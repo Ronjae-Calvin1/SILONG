@@ -1,8 +1,11 @@
 """
-Backbone: map slice only.
+Backbone: map slice only (Batangas City facilities).
 Facilities in SQLite -> one FastAPI endpoint -> frontend fetches it.
 Weather/AI modules still exist in the folder but aren't wired in yet.
 """
+import json
+from pathlib import Path
+
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -15,38 +18,62 @@ from .schemas import FacilityOut
 Base.metadata.create_all(bind=engine)
 
 
+# Real hospitals in Batangas City, from the city government's official
+# hospitals page. Coordinates are APPROXIMATE (Batangas Medical Center uses the
+# Wikipedia point; the rest come from Google Maps links on the city page, which
+# give the map view center, not the exact pin). Verify each one by
+# right-clicking the exact pin in Google Maps before the final submission.
+# Clinics and evacuation centers are not seeded yet: they need the official
+# list from the Batangas City CDRRMO / barangay halls.
+FACILITIES = [
+    dict(name="Batangas Medical Center", type="hospital",
+         latitude=13.76698, longitude=121.06678,
+         address="Bihi Road, Kumintang Ibaba, Batangas City",
+         contact="(043) 723-0165"),
+    dict(name="Golden Gate General Hospital", type="hospital",
+         latitude=13.7538, longitude=121.0590,
+         address="P. Prieto St., Batangas City",
+         contact="(043) 723-3011",
+         notes="Approximate coordinates - verify."),
+    dict(name="Jesus of Nazareth Hospital", type="hospital",
+         latitude=13.7548, longitude=121.0647,
+         address="Gov. Antonio Carpio Rd., Gulod Labac, Batangas City",
+         contact="(043) 723-2918",
+         notes="Approximate coordinates - verify."),
+    dict(name="St. Patrick's Hospital Medical Center", type="hospital",
+         latitude=13.7527, longitude=121.0535,
+         address="Lopez Jaena, Batangas City",
+         contact="(043) 723-7089",
+         notes="Approximate coordinates - verify."),
+    dict(name="United Doctors of St. Camillus de Lellis Hospital", type="hospital",
+         latitude=13.7814, longitude=121.0557,
+         address="Diversion Road, Batangas City",
+         notes="Approximate coordinates - verify."),
+]
+
+
+# If scripts/fetch_facilities.py has been run, its OpenStreetMap results are
+# used instead of the hardcoded FACILITIES list above.
+DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "facilities.json"
+
+
+def load_facilities() -> list:
+    if DATA_FILE.exists():
+        return json.loads(DATA_FILE.read_text(encoding="utf-8"))
+    return FACILITIES
+
+
 def seed_facilities():
-    """Insert a couple of sample facilities on first run so the map has data."""
+    """
+    Reset the facilities table from data/facilities.json (or the list above)
+    on every startup. Fine for the backbone since the data lives in files.
+    Once facilities can be edited through the app, only seed an empty table.
+    """
     db = SessionLocal()
     try:
-        if db.query(Facility).count() == 0:
-            db.add_all([
-                Facility(
-                    name="Rosario District Hospital",
-                    type="hospital",
-                    latitude=13.8459,
-                    longitude=121.2044,
-                    address="Rosario, Batangas",
-                    contact="N/A",
-                ),
-                Facility(
-                    name="Barangay Evacuation Center (Sample)",
-                    type="evacuation_center",
-                    latitude=13.8500,
-                    longitude=121.2100,
-                    address="Sample Barangay, Rosario, Batangas",
-                    contact="N/A",
-                ),
-                Facility(
-                    name="Rosario Rural Health Clinic",
-                    type="clinic",
-                    latitude=13.8430,
-                    longitude=121.2010,
-                    address="Poblacion, Rosario, Batangas",
-                    contact="N/A",
-                ),
-            ])
-            db.commit()
+        db.query(Facility).delete()
+        db.add_all([Facility(**f) for f in load_facilities()])
+        db.commit()
     finally:
         db.close()
 

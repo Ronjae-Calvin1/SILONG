@@ -5,7 +5,9 @@ hospitals, and evacuation centers, weather warnings, and AI-assisted
 before/during/after guidance.
 
 Current status: backbone only. Map is working (SQLite -> FastAPI -> React +
-Leaflet). Weather and AI features are stubbed and not wired in yet.
+Leaflet) with real Batangas City hospitals. Pins are hidden until you pick a
+category. Weather and AI features are stubbed and not wired in yet.
+See `CHANGELOG.md` for what changed in each update.
 
 ## Tech stack
 
@@ -34,7 +36,7 @@ Windows users: if `pip` isn't recognized, use `py -m pip install -r requirements
 and `py -m uvicorn app.main:app --reload --port 8000` instead.
 
 Check it worked: open `http://127.0.0.1:8000/api/facilities` in a browser —
-you should see JSON data for 3 sample facilities.
+you should see JSON data for the 5 seeded hospitals.
 
 ### 2. Frontend (Terminal 2 — separate window, don't close Terminal 1)
 
@@ -46,8 +48,37 @@ npm run dev
 
 Then open the URL it prints (usually `http://localhost:5173`).
 
-You should see a map centered on Rosario, Batangas with 3 pins (hospital,
-evacuation center, clinic). Click a pin to see its details.
+You should see a map of Batangas City with no pins at first. Tap
+**Hospitals** to show them, then tap a pin to see its address and phone number.
+
+## Updating facility data
+
+Facility coordinates come from OpenStreetMap (free, no API key). With internet:
+
+```
+cd backend
+py scripts/fetch_facilities.py
+```
+
+This writes `backend/data/facilities.json`. Restart the backend to load it.
+Open the file to review it and delete any wrong entries. OpenStreetMap coverage
+is uneven in the Philippines, especially for evacuation centers, so confirm the
+official list with the Batangas City CDRRMO. If the file is missing, the backend
+uses a small hardcoded hospital list instead.
+
+Cleaning the data (both files are in `backend/data/` and are kept when the
+script is re-run):
+
+- `exclude.txt`: facility names to drop (wrong, closed, or moved).
+- `manual_facilities.json`: facilities to add by hand, such as evacuation
+  centers. Each entry needs `name`, `type` (`hospital`, `clinic` or
+  `evacuation_center`), `latitude` and `longitude`; `address`, `contact` and
+  `notes` are optional.
+
+The script also skips clinics named after individual doctors (M.D., Dr., ...)
+and lists them in its output.
+
+Map data (c) OpenStreetMap contributors.
 
 ## Stopping the servers
 
@@ -60,7 +91,7 @@ Press `Ctrl+C` in each terminal. On Windows, it may ask
 typhoon-app/
 ├── backend/
 │   └── app/
-│       ├── main.py       # FastAPI app, seeds sample data, /api/facilities endpoint
+│       ├── main.py       # FastAPI app, seeds facility list, /api/facilities endpoint
 │       ├── models.py     # SQL tables (Facility, CachedResponse)
 │       ├── schemas.py    # Request/response shapes
 │       └── database.py   # SQLite connection

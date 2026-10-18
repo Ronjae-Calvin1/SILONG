@@ -1,0 +1,25 @@
+# Facility names to always drop when running scripts/fetch_facilities.py
+# (one per line, not case-sensitive, lines starting with # are ignored).
+# Names must match the script's output exactly.
+
+# Not hospitals / not useful for typhoon response (active):
+Louella Grace Lira-Roces, M.D.
+Philippine Red Cross
+Batangas Clinical Laboratory
+CityLab 2
+J. Ramos Drug Testing Center
+Shalom Laboratory
+EBD Batangas City Health Laboratory
+Candava Skin & Laser Center
+Dermacare
+
+# Your call: private or unclear places. Remove the # to drop one.
+# Beyond Medical Hub
+# Clinic for the Sick Children
+Clinica Genesio
+# Infirmary
+# Kiddie Friends Clinic
+# Lat Women's Clinic
+# Malabanan Clinic
+# Santa Filomena Children's Clinic
+# St. Helena Medical Clinic

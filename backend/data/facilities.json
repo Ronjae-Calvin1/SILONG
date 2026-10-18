@@ -1,0 +1,209 @@
+[
+  {
+    "name": "Batangas Healthcare Hospital Jesus of Nazareth",
+    "type": "hospital",
+    "latitude": 13.759697,
+    "longitude": 121.076887,
+    "address": "Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap node/12679871959"
+  },
+  {
+    "name": "Batangas Healthcare Specialists' Medical Center",
+    "type": "hospital",
+    "latitude": 13.787666,
+    "longitude": 121.060364,
+    "address": "Batangas Diversion Road, Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap way/554072927"
+  },
+  {
+    "name": "Batangas Medical Center",
+    "type": "hospital",
+    "latitude": 13.767024,
+    "longitude": 121.066773,
+    "address": "Ebora Road, Batangas City",
+    "contact": "+6343 9801743;+6343 7408307 local 1121;+6343 7230165;+6343 7230517",
+    "notes": "Source: OpenStreetMap way/508042958"
+  },
+  {
+    "name": "Golden Gate General Hospital",
+    "type": "hospital",
+    "latitude": 13.757528,
+    "longitude": 121.061745,
+    "address": "17, P. Prieto Street, Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap way/341199386"
+  },
+  {
+    "name": "Saint Patrick's Hospital & Medical Center",
+    "type": "hospital",
+    "latitude": 13.755671,
+    "longitude": 121.060268,
+    "address": "Batangas City",
+    "contact": "+63 43 723 8196;+63 43 723 2745",
+    "notes": "Source: OpenStreetMap way/859885163"
+  },
+  {
+    "name": "United Doctors of St. Camillus de Lellis Hospital",
+    "type": "hospital",
+    "latitude": 13.782146,
+    "longitude": 121.05601,
+    "address": "Batangas Diversion Road, Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap way/352486848"
+  },
+  {
+    "name": "Balagtas Health Center",
+    "type": "clinic",
+    "latitude": 13.800513,
+    "longitude": 121.070375,
+    "address": "Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap way/851699535"
+  },
+  {
+    "name": "Barangay Pinamucan Proper Health Center",
+    "type": "clinic",
+    "latitude": 13.699124,
+    "longitude": 121.053251,
+    "address": "Batangas - Tabangao - Lobo Rd, Batangas, Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap way/795205901"
+  },
+  {
+    "name": "Batangas Social Hygiene Clinic",
+    "type": "clinic",
+    "latitude": 13.756025,
+    "longitude": 121.058244,
+    "address": "Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap node/7129739186"
+  },
+  {
+    "name": "Beyond Medical Hub",
+    "type": "clinic",
+    "latitude": 13.75584,
+    "longitude": 121.067949,
+    "address": "Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap way/1169931416"
+  },
+  {
+    "name": "Bilogo Healthn Center",
+    "type": "clinic",
+    "latitude": 13.746946,
+    "longitude": 121.156586,
+    "address": "Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap way/482192332"
+  },
+  {
+    "name": "Clinic for the Sick Children",
+    "type": "clinic",
+    "latitude": 13.754402,
+    "longitude": 121.057582,
+    "address": "Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap node/8014716745"
+  },
+  {
+    "name": "Ilijan Maternity & Lying Inn",
+    "type": "clinic",
+    "latitude": 13.632664,
+    "longitude": 121.070378,
+    "address": "Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap way/493565736"
+  },
+  {
+    "name": "Infirmary",
+    "type": "clinic",
+    "latitude": 13.784304,
+    "longitude": 121.07394,
+    "address": "Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap node/4819548958"
+  },
+  {
+    "name": "Infirmary",
+    "type": "clinic",
+    "latitude": 13.754,
+    "longitude": 121.052962,
+    "address": "Galauran Drive, Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap way/463847982"
+  },
+  {
+    "name": "Kiddie Friends Clinic",
+    "type": "clinic",
+    "latitude": 13.756112,
+    "longitude": 121.05998,
+    "address": "Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap node/8014716368"
+  },
+  {
+    "name": "Kumintang Ibaba Health Center",
+    "type": "clinic",
+    "latitude": 13.762104,
+    "longitude": 121.064122,
+    "address": "Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap way/420037788"
+  },
+  {
+    "name": "Lat Women's Clinic",
+    "type": "clinic",
+    "latitude": 13.761875,
+    "longitude": 121.057076,
+    "address": "Batangas City",
+    "contact": "+63 43 723 9476",
+    "notes": "Source: OpenStreetMap node/7921711322"
+  },
+  {
+    "name": "Luna-Lacsamana Maternity and Lying-in Clinic",
+    "type": "clinic",
+    "latitude": 13.757912,
+    "longitude": 121.057924,
+    "address": "Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap node/8014716643"
+  },
+  {
+    "name": "Malabanan Clinic",
+    "type": "clinic",
+    "latitude": 13.755756,
+    "longitude": 121.053609,
+    "address": "Rizal Avenue, Batangas",
+    "contact": null,
+    "notes": "Source: OpenStreetMap way/449797212"
+  },
+  {
+    "name": "San Paulo Health Clinic/Diagnostic Center",
+    "type": "clinic",
+    "latitude": 13.759445,
+    "longitude": 121.061887,
+    "address": "239, Evangelista Street, Batangas City",
+    "contact": "+63 43 425 0048",
+    "notes": "Source: OpenStreetMap node/8014715711"
+  },
+  {
+    "name": "Santa Filomena Children's Clinic",
+    "type": "clinic",
+    "latitude": 13.752352,
+    "longitude": 121.055036,
+    "address": "Batangas City",
+    "contact": "+63 43 723 3818",
+    "notes": "Source: OpenStreetMap node/8754613460"
+  },
+  {
+    "name": "St. Helena Medical Clinic",
+    "type": "clinic",
+    "latitude": 13.757994,
+    "longitude": 121.070976,
+    "address": "Batangas City",
+    "contact": null,
+    "notes": "Source: OpenStreetMap node/8723540500"
+  }
+]
