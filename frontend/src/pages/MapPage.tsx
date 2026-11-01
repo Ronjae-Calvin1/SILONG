@@ -1,8 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { api } from "../api/client";
 import type { Facility } from "../types";
+import { TopBar } from "../components/TopBar";
+import { FloatingButtons } from "../components/FloatingButtons";
+import { AlertsSheet } from "../components/AlertsSheet";
+import { IncidentPanel } from "../components/IncidentPanel";
+import "./MapPage.css";
 
 // Leaflet's default marker icons reference image files by relative path,
 // which breaks under bundlers like Vite. Point them at a CDN instead.
@@ -34,6 +40,10 @@ export function MapPage() {
   // Map starts clean: no pins until the user turns a category on.
   // To show a category by default, add it here, e.g. new Set(["hospital"]).
   const [visible, setVisible] = useState<Set<FacilityType>>(new Set());
+  // Is the "Submit Incident report" panel open? (starts closed)
+  const [incidentOpen, setIncidentOpen] = useState(false);
+  // How tall the sheet is right now, so the round buttons can ride above it.
+  const [sheetH, setSheetH] = useState(0);
 
   useEffect(() => {
     api
@@ -54,44 +64,17 @@ export function MapPage() {
   const shown = facilities.filter((f) => visible.has(f.type));
 
   return (
-    <div>
-      <h1>Nearby Facilities</h1>
-
-      {error && <p>Error: {error}</p>}
-
-      {/* Category filters: big, tap-friendly buttons */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
-        {(Object.keys(TYPE_LABELS) as FacilityType[]).map((type) => {
-          const count = facilities.filter((f) => f.type === type).length;
-          return (
-            <button
-              key={type}
-              onClick={() => toggle(type)}
-              disabled={count === 0}
-              aria-pressed={visible.has(type)}
-              style={{
-                minHeight: "44px",
-                padding: "0 12px",
-                fontWeight: visible.has(type) ? "bold" : "normal",
-              }}
-            >
-              {visible.has(type) ? "✓ " : ""}
-              {TYPE_LABELS[type]} ({count})
-            </button>
-          );
-        })}
-      </div>
-
-      {visible.size === 0 && facilities.length > 0 && (
-        <p>Select a category above to show pins on the map.</p>
-      )}
-
-      {/* Height fills the screen instead of a fixed 500px (mobile-first) */}
+    <div
+      className="map-screen"
+      style={{ "--sheet-h": `${sheetH}px` } as CSSProperties}
+    >
       <MapContainer
         center={DEFAULT_CENTER}
         zoom={13}
-        style={{ height: "calc(100dvh - 190px)", minHeight: "320px", width: "100%" }}
+        zoomControl={false}
+        style={{ height: "100%", width: "100%" }}
       >
+        {/* The old map (OpenStreetMap) */}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -112,6 +95,38 @@ export function MapPage() {
           </Marker>
         ))}
       </MapContainer>
+
+      <TopBar />
+
+      {/* Category filters: big, tap-friendly buttons */}
+      <div className="filter-row">
+        {(Object.keys(TYPE_LABELS) as FacilityType[]).map((type) => {
+          const count = facilities.filter((f) => f.type === type).length;
+          return (
+            <button
+              key={type}
+              className="filter-btn"
+              onClick={() => toggle(type)}
+              disabled={count === 0}
+              aria-pressed={visible.has(type)}
+            >
+              {visible.has(type) ? "✓ " : ""}
+              {TYPE_LABELS[type]} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      {error && <p className="map-message">Error: {error}</p>}
+      {!error && visible.size === 0 && facilities.length > 0 && (
+        <p className="map-message">Select a category above to show pins on the map.</p>
+      )}
+
+      <FloatingButtons onOpenIncident={() => setIncidentOpen(true)} />
+
+      <AlertsSheet onHeightChange={setSheetH} />
+
+      <IncidentPanel open={incidentOpen} onClose={() => setIncidentOpen(false)} />
     </div>
   );
 }
