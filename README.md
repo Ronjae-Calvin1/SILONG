@@ -1,6 +1,6 @@
 # Typhoon Prep App
 
-Mobile-first offline app for typhoon preparation — map of nearby clinics,
+Mobile-first app for typhoon preparation — map of nearby clinics,
 hospitals, and evacuation centers, weather warnings, and AI-assisted
 before/during/after guidance.
 
