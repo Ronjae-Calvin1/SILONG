@@ -2,6 +2,30 @@
 
 Short log of what changed in each update, newest first.
 
+## Update 6 — Capacity and availability
+- Tap a pin to open a details panel: name, type, address, tap-to-call phone,
+  status, "Last updated: <time> (15 minutes ago)", people inside ("85 / 100"),
+  resources and note. **Update status** opens a phone-friendly form with big
+  buttons; on success the pin and panel update immediately.
+- Pins are colored by status (green open, orange almost full / busy, red full,
+  grey closed, light grey no status yet, dim with dashed ring when older than
+  6 hours). A letter in the pin shows the type (H, C, E).
+- Backend: new `status_updates` table (history; newest = current), validation
+  per facility type (422 with a clear message), `POST /api/facilities/{id}/status`,
+  `GET /api/facilities/{id}/status/history`, and `/api/facilities` now includes
+  each place's latest `status` (or `null`) with a server-computed `is_outdated`.
+- Facility IDs are now stable: facilities carry a permanent `key` and are synced
+  by key at startup instead of deleted and re-inserted.
+- Spam protection without login: 1 update per place per IP per minute and 10 per
+  IP per 10 minutes, in memory. The page shows the friendly "please wait" message.
+- The page re-checks the server every minute and refreshes "x minutes ago" labels.
+- New files: `backend/app/config.py` (6-hour rule and limits, to confirm),
+  `rate_limit.py`, `status_service.py`, `scripts/backdate_status.py` (test the
+  outdated rule), and `frontend/src/components/` `FacilityPanel.tsx`,
+  `StatusForm.tsx`, `statusInfo.ts`, `StatusPanel.css`.
+- Old databases are upgraded automatically (the facilities table is rebuilt once).
+- To confirm with the documentation: the 6-hour threshold and the rate limits.
+
 ## Update 5 — Hospital list cleanup
 - `backend/scripts/fetch_facilities.py`: removes same-name duplicate points
   within 100 m (Jesus of Nazareth was listed twice) and moves health centers and
