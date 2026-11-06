@@ -2,11 +2,14 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { api } from "../api/client";
-import type { Facility } from "../types";
+import type { Facility, FacilityStatus, FacilityType } from "../types";
 import { TopBar } from "../components/TopBar";
 import { FloatingButtons } from "../components/FloatingButtons";
 import { AlertsSheet } from "../components/AlertsSheet";
 import { IncidentPanel } from "../components/IncidentPanel";
+import { FacilityPanel } from "../components/FacilityPanel";
+import { StatusForm } from "../components/StatusForm";
+import { statusKey } from "../components/statusInfo";
 import "./MapPage.css";
 
 // Base map (vector). Put your MapTiler key and your custom map ID in
@@ -41,6 +44,19 @@ const MAX_ZOOM = 22;
 // Batangas City (longitude, latitude)
 const DEFAULT_CENTER: [number, number] = [121.0583, 13.7565];
 
+// How often the page re-checks the server for new status updates (also keeps
+// "May be outdated" honest while the page stays open).
+const REFRESH_MS = 60_000;
+
+// Letter shown inside each pin so the facility type stays visible next to the status color.
+const TYPE_LETTER: Record<FacilityType, string> = { hospital: "H", clinic: "C", evacuation_center: "E" };
+
+// One pin on the map: the MapLibre marker plus the element we restyle in place.
+interface Pin {
+  marker: maplibregl.Marker;
+  el: HTMLDivElement;
+}
+
 
 export function MapPage() {
   const [facilities, setFacilities] = useState<Facility[]>([]);
@@ -49,9 +65,16 @@ export function MapPage() {
   const [incidentOpen, setIncidentOpen] = useState(false);
   // How tall the sheet is right now, so the round buttons can ride above it.
   const [sheetH, setSheetH] = useState(0);
+  // Pin that is open in the details panel, and whether its update form is open.
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const mapDiv = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const markersRef = useRef<maplibregl.Marker[]>([]);
+  const pinsRef = useRef<Map<number, Pin>>(new Map());
+  const lastSaveAt = useRef(0);
+  const hadSelection = useRef(false);
+  const toastTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     api
@@ -59,6 +82,24 @@ export function MapPage() {
       .then(setFacilities)
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
   }, []);
+
+  // Pick up other people's updates. A failed refresh is ignored (the pins we
+  // already have stay on screen), and a response that was requested before the
+  // user's own save is dropped so it cannot overwrite the fresh status.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const startedAt = Date.now();
+      api
+        .getFacilities()
+        .then((list) => {
+          if (startedAt >= lastSaveAt.current) setFacilities(list);
+        })
+        .catch(() => {});
+    }, REFRESH_MS);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => () => window.clearTimeout(toastTimer.current), []);
 
   // Create the map once.
   useEffect(() => {
@@ -80,32 +121,95 @@ export function MapPage() {
   // All pins are always shown.
   const shown = facilities;
 
-  // Draw a pin for every facility once the data has loaded.
+  // Draw a pin for every facility. Pins are created once and then only restyled
+  // when a status changes, so an update shows up without redrawing the map.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    markersRef.current.forEach((m) => m.remove());
-    markersRef.current = shown.map((f) => {
-      const box = document.createElement("div");
-      const name = document.createElement("strong");
-      name.textContent = f.name;
-      box.appendChild(name);
-      box.appendChild(document.createElement("br"));
-      box.appendChild(document.createTextNode(f.address ?? ""));
-      if (f.contact && f.contact !== "N/A") {
-        box.appendChild(document.createElement("br"));
-        const a = document.createElement("a");
-        a.href = `tel:${f.contact.replace(/[^\d+]/g, "")}`;
-        a.textContent = f.contact;
-        box.appendChild(a);
+    const pins = pinsRef.current;
+    const ids = new Set(shown.map((f) => f.id));
+    pins.forEach((pin, id) => {
+      if (!ids.has(id)) {
+        pin.marker.remove();
+        pins.delete(id);
       }
-      return new maplibregl.Marker()
-        .setLngLat([f.longitude, f.latitude])
-        .setPopup(new maplibregl.Popup({ offset: 25 }).setDOMContent(box))
-        .addTo(map);
+    });
+    shown.forEach((f) => {
+      let pin = pins.get(f.id);
+      if (!pin) {
+        const el = document.createElement("div");
+        el.className = "pin";
+        el.setAttribute("role", "button");
+        el.tabIndex = 0;
+        el.setAttribute("aria-label", f.name);
+        const body = document.createElement("div");
+        body.className = "pin-body";
+        const letter = document.createElement("span");
+        letter.className = "pin-letter";
+        letter.textContent = TYPE_LETTER[f.type];
+        body.appendChild(letter);
+        el.appendChild(body);
+        el.addEventListener("click", () => {
+          setSelectedId(f.id);
+          setFormOpen(false);
+        });
+        el.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setSelectedId(f.id);
+            setFormOpen(false);
+          }
+        });
+        // The rotated teardrop's tip sits about 20px below the element's center.
+        const marker = new maplibregl.Marker({ element: el, anchor: "center", offset: [0, -20] })
+          .setLngLat([f.longitude, f.latitude])
+          .addTo(map);
+        pin = { marker, el };
+        pins.set(f.id, pin);
+      }
+      pin.el.dataset.status = statusKey(f); // open | almost_full | busy | full | closed | unknown
+      pin.el.dataset.outdated = String(!!f.status?.is_outdated);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facilities]);
+
+  // Highlight the selected pin.
+  useEffect(() => {
+    pinsRef.current.forEach((pin, id) => {
+      pin.el.dataset.selected = String(id === selectedId);
+    });
+  }, [selectedId, facilities]);
+
+  // Keep the selected pin visible above the details panel.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const f = facilities.find((x) => x.id === selectedId);
+    if (f) {
+      hadSelection.current = true;
+      map.easeTo({
+        center: [f.longitude, f.latitude],
+        padding: { top: 0, left: 0, right: 0, bottom: Math.min(320, window.innerHeight * 0.5) },
+        duration: 300,
+      });
+    } else if (hadSelection.current) {
+      hadSelection.current = false;
+      map.easeTo({ padding: { top: 0, left: 0, right: 0, bottom: 0 }, duration: 300 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  const selected = facilities.find((f) => f.id === selectedId) ?? null;
+
+  // The server accepted a new status: show it on the pin and in the panel right away.
+  function handleSaved(facilityId: number, status: FacilityStatus) {
+    lastSaveAt.current = Date.now();
+    setFacilities((list) => list.map((f) => (f.id === facilityId ? { ...f, status } : f)));
+    setFormOpen(false);
+    setToast("Status updated. Thank you!");
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 3000);
+  }
 
   return (
     <div
@@ -123,6 +227,32 @@ export function MapPage() {
       <AlertsSheet onHeightChange={setSheetH} />
 
       <IncidentPanel open={incidentOpen} onClose={() => setIncidentOpen(false)} />
+
+      {selected && (
+        <FacilityPanel
+          facility={selected}
+          onClose={() => {
+            setSelectedId(null);
+            setFormOpen(false);
+          }}
+          onUpdateStatus={() => setFormOpen(true)}
+        />
+      )}
+
+      {selected && formOpen && (
+        <StatusForm
+          key={selected.id}
+          facility={selected}
+          onClose={() => setFormOpen(false)}
+          onSaved={handleSaved}
+        />
+      )}
+
+      {toast && (
+        <div className="status-toast" role="status">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

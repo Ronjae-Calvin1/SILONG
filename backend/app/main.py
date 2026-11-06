@@ -1,20 +1,38 @@
 """
-Backbone: map slice only (Batangas City facilities).
-Facilities in SQLite -> one FastAPI endpoint -> frontend fetches it.
+Backbone: map slice + capacity/availability status (Batangas City facilities).
+Facilities in SQLite -> FastAPI endpoints -> frontend fetches them.
 Weather/AI modules still exist in the folder but aren't wired in yet.
 """
 import json
+import re
 from pathlib import Path
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 from typing import List
 
+from . import status_service
 from .database import Base, engine, SessionLocal, get_db
-from .models import Facility
-from .schemas import FacilityOut
+from .models import Facility, StatusUpdate
+from .rate_limit import limiter
+from .schemas import FacilityOut, StatusIn, StatusOut, validate_for_facility_type
 
+
+def _drop_legacy_facilities_table():
+    """
+    Older databases have a facilities table without the stable `key` column.
+    That table was rebuilt from the data files on every start, so dropping it
+    loses nothing (status updates did not exist yet).
+    """
+    insp = inspect(engine)
+    if insp.has_table("facilities") and "key" not in {c["name"] for c in insp.get_columns("facilities")}:
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE facilities"))
+
+
+_drop_legacy_facilities_table()
 Base.metadata.create_all(bind=engine)
 
 
@@ -63,24 +81,67 @@ def load_facilities() -> list:
     return FACILITIES
 
 
-def seed_facilities():
+_OSM_REF = re.compile(r"OpenStreetMap\s+(node|way|relation)/(\d+)")
+
+
+def facility_key(f: dict) -> str:
     """
-    Reset the facilities table from data/facilities.json (or the list above)
-    on every startup. Fine for the backbone since the data lives in files.
-    Once facilities can be edited through the app, only seed an empty table.
+    A stable identity for a facility that does not depend on its position in
+    the file. Facilities fetched from OpenStreetMap carry their OSM reference in
+    `notes` ("Source: OpenStreetMap way/123"), which is unique and permanent.
+    Anything else (manual entries, the hardcoded fallback) falls back to
+    type + name, so names must be unique within a type for those.
+    """
+    m = _OSM_REF.search(f.get("notes") or "")
+    if m:
+        return f"osm:{m.group(1)}/{m.group(2)}"
+    name = re.sub(r"[^a-z0-9]+", "-", f["name"].lower()).strip("-")
+    return f"manual:{f['type']}:{name}"
+
+
+def sync_facilities():
+    """
+    Bring the facilities table in line with data/facilities.json (or the list
+    above) WITHOUT resetting it. Rows are matched on `key`, so a facility keeps
+    the same numeric id across restarts and re-fetches, and its status history
+    stays attached to the right place.
+
+      - new key      -> inserted
+      - known key    -> name/coordinates/address/contact/notes refreshed
+      - missing key  -> facility removed (the data file no longer lists it),
+                        together with its status history
     """
     db = SessionLocal()
     try:
-        db.query(Facility).delete()
-        db.add_all([Facility(**f) for f in load_facilities()])
+        wanted = {}
+        for f in load_facilities():
+            key = facility_key(f)
+            if key in wanted:  # same key twice in the file: keep the first
+                continue
+            wanted[key] = f
+
+        existing = {row.key: row for row in db.query(Facility).all()}
+
+        for key, f in wanted.items():
+            row = existing.get(key)
+            if row is None:
+                db.add(Facility(key=key, **f))
+            else:
+                for field, value in f.items():
+                    setattr(row, field, value)
+
+        for key, row in existing.items():
+            if key not in wanted:
+                db.query(StatusUpdate).filter(StatusUpdate.facility_id == row.id).delete()
+                db.delete(row)
         db.commit()
     finally:
         db.close()
 
 
-seed_facilities()
+sync_facilities()
 
-app = FastAPI(title="Typhoon Prep API — map slice")
+app = FastAPI(title="SILONG API — map and status")
 
 app.add_middleware(
     CORSMiddleware,
@@ -97,4 +158,70 @@ def health():
 
 @app.get("/api/facilities", response_model=List[FacilityOut])
 def list_facilities(db: Session = Depends(get_db)):
-    return db.query(Facility).all()
+    """All facilities, each with its latest status (or null) attached."""
+    latest = status_service.latest_status_by_facility(db)
+    out = []
+    for f in db.query(Facility).order_by(Facility.id).all():
+        item = FacilityOut.model_validate(f)  # `status` is empty on the row itself
+        item.status = latest.get(f.id)
+        out.append(item)
+    return out
+
+
+def _get_facility_or_404(db: Session, facility_id: int) -> Facility:
+    facility = db.get(Facility, facility_id)
+    if facility is None:
+        raise HTTPException(status_code=404, detail="Facility not found.")
+    return facility
+
+
+@app.post("/api/facilities/{facility_id}/status", response_model=StatusOut, status_code=201)
+def submit_status(
+    facility_id: int,
+    payload: StatusIn,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Add a status update (kept as history). Returns the new latest status."""
+    facility = _get_facility_or_404(db, facility_id)
+
+    try:
+        validate_for_facility_type(payload, facility.type)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    # Rate limit after validation, so a mistyped form does not use up the allowance.
+    ip = request.client.host if request.client else "unknown"
+    hit = limiter.check(ip, facility_id)
+    if hit:
+        scope, wait = hit
+        if scope == "place":
+            msg = f"You just updated this place. Please wait {wait} seconds before sending another update."
+        else:
+            minutes = max(1, round(wait / 60))
+            msg = f"Too many updates from your connection. Please try again in about {minutes} minute(s)."
+        raise HTTPException(status_code=429, detail=msg, headers={"Retry-After": str(wait)})
+
+    row = StatusUpdate(
+        facility_id=facility.id,
+        status=payload.status,
+        people_inside=payload.people_inside,
+        max_capacity=payload.max_capacity,
+        resources=json.dumps(payload.resources) if payload.resources else None,
+        note=payload.note,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return status_service.to_status_out(row)
+
+
+@app.get("/api/facilities/{facility_id}/status/history", response_model=List[StatusOut])
+def status_history(
+    facility_id: int,
+    limit: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """Newest first. Simple view for debugging and later use."""
+    _get_facility_or_404(db, facility_id)
+    return status_service.history(db, facility_id, limit)

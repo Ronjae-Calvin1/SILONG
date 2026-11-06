@@ -19,7 +19,7 @@ documentation). `CHANGELOG.md` lists what changed in each update.
 | Function | What it does | Status |
 | --- | --- | --- |
 | Map | Shows hospitals, clinics and evacuation centers. All pins show automatically. Tap a pin for the name, address and a tap-to-call number. | Working |
-| Capacity and availability | Anyone can see and update how full a place is and whether it is open. | Not built yet |
+| Capacity and availability | Tap a pin to see whether a place is open, busy or full and when that was last updated. Anyone can update it, with no login. | Working |
 | Weather forecast | Current weather and a short forecast. | Screen only, sample data |
 | Emergency contacts | Red phone button that opens numbers to call with one tap. | Button only, not wired |
 | Early warning alerts | Bottom panel with weather, official warnings and summarized internet updates. | Screen only, sample data |
@@ -105,6 +105,69 @@ Then open the URL it prints (usually `http://localhost:5173`). Restart
 You should see a map of Batangas City with all the pins already on it. Tap a
 pin to see its address and phone number.
 
+## Capacity and availability
+
+Tap a pin to see its status, when it was last updated ("15 minutes ago") and,
+for evacuation centers, how many people are inside. Tap **Update status** to
+report a new one. The pin changes color right away:
+
+| Pin | Meaning |
+| --- | --- |
+| Green | Open |
+| Orange | Almost full (evacuation center) or Busy / Limited (hospital, clinic) |
+| Red | Full |
+| Dark grey | Closed |
+| Light grey | No status yet (never shown as "Open") |
+| Dim, dashed ring | Last update is older than 6 hours: "May be outdated" |
+
+Every update is saved as history in SQLite; the newest one is the status. People
+can only send status data, never a place's name, address or phone number.
+
+**Settings to confirm** (`backend/app/config.py`, each can also be set with an
+environment variable):
+
+- `OUTDATED_AFTER`: 6 hours (`STATUS_OUTDATED_AFTER_HOURS`). The only place this
+  number lives.
+- `STATUS_COOLDOWN_SECONDS`: 60, one update per place per IP.
+- `STATUS_IP_MAX_UPDATES` / `STATUS_IP_WINDOW_SECONDS`: 10 updates per IP per 10 minutes.
+
+**Try it** (backend and frontend running as above):
+
+1. Open the site, tap a pin, tap **Update status**, pick a status, **Submit**.
+2. Refresh the page: the status is still there.
+3. Update the same place again within a minute: you get a "please wait" message.
+   For testing, start the backend with `STATUS_COOLDOWN_SECONDS=0` to turn that off.
+4. See the 6-hour rule: backdate the latest update of a place, then refresh.
+   ```
+   cd backend
+   py scripts/backdate_status.py --list          # which places have updates
+   py scripts/backdate_status.py 3 --hours 7     # make place 3's update 7 hours old
+   ```
+5. Call the API directly (Mac/Linux/Git Bash):
+   ```
+   curl -X POST http://127.0.0.1:8000/api/facilities/3/status \
+     -H "Content-Type: application/json" \
+     -d '{"status": "busy", "note": "Long wait at the ER"}'
+   ```
+   Windows Command Prompt:
+   ```
+   curl.exe -X POST http://127.0.0.1:8000/api/facilities/3/status -H "Content-Type: application/json" -d "{\"status\": \"busy\", \"note\": \"Long wait at the ER\"}"
+   ```
+   A status that does not fit the place (for example `almost_full` for a
+   hospital) returns 422. Also: `GET /api/facilities` (each place has `status`,
+   or `null`) and `GET /api/facilities/3/status/history?limit=10`.
+
+The current data has no evacuation centers yet. To try the evacuation center form,
+add one to `backend/data/manual_facilities.json` (see "Updating facility data")
+and run the fetch script, or add an entry to `facilities.json` and restart.
+
+**Facility IDs:** each facility gets a permanent key (its OpenStreetMap
+reference, or type + name for manual entries). On every start the backend
+matches the data file to the database by that key instead of rebuilding the
+table, so a place keeps its ID and its history when the file is re-fetched or
+reordered. A place that disappears from the file is removed together with its
+history.
+
 ## Using a custom map
 
 A custom map lets you hide icons you do not want while keeping place names.
@@ -161,8 +224,11 @@ SILONG/
 │   └── app/
 │       ├── main.py             # FastAPI app, loads facilities, /api/facilities
 │       ├── routes.py           # API routes (weather and AI routes are stubs)
-│       ├── models.py           # SQL tables
-│       ├── schemas.py          # Request/response shapes
+│       ├── models.py           # SQL tables (facilities, status updates)
+│       ├── schemas.py          # Request/response shapes and status rules
+│       ├── config.py           # 6-hour outdated rule, rate limits
+│       ├── rate_limit.py       # Per-IP limit on status updates
+│       ├── status_service.py   # Reads latest status / history
 │       ├── database.py         # SQLite connection
 │       ├── weather_service.py  # Sample weather data (stub)
 │       └── ai_service.py       # Chatbot/AI answers (stub)
@@ -172,7 +238,8 @@ SILONG/
         ├── App.tsx             # Renders MapPage
         ├── api/client.ts       # Talks to the backend
         ├── pages/MapPage.tsx   # MapLibre map + facility pins
-        ├── components/         # Top bar, round buttons, alerts panel, incident form
+        ├── components/         # Top bar, round buttons, alerts panel, incident form,
+        │                       # facility details panel and status update form
         └── _later/             # Parked pages and offline code (not used)
 ```
 
@@ -180,8 +247,6 @@ SILONG/
 
 Based on the project documentation:
 
-- Capacity and availability: let anyone update the status of a place, with the
-  time of the last update and a "May be outdated" label for old updates.
 - Emergency contacts screen behind the red phone button (numbers must be
   checked with the Batangas City CDRRMO).
 - Real weather (Open-Meteo) and official warnings in the Early Warning panel.
