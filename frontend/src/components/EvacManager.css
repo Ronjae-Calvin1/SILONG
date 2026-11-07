@@ -191,7 +191,116 @@
   cursor: default;
 }
 
+/* ---------- Removed centers (list under the top-bar menu button) ---------- */
+/* Small card under the top bar. Above the alerts sheet (1200), below the details panel (1350). */
+.removed-menu {
+  position: absolute;
+  top: 60px;
+  left: 8px;
+  z-index: 1250;
+  box-sizing: border-box;
+  width: min(360px, calc(100% - 16px));
+  max-height: 60%;
+  overflow-y: auto;
+  padding: 4px 12px 12px;
+  border: 1px solid #2b2f6b;
+  border-radius: 12px;
+  background: #05072e;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+  color: #c9cbe8;
+}
+
+.removed-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.removed-title {
+  margin: 0;
+  color: #fff;
+  font-size: 16px;
+}
+
+.removed-close {
+  width: 44px;
+  height: 44px;
+  margin-right: -12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+
+.removed-note {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.removed-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.removed-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 0;
+  border-top: 1px solid #2b2f6b;
+}
+
+.removed-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.removed-name {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.removed-when {
+  font-size: 13px;
+}
+
+.removed-restore-btn {
+  flex: none;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 2px solid #8c96ff;
+  border-radius: 22px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.removed-restore-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.removed-error {
+  flex-basis: 100%;
+  margin: 0;
+  text-align: left;
+}
+
 .add-center-btn:focus-visible,
+.removed-close:focus-visible,
+.removed-restore-btn:focus-visible,
 .evac-banner-btn:focus-visible,
 .evac-link-btn:focus-visible,
 .evac-remove-btn:focus-visible,

@@ -19,7 +19,8 @@ documentation). `CHANGELOG.md` lists what changed in each update.
 | Function | What it does | Status |
 | --- | --- | --- |
 | Map | Shows hospitals, clinics and evacuation centers. All pins show automatically. Tap a pin for the name, address and a tap-to-call number. | Working |
-| Capacity and availability | Tap a pin to see whether a place is open, busy or full and when that was last updated. Anyone can update it, with no login. | Working |
+| Capacity and availability | Tap a pin to see whether a place is open, busy or full and when that was last updated. Evacuation centers also show a capacity bar ("85 / 100 people", "15 spaces left"). Anyone can update it, with no login. | Working |
+| Evacuation center manager | Add an evacuation center on the map, remove one, and restore a removed one. Removing hides a center, it never deletes it. | Working |
 | Weather forecast | Current weather and a short forecast. | Screen only, sample data |
 | Emergency contacts | Red phone button that opens numbers to call with one tap. | Button only, not wired |
 | Early warning alerts | Bottom panel with weather, official warnings and summarized internet updates. | Screen only, sample data |
@@ -108,17 +109,54 @@ pin to see its address and phone number.
 ## Capacity and availability
 
 Tap a pin to see its status, when it was last updated ("15 minutes ago") and,
-for evacuation centers, how many people are inside. Tap **Update status** to
-report a new one. The pin changes color right away:
+for evacuation centers, how full it is. Tap **Update status** to report a new
+one. The pin and the panel change right away, with no reload.
 
-| Pin | Meaning |
-| --- | --- |
-| Green | Open |
-| Orange | Almost full (evacuation center) or Busy / Limited (hospital, clinic) |
-| Red | Full |
-| Dark grey | Closed |
-| Light grey | No status yet (never shown as "Open") |
-| Dim, dashed ring | Last update is older than 6 hours: "May be outdated" |
+**Status** (what people can pick, and the pin color it gives):
+
+| Status | Place | Pin |
+| --- | --- | --- |
+| Open - Space available | Evacuation center | Green |
+| Almost full | Evacuation center | Orange |
+| Full | Evacuation center | Red |
+| Closed / Not in use | Evacuation center | Dark grey |
+| Open - Accepting patients | Hospital, clinic | Green |
+| Busy / Limited | Hospital, clinic | Orange |
+| Full / Not accepting | Hospital, clinic | Red |
+| Closed | Hospital, clinic | Dark grey |
+| No status yet | Any | Hollow pin (never shown as "Open") |
+
+Other pin looks: **dim with a dashed ring** means the last update is older than
+6 hours ("May be outdated" in the panel). A **small blue ring** means the center
+was added through the app. The letter in the pin is the type (H, C, E).
+
+**Capacity** (evacuation centers only). The panel shows a bar when both the
+maximum capacity and the people inside are known:
+
+| People inside | Bar | Text |
+| --- | --- | --- |
+| Under 70% of capacity | Green | `30 / 100 people`, `70 spaces left` |
+| 70% to 99% | Orange | `85 / 100 people`, `15 spaces left` |
+| 100% or more | Red | `100 / 100 people`, `No spaces left` |
+
+If the people inside are not known, only `Capacity: 100 people` is shown. A new
+center has a capacity but no status yet, so it shows "No status yet" together
+with its capacity. Older centers from OpenStreetMap or the manual file have no
+capacity: the panel says "Capacity not set" with a small **Set capacity** button
+(it opens the update form at the capacity field; a report always needs a status
+too).
+
+The update form for an evacuation center offers the four statuses above, and
+optionally people inside, maximum capacity (filled in from the center), what is
+available (space, food, water, power, toilets, medical) and a short note.
+Hospitals and clinics keep their own form (status and a short note).
+
+**Automatic "Full":** if the people inside reach the maximum capacity and the
+status sent is "Open" or "Almost full", the server saves it as **Full** and the
+page shows its message ("People inside (100) has reached the maximum capacity
+(100), so this center was saved as full."). A report that leaves the capacity
+out keeps the last known one. A people count of more than twice the capacity is
+refused as a typo.
 
 Every update is saved as history in SQLite; the newest one is the status. People
 can only send status data, never a place's name, address or phone number.
@@ -157,16 +195,70 @@ environment variable):
    hospital) returns 422. Also: `GET /api/facilities` (each place has `status`,
    or `null`) and `GET /api/facilities/3/status/history?limit=10`.
 
-The current data has no evacuation centers yet. To try the evacuation center form,
-add one to `backend/data/manual_facilities.json` (see "Updating facility data")
-and run the fetch script, or add an entry to `facilities.json` and restart.
+The current data file has no evacuation centers. Add one in the app (see
+"Evacuation centers: add, remove, restore" below), or add one to
+`backend/data/manual_facilities.json` (see "Updating facility data").
 
 **Facility IDs:** each facility gets a permanent key (its OpenStreetMap
-reference, or type + name for manual entries). On every start the backend
-matches the data file to the database by that key instead of rebuilding the
-table, so a place keeps its ID and its history when the file is re-fetched or
-reordered. A place that disappears from the file is removed together with its
-history.
+reference, type + name for manual entries, or `user:<n>` for centers added in
+the app). On every start the backend matches the data file to the database by
+that key instead of rebuilding the table, so a place keeps its ID and its
+history when the file is re-fetched or reordered. A place that disappears from
+the file is removed together with its history. Centers added in the app live in
+their own table, so re-fetching the file never removes them.
+
+## Evacuation centers: add, remove, restore
+
+**Add a center**
+
+1. Tap **Add evacuation center** (bottom left), then tap the map to place the pin.
+   Drag the pin to adjust it, then tap **Continue**.
+2. Fill in the form: name, type (Permanent or Temporary) and **maximum capacity**
+   are required; barangay, address, contact number and a short note are optional.
+   The location must be inside Batangas City (a rough box set in
+   `BATANGAS_CITY_BBOX` in `config.py`). Tap **Save evacuation center**.
+3. The pin appears right away with a blue ring. It shows "No status yet" and
+   "Capacity: N people" until someone reports.
+
+A center with the same name within 30 m of an existing one is refused. If that
+one was removed earlier, the message says to restore it instead.
+
+**Remove a center:** tap its pin, then **Remove from map** and **Yes, remove**.
+Only evacuation centers can be removed; hospitals and clinics cannot.
+
+**Restore a center:** tap the menu button (top left), open **Removed centers**
+and tap **Restore** next to the center. Its pin comes back right away, with its
+old status history.
+
+**Soft delete:** removing never deletes anything. The center and its status
+history stay in the database; a row in `facility_removals` hides it from
+`GET /api/facilities` until it is restored (`restored_at` is filled in). The
+hiding is kept when the backend restarts and when the facilities file is
+re-fetched, and it works the same for centers from OpenStreetMap, the manual
+file and the app. Adds, removals and restores are also written to `action_log`
+with a hashed IP address (never the address itself). There are no accounts, so
+the only protection is a limit: 10 add/remove/restore actions per IP per 10
+minutes (`MANAGE_MAX_ACTIONS`, `MANAGE_WINDOW_SECONDS`).
+
+| Action | Endpoint |
+| --- | --- |
+| Add | `POST /api/evacuation-centers` |
+| Remove (hide) | `DELETE /api/evacuation-centers/{id}` |
+| List removed | `GET /api/evacuation-centers/removed` |
+| Restore | `POST /api/evacuation-centers/{id}/restore` |
+
+**Try it** (backend and frontend running; start the backend with
+`STATUS_COOLDOWN_SECONDS=0` so repeated updates are not delayed):
+
+1. Add a center with capacity 100. The panel shows "No status yet" and
+   "Capacity: 100 people".
+2. Update status: **Almost full**, people inside 85. Orange pin, orange bar,
+   "85 / 100 people", "15 spaces left".
+3. Update status: **Open**, people inside 100. The page shows the "saved as
+   full" message; the pin and bar turn red and the status is **Full**.
+4. Refresh the page: the center and its status are still there.
+5. Remove it, restart the backend, refresh: it stays hidden.
+6. Menu, **Removed centers**, **Restore**: the pin is back.
 
 ## Using a custom map
 
@@ -222,13 +314,15 @@ Press `Ctrl+C` in each terminal. On Windows, it may ask
 SILONG/
 ├── backend/
 │   └── app/
-│       ├── main.py             # FastAPI app, loads facilities, /api/facilities
+│       ├── main.py             # FastAPI app, loads facilities, /api/facilities and the status routes
 │       ├── routes.py           # API routes (weather and AI routes are stubs)
-│       ├── models.py           # SQL tables (facilities, status updates)
+│       ├── evac_routes.py      # Add / remove / restore evacuation centers
+│       ├── evac_service.py     # Center keys, duplicate check, soft delete, action log
+│       ├── models.py           # SQL tables (facilities, status updates, user centers, removals, action log)
 │       ├── schemas.py          # Request/response shapes and status rules
-│       ├── config.py           # 6-hour outdated rule, rate limits
-│       ├── rate_limit.py       # Per-IP limit on status updates
-│       ├── status_service.py   # Reads latest status / history
+│       ├── config.py           # 6-hour outdated rule, rate limits, city area, duplicate distance
+│       ├── rate_limit.py       # Per-IP limits (status updates, add/remove/restore)
+│       ├── status_service.py   # Latest status / history, capacity rule (automatic "Full")
 │       ├── database.py         # SQLite connection
 │       ├── weather_service.py  # Sample weather data (stub)
 │       └── ai_service.py       # Chatbot/AI answers (stub)
@@ -238,8 +332,15 @@ SILONG/
         ├── App.tsx             # Renders MapPage
         ├── api/client.ts       # Talks to the backend
         ├── pages/MapPage.tsx   # MapLibre map + facility pins
-        ├── components/         # Top bar, round buttons, alerts panel, incident form,
-        │                       # facility details panel and status update form
+        ├── components/         # Top bar, round buttons, alerts panel, incident form, plus:
+        │   ├── FacilityPanel.tsx      # Details panel: status, last updated, remove button
+        │   ├── CapacityIndicator.tsx  # Capacity bar, "Capacity: N people", "Capacity not set"
+        │   ├── StatusForm.tsx         # Update status form (own statuses for centers vs hospitals)
+        │   ├── statusInfo.ts          # Status labels, time labels, capacity colors
+        │   ├── AddEvacCenter.tsx      # "Add evacuation center" button, pin placement
+        │   ├── EvacCenterForm.tsx     # Details form for a new center
+        │   ├── RemovedCenters.tsx     # "Removed centers" list with Restore (top-bar menu)
+        │   └── StatusPanel.css, EvacManager.css   # Styles for the above
         └── _later/             # Parked pages and offline code (not used)
 ```
 

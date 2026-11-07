@@ -10,7 +10,8 @@ import { IncidentPanel } from "../components/IncidentPanel";
 import { FacilityPanel } from "../components/FacilityPanel";
 import { AddEvacCenter } from "../components/AddEvacCenter";
 import { StatusForm } from "../components/StatusForm";
-import { statusKey } from "../components/statusInfo";
+import { RemovedCenters } from "../components/RemovedCenters";
+import { statusKey, withNewStatus } from "../components/statusInfo";
 import "./MapPage.css";
 
 // Base map (vector). Put your MapTiler key and your custom map ID in
@@ -69,7 +70,12 @@ export function MapPage() {
   // Pin that is open in the details panel, and whether its update form is open.
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [formOpen, setFormOpen] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  // True when the form was opened from "Set capacity" (capacity field first).
+  const [focusCapacity, setFocusCapacity] = useState(false);
+  // Top-bar menu: for now it only holds the "Removed centers" list.
+  const [menuOpen, setMenuOpen] = useState(false);
+  // "notice" is for messages from the server that change what the person typed (longer, orange).
+  const [toast, setToast] = useState<{ text: string; kind: "ok" | "notice" } | null>(null);
   // True while someone is adding an evacuation center (placing the pin or filling in the form).
   const [adding, setAdding] = useState(false);
   const mapDiv = useRef<HTMLDivElement>(null);
@@ -152,15 +158,16 @@ export function MapPage() {
         letter.textContent = TYPE_LETTER[f.type];
         body.appendChild(letter);
         el.appendChild(body);
-        el.addEventListener("click", () => {
+        const open = () => {
           setSelectedId(f.id);
           setFormOpen(false);
-        });
+          setMenuOpen(false);
+        };
+        el.addEventListener("click", open);
         el.addEventListener("keydown", (e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            setSelectedId(f.id);
-            setFormOpen(false);
+            open();
           }
         });
         // The rotated teardrop's tip sits about 20px below the element's center.
@@ -172,6 +179,7 @@ export function MapPage() {
       }
       pin.el.dataset.status = statusKey(f); // open | almost_full | busy | full | closed | unknown
       pin.el.dataset.outdated = String(!!f.status?.is_outdated);
+      pin.el.dataset.source = f.source; // "user" gets a small ring (added through the app)
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facilities]);
@@ -204,26 +212,31 @@ export function MapPage() {
 
   const selected = facilities.find((f) => f.id === selectedId) ?? null;
 
-  function showToast(message: string) {
-    setToast(message);
+  function showToast(text: string, kind: "ok" | "notice" = "ok", ms = 3000) {
+    setToast({ text, kind });
     window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(null), 3000);
+    toastTimer.current = window.setTimeout(() => setToast(null), ms);
   }
 
   // The server accepted a new status: show it on the pin and in the panel right away.
-  function handleSaved(facilityId: number, status: FacilityStatus) {
+  // `message` is only for the toast (the server changed the status, e.g. saved it as full);
+  // it is not kept on the facility.
+  function handleSaved(facilityId: number, saved: FacilityStatus) {
+    const { message, ...status } = saved;
     lastSaveAt.current = Date.now();
-    setFacilities((list) => list.map((f) => (f.id === facilityId ? { ...f, status } : f)));
+    setFacilities((list) => list.map((f) => (f.id === facilityId ? withNewStatus(f, status) : f)));
     setFormOpen(false);
-    showToast("Status updated. Thank you!");
+    if (message) showToast(message, "notice", 8000);
+    else showToast("Status updated. Thank you!");
   }
 
-  // Adding starts: close the details panel. Adding ends: nothing to undo.
+  // Adding starts: close the details panel and the menu. Adding ends: nothing to undo.
   function handleAddActive(active: boolean) {
     setAdding(active);
     if (active) {
       setSelectedId(null);
       setFormOpen(false);
+      setMenuOpen(false);
     }
   }
 
@@ -242,7 +255,16 @@ export function MapPage() {
     setFacilities((list) => list.filter((f) => f.id !== facilityId));
     setSelectedId(null);
     setFormOpen(false);
-    showToast("Evacuation center removed.");
+    showToast("Evacuation center removed. You can restore it from the menu.");
+  }
+
+  // The server restored a center: its pin is back right away, with its details open so it is easy to find.
+  function handleRestored(facility: Facility) {
+    lastSaveAt.current = Date.now();
+    setFacilities((list) => (list.some((f) => f.id === facility.id) ? list : [...list, facility]));
+    setMenuOpen(false);
+    setSelectedId(facility.id);
+    showToast("Evacuation center restored.");
   }
 
   return (
@@ -253,7 +275,9 @@ export function MapPage() {
     >
       <div ref={mapDiv} style={{ height: "100%", width: "100%" }} />
 
-      <TopBar />
+      <TopBar menuOpen={menuOpen} onMenuClick={() => setMenuOpen((open) => !open)} />
+
+      {menuOpen && !adding && <RemovedCenters onClose={() => setMenuOpen(false)} onRestored={handleRestored} />}
 
       {error && <p className="map-message">Error: {error}</p>}
 
@@ -273,7 +297,14 @@ export function MapPage() {
             setSelectedId(null);
             setFormOpen(false);
           }}
-          onUpdateStatus={() => setFormOpen(true)}
+          onUpdateStatus={() => {
+            setFocusCapacity(false);
+            setFormOpen(true);
+          }}
+          onSetCapacity={() => {
+            setFocusCapacity(true);
+            setFormOpen(true);
+          }}
           onRemoved={handleRemoved}
         />
       )}
@@ -282,14 +313,15 @@ export function MapPage() {
         <StatusForm
           key={selected.id}
           facility={selected}
+          focusCapacity={focusCapacity}
           onClose={() => setFormOpen(false)}
           onSaved={handleSaved}
         />
       )}
 
       {toast && (
-        <div className="status-toast" role="status">
-          {toast}
+        <div className="status-toast" data-kind={toast.kind} role="status">
+          {toast.text}
         </div>
       )}
     </div>

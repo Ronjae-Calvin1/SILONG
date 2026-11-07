@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
 import type { Facility } from "../types";
+import { CapacityIndicator } from "./CapacityIndicator";
 import { Icon } from "./icons";
 import {
   RESOURCE_OPTIONS,
@@ -34,12 +35,13 @@ interface Props {
   facility: Facility;
   onClose: () => void;
   onUpdateStatus: () => void;
+  onSetCapacity: () => void; // opens the update form with the capacity field ready (centers without a capacity)
   onRemoved: (facilityId: number) => void; // the server hid the center; the page removes its pin
 }
 
-// Details for the tapped pin: info, current status, and the "Update status" button.
-// Evacuation centers also get "Remove from map" (with a confirmation step).
-export function FacilityPanel({ facility: f, onClose, onUpdateStatus, onRemoved }: Props) {
+// Details for the tapped pin: info, current status, capacity (evacuation centers) and the
+// "Update status" button. Evacuation centers also get "Remove from map" (with a confirmation step).
+export function FacilityPanel({ facility: f, onClose, onUpdateStatus, onSetCapacity, onRemoved }: Props) {
   const now = useNow();
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -90,30 +92,27 @@ export function FacilityPanel({ facility: f, onClose, onUpdateStatus, onRemoved 
       ))}
 
       <div className="status-block">
-        <span className="status-badge" data-status={statusKey(f)} data-outdated={s?.is_outdated ? "true" : "false"}>
+        <span className="status-badge" data-status={statusKey(f)} data-outdated={f.is_outdated ? "true" : "false"}>
           {statusLabel(f)}
         </span>
-        {s?.is_outdated && <span className="outdated-badge">May be outdated</span>}
+        {f.is_outdated && <span className="outdated-badge">May be outdated</span>}
 
         {s ? (
+          <p className="facility-line">
+            Last updated: {clockTime(s.updated_at, now)} ({timeAgo(s.updated_at, now)})
+          </p>
+        ) : (
+          <p className="facility-line">Nobody has reported yet. Be the first to update.</p>
+        )}
+
+        {/* Works with or without a status: a new center has no status yet but does have a capacity. */}
+        {f.type === "evacuation_center" && <CapacityIndicator facility={f} onSetCapacity={onSetCapacity} />}
+
+        {s && (
           <>
-            <p className="facility-line">
-              Last updated: {clockTime(s.updated_at, now)} ({timeAgo(s.updated_at, now)})
-            </p>
-            {s.people_inside !== null && (
-              <p className="facility-line">
-                People inside: {s.people_inside}
-                {s.max_capacity !== null ? ` / ${s.max_capacity}` : ""}
-              </p>
-            )}
-            {s.people_inside === null && s.max_capacity !== null && (
-              <p className="facility-line">Capacity: {s.max_capacity}</p>
-            )}
             {resourceText && <p className="facility-line">Available: {resourceText}</p>}
             {s.note && <p className="facility-line facility-note">“{s.note}”</p>}
           </>
-        ) : (
-          <p className="facility-line">Nobody has reported yet. Be the first to update.</p>
         )}
       </div>
 

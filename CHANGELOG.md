@@ -2,6 +2,53 @@
 
 Short log of what changed in each update, newest first.
 
+## Update 7 — Evacuation center manager
+- Evacuation centers can be added, removed and restored in the app. **Add
+  evacuation center** (bottom left): tap the map, drag the pin, fill in the form
+  (name, type, maximum capacity, optional barangay/address/contact/note). The pin
+  shows up right away with a small blue ring. **Remove from map** (in the details
+  panel, with a confirmation step) hides a center; the menu button (top left)
+  opens **Removed centers** with a **Restore** button for each.
+- Removing is a soft delete: nothing is erased. The center and its status
+  history stay in the database, a row in `facility_removals` hides it, and it
+  stays hidden after a backend restart or a new `facilities.json`.
+- Details panel for evacuation centers: status label (Open - Space available,
+  Almost full, Full, Closed / Not in use), "Last updated" with a relative label,
+  "May be outdated", and a capacity bar (under 70% green, 70-99% orange, 100% or
+  more red) with "85 / 100 people" and "15 spaces left". Without a status it says
+  "No status yet" together with "Capacity: N people" (never a fake default
+  status). Without a capacity (older OpenStreetMap or manual centers) it says
+  "Capacity not set" with a small **Set capacity** button.
+- Update status form for evacuation centers: only open, almost full, full and
+  closed; optional people inside, maximum capacity (filled in from the center),
+  resources and a note. Hospitals and clinics keep their own form. If the server
+  saves the report as full (people inside reached the capacity), the page shows
+  its message. The pin and panel update immediately; if sending fails, what was
+  typed is kept and the button says "Try again".
+- Pins: green open, orange almost full, red full, grey closed, hollow for no
+  status, dim with a dashed ring when older than 6 hours, and a small blue ring
+  on centers added through the app. The type letters stay.
+- Backend: `POST /api/evacuation-centers`, `DELETE /api/evacuation-centers/{id}`,
+  `GET /api/evacuation-centers/removed`, `POST /api/evacuation-centers/{id}/restore`;
+  new tables `user_evacuation_centers`, `facility_removals`, `action_log` (hashed
+  IP only); `/api/facilities` hides removed centers and gives evacuation centers
+  `people_inside`, `max_capacity`, `spaces_left`, `percent_full`, `source` and
+  `center_type`; the status route saves "full" when people inside reach the
+  maximum capacity and returns a `message`; duplicate names within 30 m are
+  refused; the location must be inside Batangas City.
+- New files: `backend/app/evac_routes.py`, `evac_service.py`, and in
+  `frontend/src/components/` `AddEvacCenter.tsx`, `EvacCenterForm.tsx`,
+  `evacCenterDraft.ts`, `CapacityIndicator.tsx`, `RemovedCenters.tsx`,
+  `EvacManager.css`. `README.md` has the status table, the add/remove/restore
+  steps and the project structure.
+- To confirm with the documentation: the 70% / 100% bar colors, the automatic
+  "full" rule, the limit of 10 add/remove/restore actions per IP per 10 minutes,
+  the 30 m duplicate distance and the Batangas City area (`config.py`).
+- Limits: there are no accounts, so anyone can remove or restore a center; the
+  per-IP limit and the action log are the only protection. **Set capacity** opens
+  the update form because the backend only accepts a capacity together with a
+  status report. Not tried on a real phone yet.
+
 ## Update 6 — Capacity and availability
 - Tap a pin to open a details panel: name, type, address, tap-to-call phone,
   status, "Last updated: <time> (15 minutes ago)", people inside ("85 / 100"),
