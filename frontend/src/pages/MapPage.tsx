@@ -311,7 +311,7 @@ export function MapPage() {
 
       {selected && formOpen && (
         <StatusForm
-          key={selected.id}
+          key={`status-form-${selected.id}`}
           facility={selected}
           focusCapacity={focusCapacity}
           onClose={() => setFormOpen(false)}
