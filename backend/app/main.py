@@ -1,5 +1,6 @@
 """
-Backbone: map slice + capacity/availability status (Batangas City facilities).
+Backbone: map slice + capacity/availability status (Batangas City facilities)
++ evacuation center manager (add / soft remove / restore, see evac_routes.py).
 Facilities in SQLite -> FastAPI endpoints -> frontend fetches them.
 Weather/AI modules still exist in the folder but aren't wired in yet.
 """
@@ -8,14 +9,18 @@ import re
 from pathlib import Path
 
 from fastapi import FastAPI, Depends, HTTPException, Query, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 from typing import List
 
-from . import status_service
+from . import evac_service, status_service
 from .database import Base, engine, SessionLocal, get_db
-from .models import Facility, StatusUpdate
+from .evac_routes import router as evac_router
+from .models import Facility, StatusUpdate, UserEvacuationCenter
 from .rate_limit import limiter
 from .schemas import FacilityOut, StatusIn, StatusOut, validate_for_facility_type
 
@@ -33,6 +38,9 @@ def _drop_legacy_facilities_table():
 
 
 _drop_legacy_facilities_table()
+# Creates any table that does not exist yet (including the evacuation center
+# manager tables on an existing database) and leaves existing tables untouched,
+# so nobody has to delete the database file.
 Base.metadata.create_all(bind=engine)
 
 
@@ -73,12 +81,35 @@ FACILITIES = [
 # If scripts/fetch_facilities.py has been run, its OpenStreetMap results are
 # used instead of the hardcoded FACILITIES list above.
 DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "facilities.json"
+# Places added by hand. The fetch script also merges this file into
+# facilities.json; both are read here so an entry works without re-running it.
+# An entry present in both gets the same key and is kept once.
+MANUAL_FILE = DATA_FILE.parent / "manual_facilities.json"
+_FACILITY_FIELDS = ("name", "type", "latitude", "longitude", "address", "contact", "notes")
+
+
+def load_manual_facilities() -> list:
+    if not MANUAL_FILE.exists():
+        return []
+    try:
+        rows = json.loads(MANUAL_FILE.read_text(encoding="utf-8"))
+    except ValueError as e:
+        print(f"Ignoring {MANUAL_FILE.name}: not valid JSON ({e})")
+        return []
+    items = []
+    for row in rows:
+        if not all(k in row for k in ("name", "type", "latitude", "longitude")):
+            print(f"Skipping manual entry missing name/type/latitude/longitude: {row}")
+            continue
+        item = {k: row.get(k) for k in _FACILITY_FIELDS}  # drops unknown fields
+        item["notes"] = item["notes"] or "Added manually"
+        items.append(item)
+    return items
 
 
 def load_facilities() -> list:
-    if DATA_FILE.exists():
-        return json.loads(DATA_FILE.read_text(encoding="utf-8"))
-    return FACILITIES
+    base = json.loads(DATA_FILE.read_text(encoding="utf-8")) if DATA_FILE.exists() else FACILITIES
+    return base + load_manual_facilities()
 
 
 _OSM_REF = re.compile(r"OpenStreetMap\s+(node|way|relation)/(\d+)")
@@ -102,14 +133,19 @@ def facility_key(f: dict) -> str:
 def sync_facilities():
     """
     Bring the facilities table in line with data/facilities.json (or the list
-    above) WITHOUT resetting it. Rows are matched on `key`, so a facility keeps
-    the same numeric id across restarts and re-fetches, and its status history
-    stays attached to the right place.
+    above), manual_facilities.json and the user-added centers WITHOUT resetting
+    it. Rows are matched on `key`, so a facility keeps the same numeric id across
+    restarts and re-fetches, and its status history stays attached to the right
+    place.
 
       - new key      -> inserted
       - known key    -> name/coordinates/address/contact/notes refreshed
-      - missing key  -> facility removed (the data file no longer lists it),
+      - missing key  -> facility removed (no source lists it any more),
                         together with its status history
+
+    User-added centers (key "user:<n>") are listed from their own table, so they
+    are never swept away here. Soft-removed centers stay in the table too: the
+    API just hides them.
     """
     db = SessionLocal()
     try:
@@ -119,6 +155,9 @@ def sync_facilities():
             if key in wanted:  # same key twice in the file: keep the first
                 continue
             wanted[key] = f
+
+        for u in db.query(UserEvacuationCenter).all():
+            wanted[f"user:{u.id}"] = evac_service.user_center_facility_fields(u)
 
         existing = {row.key: row for row in db.query(Facility).all()}
 
@@ -142,6 +181,18 @@ def sync_facilities():
 sync_facilities()
 
 app = FastAPI(title="SILONG API — map and status")
+app.include_router(evac_router)
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    """
+    FastAPI's normal 422 (type / loc / msg), without the `input` it echoes back.
+    A request body can contain NaN or Infinity, which is not valid JSON, so
+    echoing it made the error response itself crash into a 500.
+    """
+    errors = [{k: v for k, v in e.items() if k != "input"} for e in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errors)})
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -158,19 +209,25 @@ def health():
 
 @app.get("/api/facilities", response_model=List[FacilityOut])
 def list_facilities(db: Session = Depends(get_db)):
-    """All facilities, each with its latest status (or null) attached."""
+    """
+    All facilities from every source (osm / manual / user), minus removed
+    evacuation centers. Each has its latest status (or null) and, for
+    evacuation centers, the capacity fields.
+    """
     latest = status_service.latest_status_by_facility(db)
-    out = []
-    for f in db.query(Facility).order_by(Facility.id).all():
-        item = FacilityOut.model_validate(f)  # `status` is empty on the row itself
-        item.status = latest.get(f.id)
-        out.append(item)
-    return out
+    status_max = status_service.latest_max_capacity_by_facility(db)
+    users = {f"user:{u.id}": u for u in db.query(UserEvacuationCenter).all()}
+    removed = evac_service.removed_keys(db)
+    return [
+        evac_service.to_facility_out(f, latest.get(f.id), users.get(f.key), status_max.get(f.id))
+        for f in db.query(Facility).order_by(Facility.id).all()
+        if f.key not in removed
+    ]
 
 
 def _get_facility_or_404(db: Session, facility_id: int) -> Facility:
     facility = db.get(Facility, facility_id)
-    if facility is None:
+    if facility is None or evac_service.active_removal(db, facility.key):
         raise HTTPException(status_code=404, detail="Facility not found.")
     return facility
 
@@ -185,8 +242,15 @@ def submit_status(
     """Add a status update (kept as history). Returns the new latest status."""
     facility = _get_facility_or_404(db, facility_id)
 
+    # The capacity rule (people_inside >= max_capacity -> full) lives in
+    # status_service.resolve_status; nothing else decides it.
     try:
         validate_for_facility_type(payload, facility.type)
+        user_row = evac_service.user_row_for(db, facility.key)
+        resolved = status_service.resolve_status(
+            payload,
+            status_service.effective_max_capacity(db, facility.id, user_row.max_capacity if user_row else None),
+        )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -204,16 +268,18 @@ def submit_status(
 
     row = StatusUpdate(
         facility_id=facility.id,
-        status=payload.status,
-        people_inside=payload.people_inside,
-        max_capacity=payload.max_capacity,
+        status=resolved.status,
+        people_inside=resolved.people_inside,
+        max_capacity=resolved.max_capacity,
         resources=json.dumps(payload.resources) if payload.resources else None,
         note=payload.note,
     )
     db.add(row)
     db.commit()
     db.refresh(row)
-    return status_service.to_status_out(row)
+    out = status_service.to_status_out(row)
+    out.message = resolved.message
+    return out
 
 
 @app.get("/api/facilities/{facility_id}/status/history", response_model=List[StatusOut])

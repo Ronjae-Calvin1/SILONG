@@ -66,3 +66,35 @@ class UpdateRateLimiter:
 
 
 limiter = UpdateRateLimiter()
+
+
+class ActionRateLimiter:
+    """
+    Sliding window per IP for add / remove / restore of evacuation centers:
+    at most MANAGE_MAX_ACTIONS in MANAGE_WINDOW_SECONDS (config.py), shared by
+    the three actions. Same limits as UpdateRateLimiter (memory only, per
+    process, an IP behind a proxy looks shared).
+    """
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic):
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._hits: dict[str, deque] = defaultdict(deque)
+
+    def check(self, ip: str) -> Optional[int]:
+        """None if allowed (and recorded), otherwise the seconds to wait."""
+        now = self._clock()
+        with self._lock:
+            hits = self._hits[ip]
+            while hits and now - hits[0] > config.MANAGE_WINDOW_SECONDS:
+                hits.popleft()
+            if len(hits) >= config.MANAGE_MAX_ACTIONS:
+                return max(1, int(config.MANAGE_WINDOW_SECONDS - (now - hits[0]) + 0.999))
+            hits.append(now)
+            # Drop IPs that have gone quiet so the dict cannot grow forever.
+            for other in [k for k, q in self._hits.items() if k != ip and now - q[-1] > config.MANAGE_WINDOW_SECONDS]:
+                del self._hits[other]
+            return None
+
+
+manage_limiter = ActionRateLimiter()
