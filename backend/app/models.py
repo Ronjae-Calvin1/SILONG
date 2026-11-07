@@ -31,6 +31,54 @@ class Facility(Base):
     notes = Column(Text, nullable=True)
 
 
+class UserEvacuationCenter(Base):
+    """
+    An evacuation center added through the API. Each row also has a matching
+    `facilities` row (key "user:<id>"), so map, status history and ids work the
+    same as for OSM and manual centers. Rows are never deleted: removing a center
+    is recorded in FacilityRemoval.
+    """
+    __tablename__ = "user_evacuation_centers"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    center_type = Column(String, nullable=False)  # "permanent" | "temporary"
+    barangay = Column(String, nullable=True)
+    address = Column(String, nullable=True)
+    contact = Column(String, nullable=True)
+    max_capacity = Column(Integer, nullable=False)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    note = Column(String(140), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
+class FacilityRemoval(Base):
+    """
+    Soft delete. A center is hidden while it has a row here with restored_at
+    empty. Keyed by the facility `key` (not the numeric id) so it works for
+    OSM / manual / user centers and survives a rebuild of the facilities table.
+    Restoring sets restored_at; rows are kept as history.
+    """
+    __tablename__ = "facility_removals"
+
+    id = Column(Integer, primary_key=True)
+    facility_key = Column(String, nullable=False, index=True)
+    removed_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    restored_at = Column(DateTime, nullable=True)
+
+
+class ActionLog(Base):
+    """Who-did-what trail for add / remove / restore. The IP is stored hashed only."""
+    __tablename__ = "action_log"
+
+    id = Column(Integer, primary_key=True)
+    action = Column(String, nullable=False)  # "add" | "remove" | "restore"
+    facility_key = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    ip_hash = Column(String, nullable=False)
+
+
 class StatusUpdate(Base):
     """Capacity / availability report. Newest row per facility = current status."""
     __tablename__ = "status_updates"
