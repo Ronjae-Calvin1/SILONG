@@ -1,7 +1,7 @@
 // Single place that knows how to reach the backend.
-// Map slice + status updates for now — more endpoints get added back as features return.
+// Map slice + status updates + adding/removing evacuation centers for now — more endpoints get added back as features return.
 
-import type { Facility, FacilityStatus, StatusPayload } from "../types";
+import type { Facility, FacilityStatus, NewEvacuationCenter, RemovedCenter, StatusPayload } from "../types";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api";
 
@@ -51,4 +51,14 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     }),
+  // Returns the new center, shaped like an item of getFacilities().
+  addEvacuationCenter: (payload: NewEvacuationCenter) =>
+    request<Facility>("/evacuation-centers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  // Soft remove: the backend hides the center and keeps its data, so it can be restored.
+  removeEvacuationCenter: (facilityId: number) =>
+    request<RemovedCenter>(`/evacuation-centers/${facilityId}`, { method: "DELETE" }),
 };

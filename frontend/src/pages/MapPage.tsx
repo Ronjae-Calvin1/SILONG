@@ -8,6 +8,7 @@ import { FloatingButtons } from "../components/FloatingButtons";
 import { AlertsSheet } from "../components/AlertsSheet";
 import { IncidentPanel } from "../components/IncidentPanel";
 import { FacilityPanel } from "../components/FacilityPanel";
+import { AddEvacCenter } from "../components/AddEvacCenter";
 import { StatusForm } from "../components/StatusForm";
 import { statusKey } from "../components/statusInfo";
 import "./MapPage.css";
@@ -69,6 +70,8 @@ export function MapPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // True while someone is adding an evacuation center (placing the pin or filling in the form).
+  const [adding, setAdding] = useState(false);
   const mapDiv = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const pinsRef = useRef<Map<number, Pin>>(new Map());
@@ -201,19 +204,51 @@ export function MapPage() {
 
   const selected = facilities.find((f) => f.id === selectedId) ?? null;
 
+  function showToast(message: string) {
+    setToast(message);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 3000);
+  }
+
   // The server accepted a new status: show it on the pin and in the panel right away.
   function handleSaved(facilityId: number, status: FacilityStatus) {
     lastSaveAt.current = Date.now();
     setFacilities((list) => list.map((f) => (f.id === facilityId ? { ...f, status } : f)));
     setFormOpen(false);
-    setToast("Status updated. Thank you!");
-    window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(null), 3000);
+    showToast("Status updated. Thank you!");
+  }
+
+  // Adding starts: close the details panel. Adding ends: nothing to undo.
+  function handleAddActive(active: boolean) {
+    setAdding(active);
+    if (active) {
+      setSelectedId(null);
+      setFormOpen(false);
+    }
+  }
+
+  // The server saved a new evacuation center: show its pin right away and open its details.
+  // (lastSaveAt makes a refresh that was already on its way not wipe it out.)
+  function handleAdded(facility: Facility) {
+    lastSaveAt.current = Date.now();
+    setFacilities((list) => (list.some((f) => f.id === facility.id) ? list : [...list, facility]));
+    setSelectedId(facility.id);
+    showToast("Evacuation center added.");
+  }
+
+  // The server hid an evacuation center: its pin disappears right away.
+  function handleRemoved(facilityId: number) {
+    lastSaveAt.current = Date.now();
+    setFacilities((list) => list.filter((f) => f.id !== facilityId));
+    setSelectedId(null);
+    setFormOpen(false);
+    showToast("Evacuation center removed.");
   }
 
   return (
     <div
       className="map-screen"
+      data-adding={adding}
       style={{ "--sheet-h": `${sheetH}px` } as CSSProperties}
     >
       <div ref={mapDiv} style={{ height: "100%", width: "100%" }} />
@@ -224,18 +259,22 @@ export function MapPage() {
 
       <FloatingButtons onOpenIncident={() => setIncidentOpen(true)} />
 
+      <AddEvacCenter mapRef={mapRef} onActiveChange={handleAddActive} onAdded={handleAdded} />
+
       <AlertsSheet onHeightChange={setSheetH} />
 
       <IncidentPanel open={incidentOpen} onClose={() => setIncidentOpen(false)} />
 
-      {selected && (
+      {selected && !adding && (
         <FacilityPanel
+          key={selected.id}
           facility={selected}
           onClose={() => {
             setSelectedId(null);
             setFormOpen(false);
           }}
           onUpdateStatus={() => setFormOpen(true)}
+          onRemoved={handleRemoved}
         />
       )}
 
