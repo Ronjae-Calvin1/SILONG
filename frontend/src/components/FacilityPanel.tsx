@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { api, ApiError } from "../api/client";
 import type { Facility } from "../types";
 import { Icon } from "./icons";
 import {
@@ -11,6 +12,7 @@ import {
   timeAgo,
 } from "./statusInfo";
 import "./StatusPanel.css";
+import "./EvacManager.css";
 
 // Current time, refreshed every minute (and when the tab comes back), so the
 // "15 minutes ago" labels never go stale while the page stays open.
@@ -32,11 +34,38 @@ interface Props {
   facility: Facility;
   onClose: () => void;
   onUpdateStatus: () => void;
+  onRemoved: (facilityId: number) => void; // the server hid the center; the page removes its pin
 }
 
 // Details for the tapped pin: info, current status, and the "Update status" button.
-export function FacilityPanel({ facility: f, onClose, onUpdateStatus }: Props) {
+// Evacuation centers also get "Remove from map" (with a confirmation step).
+export function FacilityPanel({ facility: f, onClose, onUpdateStatus, onRemoved }: Props) {
   const now = useNow();
+  const [confirming, setConfirming] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const confirmRef = useRef<HTMLDivElement>(null);
+
+  // The confirmation appears at the bottom of a scrolling panel: scroll the panel
+  // (only the panel, not the page behind it) down so it is seen.
+  useEffect(() => {
+    const panel = confirmRef.current?.parentElement;
+    if (confirming && panel) panel.scrollTop = panel.scrollHeight;
+  }, [confirming]);
+
+  async function remove() {
+    if (removing) return;
+    setRemoving(true);
+    setRemoveError(null);
+    try {
+      await api.removeEvacuationCenter(f.id);
+      onRemoved(f.id); // parent hides the pin and closes this panel
+    } catch (err) {
+      setRemoveError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
+      setRemoving(false);
+    }
+  }
+
   const s = f.status;
   const phones = phoneLinks(f.contact);
   const resourceText = s
@@ -91,6 +120,38 @@ export function FacilityPanel({ facility: f, onClose, onUpdateStatus }: Props) {
       <button className="update-status-btn" onClick={onUpdateStatus}>
         Update status
       </button>
+
+      {f.type === "evacuation_center" &&
+        (confirming ? (
+          <div className="evac-confirm" role="group" aria-label="Confirm removal" ref={confirmRef}>
+            <p className="evac-confirm-text">Remove this evacuation center from the map?</p>
+            {removeError && (
+              <p className="status-form-error" role="alert">
+                {removeError}
+              </p>
+            )}
+            <div className="evac-confirm-actions">
+              <button
+                type="button"
+                className="evac-confirm-keep"
+                disabled={removing}
+                onClick={() => {
+                  setConfirming(false);
+                  setRemoveError(null);
+                }}
+              >
+                Keep it
+              </button>
+              <button type="button" className="evac-confirm-yes" disabled={removing} onClick={remove}>
+                {removing ? "Removing…" : removeError ? "Try again" : "Yes, remove"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="evac-remove-btn" onClick={() => setConfirming(true)}>
+            Remove from map
+          </button>
+        ))}
     </section>
   );
 }
