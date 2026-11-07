@@ -1,6 +1,6 @@
 // Labels and small helpers for the capacity / availability feature.
 
-import type { Facility, FacilityType, ResourceName, StatusValue } from "../types";
+import type { Facility, FacilityStatus, FacilityType, ResourceName, StatusValue } from "../types";
 
 export const TYPE_LABEL: Record<FacilityType, string> = {
   hospital: "Hospital",
@@ -54,6 +54,40 @@ export function statusKey(f: Facility): StatusValue | "unknown" {
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"} ago`;
+}
+
+// "1 person" / "85 people", "1 space" / "15 spaces"
+export function countOf(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+// Bar color for the capacity indicator: under 70% green, 70-99% orange, 100% or more red.
+// Worked out from the real counts (not the rounded percent_full), so 9,999 of 10,000
+// can never round up to a red "100%".
+export type CapacityLevel = "green" | "orange" | "red";
+
+export function capacityLevel(people: number, max: number): CapacityLevel {
+  if (people >= max) return "red";
+  return people * 100 >= max * 70 ? "orange" : "green";
+}
+
+// Same rule as the backend's capacity_fields(): the new report's max_capacity (the server
+// already filled it in from the last known one when the form left it out), people_inside
+// from the report, and the numbers that depend on both. Lets the panel and pin show a new
+// report right away without waiting for the next refresh.
+export function withNewStatus(f: Facility, s: FacilityStatus): Facility {
+  const next: Facility = { ...f, status: s, is_outdated: s.is_outdated };
+  if (f.type !== "evacuation_center") return next;
+  const max = s.max_capacity ?? f.max_capacity;
+  const people = s.people_inside;
+  const known = people !== null && max !== null;
+  return {
+    ...next,
+    people_inside: people,
+    max_capacity: max,
+    spaces_left: known ? Math.max(0, max - people) : null,
+    percent_full: known ? Math.round((people / max) * 1000) / 10 : null,
+  };
 }
 
 // "just now", "15 minutes ago", "3 hours ago", "2 days ago"

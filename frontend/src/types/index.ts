@@ -18,6 +18,9 @@ export interface FacilityStatus {
   note: string | null;
   updated_at: string; // ISO time, UTC
   is_outdated: boolean; // decided by the server (one 6h setting lives there)
+  // Only on the answer to a new report, when the server changed what was sent
+  // (for example it saved "full" because people_inside reached max_capacity).
+  message?: string | null;
 }
 
 export interface Facility {

@@ -8,7 +8,11 @@ import "./StatusPanel.css";
 interface Props {
   facility: Facility;
   onClose: () => void;
+  // The new status as the server saved it. `status.message` is set when the server changed
+  // what was sent (auto-saved as full); the parent shows it.
   onSaved: (facilityId: number, status: FacilityStatus) => void;
+  // Opened from "Set capacity": put the cursor in the capacity field and say what to do.
+  focusCapacity?: boolean;
 }
 
 // "" -> undefined, otherwise a whole number >= 0 (NaN if it is not one).
@@ -19,12 +23,13 @@ function toCount(text: string): number | undefined {
 }
 
 // Users can only send capacity/availability data, never name, address or phone.
-export function StatusForm({ facility: f, onClose, onSaved }: Props) {
+export function StatusForm({ facility: f, onClose, onSaved, focusCapacity = false }: Props) {
   const isEvac = f.type === "evacuation_center";
   const [status, setStatus] = useState<StatusValue | null>(null);
   const [people, setPeople] = useState("");
-  // Capacity rarely changes, so start from the last reported value (still editable).
-  const [capacity, setCapacity] = useState(f.status?.max_capacity != null ? String(f.status.max_capacity) : "");
+  // Capacity rarely changes, so start from the center's current one (still editable). It comes
+  // from the facility, not from the last report: a new center has a capacity but no report yet.
+  const [capacity, setCapacity] = useState(f.max_capacity !== null ? String(f.max_capacity) : "");
   const [resources, setResources] = useState<ResourceName[]>([]);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -47,6 +52,10 @@ export function StatusForm({ facility: f, onClose, onSaved }: Props) {
       const c = toCount(capacity);
       if (Number.isNaN(p) || Number.isNaN(c)) {
         setError("People inside and maximum capacity must be whole numbers, like 85.");
+        return;
+      }
+      if (c === 0) {
+        setError("Maximum capacity must be at least 1.");
         return;
       }
       if (p !== undefined) payload.people_inside = p;
@@ -83,6 +92,12 @@ export function StatusForm({ facility: f, onClose, onSaved }: Props) {
         </header>
 
         <div className="status-form-body">
+          {isEvac && focusCapacity && (
+            <p className="status-form-hint status-form-hint-left">
+              Enter the maximum capacity below, then pick the status right now. A report needs both.
+            </p>
+          )}
+
           <fieldset className="status-choices">
             <legend>What is the status now?</legend>
             {STATUS_OPTIONS[f.type].map((o) => (
@@ -118,6 +133,7 @@ export function StatusForm({ facility: f, onClose, onSaved }: Props) {
                     className="status-input"
                     inputMode="numeric"
                     pattern="[0-9]*"
+                    autoFocus={focusCapacity}
                     value={capacity}
                     onChange={(e) => setCapacity(e.target.value)}
                   />

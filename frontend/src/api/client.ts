@@ -1,5 +1,5 @@
 // Single place that knows how to reach the backend.
-// Map slice + status updates + adding/removing evacuation centers for now — more endpoints get added back as features return.
+// Map slice + status updates + adding/removing/restoring evacuation centers for now — more endpoints get added back as features return.
 
 import type { Facility, FacilityStatus, NewEvacuationCenter, RemovedCenter, StatusPayload } from "../types";
 
@@ -61,4 +61,9 @@ export const api = {
   // Soft remove: the backend hides the center and keeps its data, so it can be restored.
   removeEvacuationCenter: (facilityId: number) =>
     request<RemovedCenter>(`/evacuation-centers/${facilityId}`, { method: "DELETE" }),
+  // Centers that are removed right now (newest removal first), for the restore list.
+  getRemovedCenters: () => request<RemovedCenter[]>("/evacuation-centers/removed"),
+  // Brings a removed center back. Returns it shaped like an item of getFacilities().
+  restoreEvacuationCenter: (facilityId: number) =>
+    request<Facility>(`/evacuation-centers/${facilityId}/restore`, { method: "POST" }),
 };
