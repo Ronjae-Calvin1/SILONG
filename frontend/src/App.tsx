@@ -1,9 +1,19 @@
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { LandingPage } from "./pages/LandingPage";
 import { MapPage } from "./pages/MapPage";
 
-// Backbone: map slice only. Other pages (Before/During/After/Weather)
-// and routing will come back once this piece is confirmed working.
+// "/" is the landing page (approved addition); "Get Started" opens the map at "/map".
+// Any other address goes back to the landing page.
 function App() {
-  return <MapPage />;
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/map" element={<MapPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
 export default App;

@@ -172,7 +172,7 @@ export function IncidentPanel({ open, onClose }: Props) {
     >
       <header className="incident-header">
         <h2 className="incident-title" id="incident-title">
-          Submit Incident report
+          Submit Incident Report
         </h2>
         <button
           ref={closeRef}

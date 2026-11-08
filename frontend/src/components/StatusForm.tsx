@@ -1,9 +1,17 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { api, ApiError } from "../api/client";
 import type { Facility, FacilityStatus, ResourceName, StatusPayload, StatusValue } from "../types";
 import { Icon } from "./icons";
-import { NOTE_MAX, RESOURCE_OPTIONS, STATUS_OPTIONS, TYPE_LABEL } from "./statusInfo";
+import {
+  NOTE_MAX,
+  RESOURCE_OPTIONS,
+  STATUS_OPTIONS,
+  STATUS_SYMBOL,
+  facilityKindLabel,
+  statusHint,
+} from "./statusInfo";
 import "./StatusPanel.css";
+import "./FacilityPanel.css";
 
 interface Props {
   facility: Facility;
@@ -13,6 +21,12 @@ interface Props {
   onSaved: (facilityId: number, status: FacilityStatus) => void;
   // Opened from "Set capacity": put the cursor in the capacity field and say what to do.
   focusCapacity?: boolean;
+}
+
+// Problems found in a number field before anything is sent.
+interface FieldErrors {
+  people?: string;
+  capacity?: string;
 }
 
 // "" -> undefined, otherwise a whole number >= 0 (NaN if it is not one).
@@ -34,6 +48,9 @@ export function StatusForm({ facility: f, onClose, onSaved, focusCapacity = fals
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const peopleRef = useRef<HTMLInputElement>(null);
+  const capacityRef = useRef<HTMLInputElement>(null);
 
   function toggleResource(r: ResourceName) {
     setResources((cur) => (cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r]));
@@ -50,12 +67,14 @@ export function StatusForm({ facility: f, onClose, onSaved, focusCapacity = fals
     if (isEvac) {
       const p = toCount(people);
       const c = toCount(capacity);
-      if (Number.isNaN(p) || Number.isNaN(c)) {
-        setError("People inside and maximum capacity must be whole numbers, like 85.");
-        return;
-      }
-      if (c === 0) {
-        setError("Maximum capacity must be at least 1.");
+      const problems: FieldErrors = {};
+      if (p !== undefined && Number.isNaN(p)) problems.people = "People inside must be a whole number, like 85.";
+      if (c !== undefined && Number.isNaN(c)) problems.capacity = "Maximum capacity must be a whole number, like 100.";
+      else if (c === 0) problems.capacity = "Maximum capacity must be at least 1.";
+      if (problems.people || problems.capacity) {
+        setFieldErrors(problems);
+        setError("Please fix the highlighted fields.");
+        (problems.people ? peopleRef : capacityRef).current?.focus(); // also scrolls it into view
         return;
       }
       if (p !== undefined) payload.people_inside = p;
@@ -65,9 +84,10 @@ export function StatusForm({ facility: f, onClose, onSaved, focusCapacity = fals
 
     setSaving(true);
     setError(null);
+    setFieldErrors({});
     try {
       const saved = await api.submitStatus(f.id, payload);
-      onSaved(f.id, saved); // parent closes the form and updates the pin
+      onSaved(f.id, saved); // parent closes the form, updates the pin and shows the confirmation
     } catch (err) {
       // Keep everything the user typed; just show what went wrong.
       if (err instanceof ApiError) setError(err.message);
@@ -77,110 +97,165 @@ export function StatusForm({ facility: f, onClose, onSaved, focusCapacity = fals
   }
 
   return (
-    <div className="status-form-overlay" role="dialog" aria-modal="true" aria-label="Update status">
-      <form className="status-form" onSubmit={submit}>
-        <header className="status-form-header">
-          <div>
-            <h2 className="status-form-title">Update status</h2>
-            <p className="status-form-sub">
-              {f.name} · {TYPE_LABEL[f.type]}
+    <div className="sf-backdrop" role="dialog" aria-modal="true" aria-label="Update status">
+      <form className="sf-sheet" onSubmit={submit} noValidate>
+        <header className="sf-header">
+          <div className="sf-title-block">
+            <h2 className="sf-title">Update status</h2>
+            <p className="sf-sub">
+              {f.name} · {facilityKindLabel(f)}
             </p>
           </div>
-          <button type="button" className="panel-close" onClick={onClose} aria-label="Close form">
+          <button type="button" className="fp-close" onClick={onClose} aria-label="Close form">
             <Icon name="close" />
           </button>
         </header>
 
-        <div className="status-form-body">
+        <div className="sf-body">
           {isEvac && focusCapacity && (
-            <p className="status-form-hint status-form-hint-left">
+            <p className="sf-notice">
               Enter the maximum capacity below, then pick the status right now. A report needs both.
             </p>
           )}
 
-          <fieldset className="status-choices">
-            <legend>What is the status now?</legend>
+          <fieldset className="sf-group">
+            <legend className="sf-legend">{isEvac ? "How full is it right now?" : "What is its status right now?"}</legend>
             {STATUS_OPTIONS[f.type].map((o) => (
-              <button
-                type="button"
-                key={o.value}
-                className="status-choice"
-                data-status={o.value}
-                aria-pressed={status === o.value}
-                onClick={() => setStatus(o.value)}
-              >
-                {o.label}
-              </button>
+              <label className="sf-choice" key={o.value} data-status={o.value}>
+                <input
+                  type="radio"
+                  name="facility-status"
+                  className="sf-radio"
+                  value={o.value}
+                  checked={status === o.value}
+                  onChange={() => setStatus(o.value)}
+                />
+                <span className="sf-choice-body">
+                  <span className="sf-dot" aria-hidden="true">
+                    {STATUS_SYMBOL[o.value]}
+                  </span>
+                  <span className="sf-choice-text">
+                    <span className="sf-choice-title">{o.label}</span>
+                    <span className="sf-choice-hint">{statusHint(f.type, o.value)}</span>
+                  </span>
+                  <span className="sf-choice-check" aria-hidden="true">
+                    {"\u2713"}
+                  </span>
+                </span>
+              </label>
             ))}
           </fieldset>
 
           {isEvac && (
             <>
-              <div className="status-row">
-                <label className="status-field">
-                  People inside (optional)
+              <div className="sf-row">
+                <label className="sf-field">
+                  <span className="sf-label">
+                    People inside <span className="sf-optional">(optional)</span>
+                  </span>
                   <input
-                    className="status-input"
+                    ref={peopleRef}
+                    className="sf-input"
                     inputMode="numeric"
                     pattern="[0-9]*"
+                    placeholder="e.g. 85"
                     value={people}
-                    onChange={(e) => setPeople(e.target.value)}
+                    aria-invalid={!!fieldErrors.people}
+                    aria-describedby={fieldErrors.people ? "sf-people-error" : undefined}
+                    onChange={(e) => {
+                      setPeople(e.target.value);
+                      setFieldErrors((cur) => ({ ...cur, people: undefined }));
+                    }}
                   />
+                  {fieldErrors.people && (
+                    <span className="sf-field-error" id="sf-people-error">
+                      {fieldErrors.people}
+                    </span>
+                  )}
                 </label>
-                <label className="status-field">
-                  Max capacity (optional)
+                <label className="sf-field">
+                  <span className="sf-label">
+                    Max capacity <span className="sf-optional">(optional)</span>
+                  </span>
                   <input
-                    className="status-input"
+                    ref={capacityRef}
+                    className="sf-input"
                     inputMode="numeric"
                     pattern="[0-9]*"
+                    placeholder="e.g. 100"
                     autoFocus={focusCapacity}
                     value={capacity}
-                    onChange={(e) => setCapacity(e.target.value)}
+                    aria-invalid={!!fieldErrors.capacity}
+                    aria-describedby={fieldErrors.capacity ? "sf-capacity-error" : undefined}
+                    onChange={(e) => {
+                      setCapacity(e.target.value);
+                      setFieldErrors((cur) => ({ ...cur, capacity: undefined }));
+                    }}
                   />
+                  {fieldErrors.capacity && (
+                    <span className="sf-field-error" id="sf-capacity-error">
+                      {fieldErrors.capacity}
+                    </span>
+                  )}
                 </label>
               </div>
 
-              <fieldset className="status-resources">
-                <legend>Available now (optional)</legend>
-                {RESOURCE_OPTIONS.map((r) => (
-                  <label key={r.value} className="status-check">
-                    <input
-                      type="checkbox"
-                      checked={resources.includes(r.value)}
-                      onChange={() => toggleResource(r.value)}
-                    />
-                    {r.label}
-                  </label>
-                ))}
+              <fieldset className="sf-group">
+                <legend className="sf-legend">
+                  Still available <span className="sf-optional">(optional)</span>
+                </legend>
+                <div className="sf-chips">
+                  {RESOURCE_OPTIONS.map((r) => (
+                    <label key={r.value} className="sf-chip">
+                      <input
+                        type="checkbox"
+                        className="sf-radio"
+                        checked={resources.includes(r.value)}
+                        onChange={() => toggleResource(r.value)}
+                      />
+                      <span className="sf-chip-body">
+                        <span className="sf-chip-check" aria-hidden="true">
+                          {"\u2713"}
+                        </span>
+                        {r.label}
+                      </span>
+                    </label>
+                  ))}
+                </div>
               </fieldset>
             </>
           )}
 
-          <label className="status-field">
-            Short note (optional)
+          <label className="sf-field">
+            <span className="sf-label">
+              Short note <span className="sf-optional">(optional)</span>
+            </span>
             <textarea
-              className="status-input"
+              className="sf-input sf-textarea"
               rows={2}
               maxLength={NOTE_MAX}
+              placeholder="e.g. Gym is full, classrooms still open."
               value={note}
               onChange={(e) => setNote(e.target.value)}
             />
-            <small>
+            <span className="sf-counter">
               {note.length}/{NOTE_MAX}
-            </small>
+            </span>
           </label>
+
+          <p className="sf-footnote">You can only update the status. Name, address and phone number can’t be changed here.</p>
         </div>
 
-        <footer className="status-form-footer">
+        <footer className="sf-footer">
           {error && (
-            <p className="status-form-error" role="alert">
-              {error}
+            <p className="sf-error" role="alert">
+              <span aria-hidden="true">{"\u26A0"}</span> {error}
             </p>
           )}
-          <button type="submit" className="status-submit" disabled={!status || saving}>
+          <button type="submit" className="sf-submit" disabled={!status || saving}>
             {saving ? "Sending…" : error ? "Try again" : "Submit"}
           </button>
-          {!status && <p className="status-form-hint">Pick a status above to continue.</p>}
+          {!status && <p className="sf-hint">Pick a status above to continue.</p>}
         </footer>
       </form>
     </div>

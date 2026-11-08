@@ -1,0 +1,127 @@
+/* Landing page. Phone layout first; wider screens just keep the content centered
+   for now (the tablet and desktop layouts come in their own task). */
+
+.landing {
+  position: relative;
+  box-sizing: border-box;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--space-5) + env(safe-area-inset-top)) var(--space-5)
+    calc(var(--space-6) + env(safe-area-inset-bottom));
+  overflow: hidden;
+  color: var(--color-on-primary);
+  font-family: var(--font-body);
+  /* Flood photo under a blue wash that gets solid toward the bottom (as in the design). */
+  background:
+    linear-gradient(180deg, rgb(32 92 128 / 0.55) 0%, rgb(32 92 128 / 0.8) 55%, var(--color-primary) 100%),
+    url("../assets/landing-flood.jpg") center top / cover no-repeat,
+    var(--color-primary);
+}
+
+/* Rain streaks. A small tile of slanted lines, repeated. Still (no animation). */
+.landing-rain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cg stroke='%23a9c9ef' stroke-width='2' stroke-linecap='round' fill='none'%3E%3Cpath d='M30 10l-14 52M110 40l-18 66M190 0l-12 44M70 130l-16 60M160 150l-20 70M220 110l-10 38M20 190l-8 34'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 240px 240px;
+}
+
+.landing-inner {
+  position: relative; /* above the rain */
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+  text-align: center;
+}
+
+.landing-headline {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: clamp(1.75rem, 7vw, 2.5rem);
+  line-height: 1.25;
+  text-wrap: balance;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.3);
+}
+
+.landing-logo {
+  display: block;
+  width: min(72vw, 340px);
+  height: auto;
+}
+
+.landing-tagline {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 500;
+  font-size: clamp(1.1rem, 4.5vw, 1.35rem);
+  line-height: 1.4;
+  text-wrap: balance;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 0.3);
+}
+
+.landing-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+}
+
+/* White pill with a darker lower edge, like the design. A link styled as a button:
+   it goes to another screen, so it is a link for keyboards and screen readers. */
+.landing-start {
+  min-height: 56px;
+  min-width: 220px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-7);
+  border-radius: var(--radius-pill);
+  background: #fff;
+  color: var(--color-primary);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 1.125rem;
+  text-decoration: none;
+  box-shadow:
+    0 4px 0 var(--color-primary-dark),
+    0 10px 20px rgb(0 0 0 / 0.25);
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
+}
+
+.landing-start:active {
+  transform: translateY(3px);
+  box-shadow:
+    0 1px 0 var(--color-primary-dark),
+    0 4px 10px rgb(0 0 0 / 0.25);
+}
+
+.landing-start:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 4px;
+}
+
+.landing-note {
+  margin: 0;
+  font-weight: 500;
+  font-size: 1rem;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-start {
+    transition: none;
+  }
+}

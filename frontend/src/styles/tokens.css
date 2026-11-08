@@ -1,0 +1,68 @@
+/* Fonts: Poppins for headings, Inter for body text  */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@500;600;700&display=swap");
+
+:root {
+  /* ---------- Brand colors ---------- */
+  --color-primary: #205c80; /* main blue (given) */
+  --color-primary-dark: #17465f; /* edges, pressed states */
+  --color-surface: #336a8c; /* cards on the main blue */
+  --color-surface-soft: rgb(255 255 255 / 0.12); /* translucent panels */
+  --color-on-primary: #ffffff;
+  --color-on-primary-muted: #d3e6f2; /* : secondary text on blue */
+  --color-sky: #9bbaf0; /* : chatbot background */
+
+  /* ---------- Action colors (rail buttons, submit) ---------- */
+  --color-emergency: #e8302f; 
+  --color-report: #3e7a1f; 
+  --color-alert: #c9a61a; 
+
+  /* ---------- Facility status colors ----------
+     Same values the map pins and badges already use. Status is always also
+     shown as text, never by color alone. */
+  --status-open: #1fa83a;
+  --status-almost-full: #f59a11;
+  --status-busy: #f59a11;
+  --status-full: #e8260f;
+  --status-closed: #6b6f80;
+
+  /* ---------- Typography ---------- */
+  --font-heading: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+
+  /* ---------- Shape ---------- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-sheet: 28px; /* top corners of bottom sheets */
+  --radius-pill: 999px;
+
+  /* ---------- Spacing (4px scale) ---------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* ---------- Accessibility ---------- */
+  --tap-min: 44px; /* smallest touch target */
+  --focus-ring: 3px solid #ffffff; /* visible on the blue backgrounds; light surfaces set their own */
+
+  /* ---------- Elevation ---------- */
+  --shadow-card: 0 3px 8px rgb(0 0 0 / 0.3);
+  --shadow-sheet: 0 -4px 14px rgb(0 0 0 / 0.35);
+}
+
+/* Breakpoints (CSS variables cannot be used inside @media, so they live here as a note):
+     phone:   up to 599px      (design first, the default styles)
+     tablet:  600px - 1023px   (min-width: 600px)
+     desktop: 1024px and up    (min-width: 1024px) */
+
+/* Page basics. The map screen is position: fixed and sets its own fonts, so this
+   does not change it. */
+body {
+  margin: 0;
+  background: var(--color-primary);
+  font-family: var(--font-body);
+}

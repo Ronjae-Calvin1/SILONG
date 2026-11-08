@@ -1,6 +1,9 @@
 const PATHS = {
   menu: <path d="M3 6h18M3 12h18M3 18h18" />,
   close: <path d="M6 6l12 12M18 6L6 18" />,
+  plus: <path d="M12 5v14M5 12h14" />,
+  chevronUp: <path d="M6 15l6-6 6 6" />,
+  
   user: (
     <>
       <circle cx="12" cy="8" r="4" />
@@ -48,6 +51,19 @@ const PATHS = {
       <circle cx="12" cy="12" r="9" />
       <path d="M3 12h18" />
       <path d="M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="7" />
+      <path d="M20 20l-3.5-3.5" />
+    </>
+  ),
+    cloud: <path d="M7 18a4 4 0 010-8 5 5 0 019.6-1A4.5 4.5 0 0117 18H7z" />,
+  refresh: (
+    <>
+      <path d="M20 12a8 8 0 11-2.3-5.7" />
+      <path d="M20 4v5h-5" />
     </>
   ),
 };

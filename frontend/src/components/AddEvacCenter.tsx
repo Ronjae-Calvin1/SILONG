@@ -23,6 +23,7 @@ interface Props {
   onActiveChange: (active: boolean) => void;
   // The server saved the new center; the page adds its pin.
   onAdded: (facility: Facility) => void;
+  startRequest:number;
 }
 
 // Same pin shape as the facility pins in MapPage, so the tip sits exactly on the coordinates.
@@ -43,7 +44,7 @@ function makeMarkerElement(): HTMLDivElement {
   return el;
 }
 
-export function AddEvacCenter({ mapRef, onActiveChange, onAdded }: Props) {
+export function AddEvacCenter({ mapRef, onActiveChange, onAdded, startRequest }: Props) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [point, setPoint] = useState<Point | null>(null);
   const [draft, setDraft] = useState<CenterDraft>(EMPTY_DRAFT);
@@ -99,6 +100,7 @@ export function AddEvacCenter({ mapRef, onActiveChange, onAdded }: Props) {
   // While placing, a tap on the map puts the pin there. A tap that is really a pan does not count (MapLibre decides).
   const picking = phase === "placing" || phase === "placed";
   useEffect(() => {
+    
     const map = mapRef.current;
     if (!map || !picking) return;
     const onClick = (e: maplibregl.MapMouseEvent) => {
@@ -117,14 +119,16 @@ export function AddEvacCenter({ mapRef, onActiveChange, onAdded }: Props) {
 
   // Leaving the page removes the map itself; this just makes sure the pin is gone too.
   useEffect(() => removeMarker, []);
+  // The rail's "Add center" button asks us to start. We only start from the
+  // idle state, so a second tap while placing does nothing.
+  useEffect(() => {
+    if (startRequest > 0 && phase === "idle") go("placing");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startRequest]);
+  
 
   return (
     <>
-      {phase === "idle" && (
-        <button className="add-center-btn" onClick={() => go("placing")}>
-          <span aria-hidden="true">+</span> Add evacuation center
-        </button>
-      )}
 
       {picking && (
         <div className="evac-banner" role="status">

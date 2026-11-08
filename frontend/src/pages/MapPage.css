@@ -14,88 +14,257 @@
   background: #05072e;
   color: #fff;
   overflow: hidden;
+  --controls-top: 72px; /* where the search bar starts. Change it here and the rail follows. */
 }
 
+/* ---------- Header (top bar) ---------- */
 .topbar {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   z-index: 1100;
-  height: 56px;
-  padding: 0 4px;
+  box-sizing: border-box;
+  height: 64px; 
+  padding: 0 8px 0 4px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  background: #05072e;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  justify-content: space-between; 
+  background: var(--color-primary);
+  box-shadow: var(--shadow-card);
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .topbar-btn {
-  min-width: 44px;
-  min-height: 44px;
+  min-width: var(--tap-min); 
+  min-height: var(--tap-min);
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
+  border-radius: var(--radius-md);
   background: transparent;
-  color: #fff;
+  color: var(--color-on-primary);
   cursor: pointer;
 }
 
-.topbar-right {
-  display: flex;
+.topbar-btn:hover,
+.topbar-btn:active {
+  background: var(--color-surface-soft); /* soft white glow when pressed */
 }
 
-/* Logo placeholder: white box with the app name */
+.topbar-btn:focus-visible {
+  outline: var(--focus-ring); /* visible outline for keyboard users */
+  outline-offset: -3px;
+}
+
+/* SILONG logo (white version, sits on the blue bar) */
 .topbar-logo {
-  padding: 4px 12px;
-  border-radius: 6px;
-  background: #fff;
-  color: #05072e;
-  font-weight: 800;
-  font-size: 15px;
-  letter-spacing: 0.5px;
+  display: block;
+  height: 22px;
+  width: auto; /* keeps the logo's proportions */
 }
 
-/* ---------- Category filter chips (existing feature) ---------- */
-.filter-row {
+/* ---------- Search bar + filter chips ---------- */
+.map-controls {
   position: absolute;
-  top: 64px;
+  top: var(--controls-top);
   left: 0;
   right: 0;
   z-index: 1050;
   display: flex;
-  gap: 8px;
-  padding: 0 8px;
+  flex-direction: column;
+  gap: var(--space-2);
+  pointer-events: none; /* the empty space around the controls must not block the map */
+}
+
+.map-controls > * {
+  pointer-events: auto; /* ...but the controls themselves must stay tappable */
+}
+
+.search {
+  position: relative; /* the results list is positioned against this box */
+  margin: 0 var(--space-3);
+}
+
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 0 var(--space-1) 0 var(--space-3);
+  border-radius: var(--radius-md);
+  background: #fff;
+  color: var(--color-primary);
+  box-shadow: var(--shadow-card);
+}
+
+.search-field:focus-within {
+  outline: 3px solid var(--color-sky); /* focus ring around the whole field */
+}
+
+.search-icon {
+  flex: none;
+  display: flex;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0; /* lets the input shrink instead of pushing the clear button out */
+  min-height: 44px;
+  border: none;
+  background: transparent;
+  color: #1b2a35;
+  font: inherit;
+  font-size: 16px; /* 16px stops iPhones zooming in when the field is tapped */
+}
+
+.search-input::placeholder {
+  color: #6b7a86;
+}
+
+.search-input:focus {
+  outline: none; /* the field's ring above replaces it */
+}
+
+.search-clear {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.search-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: var(--space-1);
+  list-style: none;
+  max-height: 40vh;
+  overflow-y: auto;
+  border-radius: var(--radius-md);
+  background: #fff;
+  box-shadow: var(--shadow-card);
+}
+
+.search-result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: #1b2a35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-result:hover,
+.search-result:focus-visible {
+  background: #e6f0f7;
+}
+
+.search-result-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.search-result-meta {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis; /* long addresses end with "..." instead of wrapping */
+  white-space: nowrap;
+  color: #52636f;
+  font-size: 13px;
+}
+
+.search-empty {
+  padding: 12px;
+  color: #52636f;
+  font-size: 14px;
+}
+
+/* Chips: one row that scrolls sideways when it does not fit */
+.filter-row {
+  box-sizing: border-box;
+  display: flex;
+  gap: var(--space-2);
+  width: fit-content; /* shrinks to the chips, so empty space beside them stays map */
+  max-width: 100%;
+  padding: 4px var(--space-3) 8px; /* room for the chip shadows, which overflow would clip */
   overflow-x: auto;
   white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.filter-row::-webkit-scrollbar {
+  display: none;
 }
 
 .filter-btn {
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-height: 44px;
-  padding: 0 14px;
-  border: 1px solid #2b2f6b;
-  border-radius: 22px;
-  background: #0d1048;
-  color: #fff;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
+  box-shadow: var(--shadow-card);
 }
 
 .filter-btn[aria-pressed="true"] {
-  background: #4a55d6;
-  font-weight: bold;
+  background: #d6dee6;
+  color: var(--color-primary);
+  font-weight: 700;
 }
 
-.filter-btn:disabled {
-  opacity: 0.5;
+.filter-btn:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -3px;
 }
+
+.filter-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.filter-btn[data-filter="hospital"] .filter-dot { background: #72bcd3; }
+.filter-btn[data-filter="clinic"] .filter-dot { background: #f0a6e8; }
+.filter-btn[data-filter="temporary"] .filter-dot { background: #a6d762; }
+.filter-btn[data-filter="permanent"] .filter-dot { background: #eacb5b; }
 
 .map-message {
   position: absolute;
-  top: 116px;
-  left: 8px;
+  top: calc(var(--controls-top) + 120px); /* below the search bar and chips */
+  left: 96px; /* to the right of the rail */
+  right: 12px;
   z-index: 1050;
   margin: 0;
   padding: 6px 10px;
@@ -104,6 +273,124 @@
   font-size: 14px;
 }
 
+/* ---------- Action Rail (left side) ---------- */
+.rail {
+  position: absolute;
+  top: calc(var(--controls-top) + 150px); /* search bar (48) + chips (56) + gaps */
+  left: var(--space-4);
+  z-index: 1040; /* under the search results (1050) and every panel */
+  box-sizing: border-box;
+  width: 70px;
+  /* Never grow past the alerts sheet. If space is short, the rail scrolls. */
+  max-height: calc(100% - var(--controls-top) - 120px - var(--sheet-h, 0px) - 16px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 10px 12px;
+  border-radius: 24px;
+  background: rgb(72 112 140 / 0.82); /* translucent grey-blue, like the design */
+  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow-card);
+  scrollbar-width: none;
+}
+
+.rail::-webkit-scrollbar {
+  display: none;
+}
+
+.rail[data-collapsed="true"] {
+  padding-bottom: 6px;
+}
+
+/* Chevron at the top: folds the rail away */
+.rail-toggle {
+  flex: none;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-on-primary);
+  cursor: pointer;
+}
+
+.rail-toggle svg {
+  transition: transform 0.2s ease;
+}
+
+.rail[data-collapsed="true"] .rail-toggle svg {
+  transform: rotate(180deg); /* chevron points down when folded */
+}
+
+/* All the square buttons share one size, spacing and shape */
+.rail-btn {
+  flex: none;
+  width: 58px;
+  height: 58px;
+  display: flex;
+  flex-direction: column; /* icon on top, label under it */
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 0.35);
+  border-radius: var(--radius-md);
+  color: var(--color-on-primary);
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+}
+
+.rail-btn-label {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.rail-btn-emergency { background: var(--color-emergency); }
+.rail-btn-report    { background: var(--color-report); }
+.rail-btn-alerts    { background: var(--color-alert); }
+.rail-btn-add       { background: var(--color-primary); }
+
+.rail-bot {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;        /* no gap between the circle edge and the picture */
+  overflow: hidden;  /* clips the square image to the round shape */
+  border: 2px solid rgb(255 255 255 / 0.6);
+  border-radius: 50%;
+  background: var(--color-primary-dark);
+  color: var(--color-on-primary);
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+}
+
+.rail-bot-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;    /* fills the whole circle */
+  pointer-events: none; /* taps go to the button, not the image */
+}
+
+.rail-btn:active,
+.rail-bot:active {
+  transform: scale(0.96); /* small "pressed" feel */
+}
+
+.rail-btn:focus-visible,
+.rail-bot:focus-visible,
+.rail-toggle:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
 /* ---------- Floating round buttons ---------- */
 .fab-column {
   position: absolute;
@@ -148,9 +435,11 @@
   z-index: 1200;
   display: flex;
   flex-direction: column;
-  background: #05072e;
-  border-radius: 18px 18px 0 0;
-  box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.5);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-family: var(--font-body);
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  box-shadow: var(--shadow-sheet);
   transition: transform 0.25s ease;
 }
 
@@ -158,77 +447,105 @@
   transition: none; /* follow the finger exactly while dragging */
 }
 
+/* Fully hidden: slides away first, then turns invisible (so keyboard users
+   cannot Tab into it and the shadow does not peek out). */
+.sheet-closed {
+  visibility: hidden;
+  transition: transform 0.25s ease, visibility 0s linear 0.25s;
+}
+
 .sheet-drag {
   touch-action: none; /* lets us drag instead of scrolling the page */
   cursor: grab;
-  padding: 8px 56px 4px; /* side space keeps the title clear of the X */
+  padding: var(--space-4) 56px var(--space-1); /* side space keeps the title clear of the X */
 }
 
 .sheet-handle {
   width: 44px;
   height: 5px;
-  margin: 0 auto 8px;
+  margin: 0 auto var(--space-3);
   border-radius: 3px;
-  background: #5a5f9a;
+  background: var(--color-on-primary);
 }
 
 .sheet-title {
   margin: 0;
-  font-size: 16px;
+  padding-bottom: var(--space-4);
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 600;
   text-align: center;
+  color: var(--color-on-primary);
+  border-bottom: 1px solid var(--color-surface-soft);
 }
 
 .sheet-close {
   position: absolute;
   top: 2px;
   right: 2px;
-  width: 44px;
-  height: 44px;
+  width: var(--tap-min);
+  height: var(--tap-min);
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
   background: transparent;
-  color: #fff;
+  color: var(--color-on-primary);
   cursor: pointer;
 }
 
-/* Tabs: white pill with 3 icon buttons */
+.sheet-close:focus-visible {
+  outline: var(--focus-ring);
+}
+
+/* Tabs: three separate white buttons; the active one is light blue */
 .sheet-tabs {
   display: flex;
-  gap: 4px;
-  margin: 4px 12px 8px;
-  padding: 4px;
-  border-radius: 14px;
-  background: #fff;
+  gap: var(--space-2);
+  margin: var(--space-3) var(--space-4);
 }
 
 .sheet-tab {
   flex: 1;
-  min-height: 44px;
+  min-height: var(--tap-min);
   display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  color: #05072e;
+  gap: 6px; /* space between icon and label */
+  border: 1px solid var(--color-primary-dark);
+  border-radius: var(--radius-md);
+  background: var(--color-on-primary);
+  color: var(--color-primary);
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
 }
 
 .sheet-tab-active {
-  background: #cfcfd6;
+  background: var(--color-on-primary-muted);
+  box-shadow: var(--shadow-card);
+}
+
+.sheet-tab:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.sheet-tab-label {
+  white-space: nowrap; /* keeps "Warnings" on one line */
 }
 
 .sheet-body {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 16px 24px;
-  color: #c9cbe8;
+  padding: var(--space-1) var(--space-4) var(--space-5);
+  color: var(--color-on-primary);
 }
 
 .sheet-heading {
-  margin: 12px 0 8px;
+  margin: var(--space-3) 0 var(--space-2);
+  font-family: var(--font-heading);
   font-size: 14px;
   text-align: center;
   text-transform: uppercase;
@@ -236,22 +553,27 @@
 }
 
 .sheet-heading-red {
-  color: #ff3b30;
+  color: var(--color-emergency);
 }
 
-/* Grey placeholder boxes */
+/* Card on the blue sheet (we will reuse this in the next step) */
 .sheet-card {
   min-height: 56px;
   margin-bottom: 10px;
-  padding: 12px;
-  border-radius: 8px;
-  background: #3b3d66;
-  color: #c9cbe8;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-on-primary);
+  font-size: 14px;
+}
+
+.sheet-note {
+  margin: var(--space-4) 0;
+  text-align: center;
   font-size: 14px;
 }
 
 /* ---------- Incident report panel ---------- */
-/* Full-screen panel that slides in from the right, above the round buttons (1300). */
 .incident-panel {
   position: absolute;
   top: 0;
@@ -263,47 +585,67 @@
   flex-direction: column;
   background: #05072e;
   color: #fff;
-  transform: translateX(100%);
-  visibility: hidden; /* closed: slide away, then hide so Tab can't reach it */
+  transform: translateY(100%);
+  visibility: hidden;
   transition: transform 0.25s ease, visibility 0s 0.25s;
 }
 
 .incident-panel-open {
-  transform: none;
+  transform: translateY(0);
   visibility: visible;
   transition: transform 0.25s ease;
+}
+
+/* Desktop: slide the incident panel in from the right. */
+@media (min-width: 700px) {
+  .incident-panel {
+    left: auto;
+    width: min(440px, 45vw);
+    transform: translateX(100%);
+  }
+
+  .incident-panel-open {
+    transform: translateX(0);
+  }
 }
 
 .incident-header {
   position: relative;
   flex: none;
-  min-height: 56px;
+  min-height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 56px; /* keeps the title clear of the X */
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  padding: 0 60px;
+  border-bottom: 1px solid rgb(255, 255, 255, 0.12);
 }
 
 .incident-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 17px;
+  font-weight: 700;
   text-align: center;
 }
 
 .incident-close {
   position: absolute;
-  top: 6px;
+  top: 50%;
   right: 4px;
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
+  border: 2px solid #8c96ff;
+  border-radius: 0;
   background: transparent;
   color: #fff;
   cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.incident-close:hover {
+  background: rgb(140, 150, 255, 0.15);
 }
 
 /* The form fills the rest. Only the body scrolls; the footer stays put. */
@@ -319,20 +661,21 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 16px;
+  padding: 20px 16px 24px;
 }
 
 .incident-info {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  margin-bottom: 16px;
-  padding: 12px;
+  margin-bottom: 20px;
+  padding: 13px;
   border: 1px solid #2b2f6b;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #0d1048;
   color: #c9cbe8;
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 /* The round "i" is drawn with CSS, no icon needed */
@@ -351,12 +694,13 @@
 
 .incident-field {
   position: relative;
-  margin-bottom: 16px;
+  margin-bottom: 19px;
 }
 
 .incident-label {
   display: block;
-  margin: 0 0 6px;
+  margin: 0 0 8px;
+  color: #fff;
   font-size: 14px;
   font-weight: 600;
 }
@@ -366,8 +710,8 @@
   display: block;
   width: 100%;
   box-sizing: border-box;
-  min-height: 44px;
-  padding: 10px 12px;
+  min-height: 46px;
+  padding: 11px 13px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: #d9d9de;
@@ -377,11 +721,15 @@
 }
 
 .incident-textarea {
-  min-height: 96px;
+  min-height: 90px;
   resize: vertical;
 }
 
-.incident-input:focus-visible,
+.incident-input:focus-visible {
+  outline: 3px solid #8c96ff;
+  outline-offset: 2px;
+}
+
 .incident-submit:focus-visible,
 .incident-close:focus-visible,
 .incident-preview-remove:focus-visible,

@@ -120,3 +120,50 @@ export function phoneLinks(contact?: string): { text: string; href: string }[] {
     .filter(Boolean)
     .map((text) => ({ text, href: `tel:${text.split(/local|loc\./i)[0].replace(/[^\d+]/g, "")}` }));
 }
+
+// ---------- Added for the redesigned details panel and status form ----------
+
+// A small symbol shown next to every status, so the status is never shown by color alone.
+export const STATUS_SYMBOL: Record<StatusValue | "unknown", string> = {
+  open: "\u2713", // check mark
+  almost_full: "!",
+  busy: "!",
+  full: "\u2715", // cross
+  closed: "\u2013", // dash
+  unknown: "?",
+};
+
+// One short helper line under each status choice in the update form.
+const STATUS_HINT: Record<FacilityType, Partial<Record<StatusValue, string>>> = {
+  evacuation_center: {
+    open: "Accepting more people.",
+    almost_full: "Only a few spaces are left.",
+    full: "Cannot take more people.",
+    closed: "Not open right now.",
+  },
+  hospital: {
+    open: "Accepting patients.",
+    busy: "Limited service or long waits.",
+    full: "Not accepting new patients.",
+    closed: "Not open right now.",
+  },
+  clinic: {
+    open: "Accepting patients.",
+    busy: "Limited service or long waits.",
+    full: "Not accepting new patients.",
+    closed: "Not open right now.",
+  },
+};
+
+export function statusHint(type: FacilityType, value: StatusValue): string {
+  return STATUS_HINT[type][value] ?? "";
+}
+
+// "Temporary evacuation center" when the center was added through the app and has a
+// center_type; otherwise the plain type label ("Hospital", "Clinic", "Evacuation center").
+export function facilityKindLabel(f: Facility): string {
+  if (f.type === "evacuation_center" && f.center_type) {
+    return `${f.center_type === "temporary" ? "Temporary" : "Permanent"} evacuation center`;
+  }
+  return TYPE_LABEL[f.type];
+}

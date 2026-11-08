@@ -4,10 +4,14 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { api } from "../api/client";
 import type { Facility, FacilityStatus, FacilityType } from "../types";
 import { TopBar } from "../components/TopBar";
-import { FloatingButtons } from "../components/FloatingButtons";
+import { ActionRail } from "../components/ActionRail";
 import { AlertsSheet } from "../components/AlertsSheet";
 import { IncidentPanel } from "../components/IncidentPanel";
+import { EmergencyHotlines } from "../components/EmergencyHotlines";
 import { FacilityPanel } from "../components/FacilityPanel";
+import { SearchBar } from "../components/SearchBar";
+import { FilterChips } from "../components/FilterChips";
+import { matchesFilter, type FilterId } from "../components/facilityFilter";
 import { AddEvacCenter } from "../components/AddEvacCenter";
 import { StatusForm } from "../components/StatusForm";
 import { RemovedCenters } from "../components/RemovedCenters";
@@ -62,22 +66,19 @@ interface Pin {
 
 export function MapPage() {
   const [facilities, setFacilities] = useState<Facility[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  // Is the "Submit Incident report" panel open? (starts closed)
-  const [incidentOpen, setIncidentOpen] = useState(false);
-  // How tall the sheet is right now, so the round buttons can ride above it.
-  const [sheetH, setSheetH] = useState(0);
-  // Pin that is open in the details panel, and whether its update form is open.
+  const [error, setError] = useState<string | null>(null); // Is the "Submit Incident report" panel open? (starts closed)
+  const [incidentOpen, setIncidentOpen] = useState(false); // How tall the sheet is right now, so the round buttons can ride above it.
+  const [emergencyOpen, setEmergencyOpen] = useState(false);
+  const [sheetH, setSheetH] = useState(0); // Pin that is open in the details panel, and whether its update form is open.
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [formOpen, setFormOpen] = useState(false);
-  // True when the form was opened from "Set capacity" (capacity field first).
-  const [focusCapacity, setFocusCapacity] = useState(false);
-  // Top-bar menu: for now it only holds the "Removed centers" list.
-  const [menuOpen, setMenuOpen] = useState(false);
-  // "notice" is for messages from the server that change what the person typed (longer, orange).
-  const [toast, setToast] = useState<{ text: string; kind: "ok" | "notice" } | null>(null);
-  // True while someone is adding an evacuation center (placing the pin or filling in the form).
+  const [formOpen, setFormOpen] = useState(false); // True when the form was opened from "Set capacity" (capacity field first).
+  const [focusCapacity, setFocusCapacity] = useState(false); // Top-bar menu: for now it only holds the "Removed centers" list.
+  const [menuOpen, setMenuOpen] = useState(false); // "notice" is for messages from the server that change what the person typed (longer, orange).
+  const [toast, setToast] = useState<{ text: string; kind: "ok" | "notice" } | null>(null); // True while someone is adding an evacuation center (placing the pin or filling in the form).
   const [adding, setAdding] = useState(false);
+  const [filter, setFilter] = useState<FilterId>("all"); // Counters that tell AddEvacCenter / AlertsSheet "start now" (see the rail).
+  const [addRequest, setAddRequest] = useState(0);
+  const [alertsRequest, setAlertsRequest] = useState(0);
   const mapDiv = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const pinsRef = useRef<Map<number, Pin>>(new Map());
@@ -127,8 +128,8 @@ export function MapPage() {
     };
   }, []);
 
-  // All pins are always shown.
-  const shown = facilities;
+  // Only the pins that match the selected chip are shown.
+  const shown = facilities.filter((f) => matchesFilter(f, filter));
 
   // Draw a pin for every facility. Pins are created once and then only restyled
   // when a status changes, so an update shows up without redrawing the map.
@@ -182,14 +183,19 @@ export function MapPage() {
       pin.el.dataset.source = f.source; // "user" gets a small ring (added through the app)
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facilities]);
+  }, [facilities, filter]);
 
   // Highlight the selected pin.
   useEffect(() => {
     pinsRef.current.forEach((pin, id) => {
       pin.el.dataset.selected = String(id === selectedId);
     });
-  }, [selectedId, facilities]);
+  }, [selectedId, facilities, filter]);
+
+    // If a place gets opened (pin tap or search result), the hotlines panel steps aside.
+  useEffect(() => {
+    if (selectedId !== null) setEmergencyOpen(false);
+  }, [selectedId]);
 
   // Keep the selected pin visible above the details panel.
   useEffect(() => {
@@ -267,6 +273,15 @@ export function MapPage() {
     showToast("Evacuation center restored.");
   }
 
+  // A search result was tapped: open that place's details. The effect that
+  // watches selectedId already moves the map to it.
+  function handleSearchSelect(facility: Facility) {
+    if (!matchesFilter(facility, filter)) setFilter("all"); // make sure its pin is visible
+    setSelectedId(facility.id);
+    setFormOpen(false);
+    setMenuOpen(false);
+  }
+
   return (
     <div
       className="map-screen"
@@ -275,19 +290,51 @@ export function MapPage() {
     >
       <div ref={mapDiv} style={{ height: "100%", width: "100%" }} />
 
-      <TopBar menuOpen={menuOpen} onMenuClick={() => setMenuOpen((open) => !open)} />
+      <TopBar
+        menuOpen={menuOpen}
+        onMenuClick={() => setMenuOpen((open) => !open)}
+        onBellClick={() => setAlertsRequest((n) => n + 1)}
+      />
+      
+      {!adding && (
+        <div className="map-controls">
+          <SearchBar facilities={facilities} onSelect={handleSearchSelect} />
+          <FilterChips value={filter} onChange={setFilter} />
+        </div>
+      )}
+
+      <SearchBar facilities={facilities} onSelect={handleSearchSelect} />
+
+      <FilterChips value={filter} onChange={setFilter} />
 
       {menuOpen && !adding && <RemovedCenters onClose={() => setMenuOpen(false)} onRestored={handleRestored} />}
 
       {error && <p className="map-message">Error: {error}</p>}
+      {!error && facilities.length > 0 && shown.length === 0 && (
+        <p className="map-message">None found in our data. Ask your local DRRMO or call 911.</p>
+        )}
+        
+        {!adding && (
+          <ActionRail
+                      onOpenEmergency={() => {
+              setSelectedId(null);
+              setFormOpen(false);
+              setMenuOpen(false);
+              setEmergencyOpen(true);
+            }}
 
-      <FloatingButtons onOpenIncident={() => setIncidentOpen(true)} />
+            onOpenIncident={() => setIncidentOpen(true)}
+            onOpenAlerts={() => setAlertsRequest((n) => n + 1)}
+            onAddCenter={() => setAddRequest((n) => n + 1)}
+          />
+          )}
 
-      <AddEvacCenter mapRef={mapRef} onActiveChange={handleAddActive} onAdded={handleAdded} />
+      <AddEvacCenter mapRef={mapRef} onActiveChange={handleAddActive} onAdded={handleAdded} startRequest={addRequest} />
 
-      <AlertsSheet onHeightChange={setSheetH} />
+      <AlertsSheet onHeightChange={setSheetH} openRequest={alertsRequest} />
 
       <IncidentPanel open={incidentOpen} onClose={() => setIncidentOpen(false)} />
+        {emergencyOpen && <EmergencyHotlines facilities={facilities} onClose={() => setEmergencyOpen(false)} />}
 
       {selected && !adding && (
         <FacilityPanel

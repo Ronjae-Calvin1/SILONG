@@ -1,0 +1,751 @@
+/* Redesigned facility details panel + status update sheet.
+   New class names start with  fp-  (details panel)  and  sf-  (status form),
+   so nothing here can clash with StatusPanel.css (pins) or EvacManager.css.
+   Colors, spacing and radius come from src/styles/tokens.css. */
+
+/* ===================== Details panel (bottom sheet) ===================== */
+.fp-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1350; /* above the alerts sheet (1200) and round buttons (1300) */
+  box-sizing: border-box;
+  max-height: 65%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  background: var(--color-primary);
+  box-shadow: var(--shadow-sheet);
+  color: var(--color-on-primary);
+}
+
+/* Wider screens: keep the panel phone-sized and centered instead of stretching. */
+@media (min-width: 600px) {
+  .fp-panel {
+    max-width: 520px;
+    margin: 0 auto;
+  }
+}
+
+.fp-top {
+  flex: none;
+  padding: var(--space-2) var(--space-4) 0;
+}
+
+.fp-scroll {
+  flex: 1;
+  min-height: 0; /* lets a flex child scroll instead of growing */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 var(--space-4) var(--space-3);
+}
+
+.fp-handle {
+  display: block;
+  width: 44px;
+  height: 4px;
+  margin: 0 auto var(--space-3);
+  border-radius: var(--radius-pill);
+  background: rgb(255 255 255 / 0.7);
+}
+
+.fp-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.fp-title-block {
+  flex: 1;
+  min-width: 0;
+}
+
+.fp-kind {
+  margin: 0 0 var(--space-1);
+  color: var(--color-on-primary-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.fp-name {
+  margin: 0;
+  color: var(--color-on-primary);
+  font-family: var(--font-heading, inherit);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.fp-address {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 6px 0 0;
+  color: var(--color-on-primary-muted);
+  font-size: 14px;
+}
+
+.fp-address svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+/* Close button (also used by the status form). 44px = comfortable tap size. */
+.fp-close {
+  flex: none;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  margin: -4px -8px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-on-primary);
+  cursor: pointer;
+}
+
+.fp-close:hover {
+  background: var(--color-surface-soft);
+}
+
+/* ---------- Status card ---------- */
+.fp-card {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.fp-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Badge: light chip with dark text (readable), a symbol, and the status in words. */
+.fp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px 5px 6px;
+  border-radius: var(--radius-pill);
+  background: #e1e4ea;
+  color: #2f3542;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.fp-badge-symbol {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--status-closed);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.fp-badge[data-status="open"] { background: #d9f2dc; color: #14532d; }
+.fp-badge[data-status="open"] .fp-badge-symbol { background: var(--status-open); }
+
+.fp-badge[data-status="almost_full"],
+.fp-badge[data-status="busy"] { background: #fde9b0; color: #5c3d00; }
+.fp-badge[data-status="almost_full"] .fp-badge-symbol,
+.fp-badge[data-status="busy"] .fp-badge-symbol { background: var(--status-almost-full); color: #3b2600; }
+
+.fp-badge[data-status="full"] { background: #fcd5d0; color: #7a1208; }
+.fp-badge[data-status="full"] .fp-badge-symbol { background: var(--status-full); }
+
+/* No status yet: outlined, never a fake "open" green. */
+.fp-badge[data-status="unknown"] {
+  border: 1px dashed rgb(255 255 255 / 0.7);
+  background: transparent;
+  color: var(--color-on-primary);
+}
+.fp-badge[data-status="unknown"] .fp-badge-symbol { background: rgb(255 255 255 / 0.25); }
+
+.fp-badge[data-outdated="true"] { opacity: 0.85; }
+
+.fp-outdated {
+  padding: 4px 10px;
+  border: 1px dashed #ffd98a;
+  border-radius: var(--radius-pill);
+  color: #ffd98a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ---------- Capacity ---------- */
+.fp-capacity {
+  margin-top: var(--space-3);
+  --bar-color: var(--status-open);
+}
+.fp-capacity[data-level="orange"] { --bar-color: var(--status-almost-full); }
+.fp-capacity[data-level="red"] { --bar-color: #ff5a45; }
+.fp-capacity[data-outdated="true"] { opacity: 0.85; }
+
+.fp-capacity-plain {
+  margin: 0;
+  font-size: 15px;
+}
+
+.fp-capacity-numbers {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.fp-capacity-numbers strong {
+  font-size: 16px;
+}
+
+.fp-capacity-bar {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: rgb(255 255 255 / 0.25);
+}
+
+.fp-capacity-fill {
+  height: 100%;
+  border-radius: 5px;
+  background: var(--bar-color);
+  transition: width 0.25s ease;
+}
+
+.fp-updated {
+  margin: var(--space-3) 0 0;
+  color: var(--color-on-primary-muted);
+  font-size: 13px;
+}
+
+/* Small text button, e.g. "Set capacity". Padding makes the tap area 44px tall. */
+.fp-link-btn {
+  min-height: var(--tap-min);
+  margin-left: var(--space-1);
+  padding: 0 var(--space-1);
+  border: none;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ---------- Sections under the card ---------- */
+.fp-section {
+  margin-top: var(--space-4);
+}
+
+.fp-section-title {
+  margin: 0 0 var(--space-2);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.fp-chips,
+.fp-contacts {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fp-chips { flex-wrap: wrap; }
+.fp-contacts { flex-direction: column; gap: 0; } /* each number is already 44px tall */
+
+/* Only resources that were reported as available are listed. */
+.fp-chip {
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  background: #d9f2dc;
+  color: #14532d;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.fp-note {
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: rgb(255 255 255 / 0.12);
+  font-size: 15px;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
+.fp-contact-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* ---------- Buttons ---------- */
+.fp-actions {
+  flex: none;
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
+  border-top: 1px solid rgb(255 255 255 / 0.2);
+}
+
+.fp-btn {
+  flex: 1;
+  box-sizing: border-box;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.fp-btn-primary {
+  border: 2px solid #fff;
+  background: #fff;
+  color: var(--color-primary);
+}
+
+.fp-btn-call {
+  border: 2px solid rgb(255 255 255 / 0.6);
+  background: transparent;
+  color: #fff;
+}
+
+.fp-remove-btn {
+  width: 100%;
+  min-height: 48px;
+  margin-top: var(--space-3);
+  border: 2px solid #ffc2b8;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: #ffd2cb;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* The removal confirmation (classes live in EvacManager.css): soften it for the blue panel. */
+.fp-panel .evac-confirm {
+  border-color: #ffc2b8;
+  border-radius: var(--radius-md);
+  background: rgb(0 0 0 / 0.2);
+}
+.fp-panel .status-form-error {
+  color: #ffd2cb;
+  font-weight: 600;
+}
+
+/* Keyboard focus ring on everything tappable in the panel and the form */
+.fp-close:focus-visible,
+.fp-link-btn:focus-visible,
+.fp-contact-link:focus-visible,
+.fp-btn:focus-visible,
+.fp-remove-btn:focus-visible,
+.sf-input:focus-visible,
+.sf-submit:focus-visible,
+.sf-radio:focus-visible + .sf-choice-body,
+.sf-radio:focus-visible + .sf-chip-body {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ===================== Status update sheet ===================== */
+.sf-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 1450; /* above the incident panel (1400) */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: rgb(5 7 46 / 0.55);
+}
+
+.sf-sheet {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 94%;
+  margin: 0 auto;
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  background: var(--color-primary);
+  box-shadow: var(--shadow-sheet);
+  color: var(--color-on-primary);
+}
+
+@media (min-width: 600px) {
+  .sf-sheet {
+    max-width: 520px;
+  }
+}
+
+.sf-header {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border-bottom: 1px solid rgb(255 255 255 / 0.2);
+}
+
+.sf-title-block {
+  min-width: 0;
+}
+
+.sf-title {
+  margin: 0;
+  font-family: var(--font-heading, inherit);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.sf-sub {
+  margin: 2px 0 0;
+  color: var(--color-on-primary-muted);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.sf-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-4);
+}
+
+.sf-notice {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: rgb(255 255 255 / 0.14);
+  font-size: 14px;
+}
+
+.sf-group {
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+
+.sf-legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.sf-optional {
+  color: var(--color-on-primary-muted);
+  font-weight: 400;
+}
+
+/* Native radio / checkbox, hidden from view but still reachable with keyboard and screen readers. */
+.sf-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------- Status choice cards ---------- */
+.sf-choice {
+  position: relative;
+  display: block;
+  margin-bottom: var(--space-2);
+  cursor: pointer;
+}
+
+.sf-choice-body {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  box-sizing: border-box;
+  min-height: 60px;
+  padding: var(--space-2) var(--space-3);
+  border: 2px solid rgb(255 255 255 / 0.25);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.sf-dot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--dot-color, var(--status-closed));
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.sf-choice[data-status="open"] { --dot-color: var(--status-open); }
+.sf-choice[data-status="almost_full"],
+.sf-choice[data-status="busy"] { --dot-color: var(--status-almost-full); }
+.sf-choice[data-status="almost_full"] .sf-dot,
+.sf-choice[data-status="busy"] .sf-dot { color: #3b2600; }
+.sf-choice[data-status="full"] { --dot-color: var(--status-full); }
+.sf-choice[data-status="closed"] { --dot-color: var(--status-closed); }
+
+.sf-choice-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sf-choice-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.sf-choice-hint {
+  color: var(--color-on-primary-muted);
+  font-size: 13px;
+}
+
+.sf-choice-check {
+  display: none;
+  flex: none;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+/* Picked: white card + a check mark (not only a color change). */
+.sf-radio:checked + .sf-choice-body {
+  border-color: #fff;
+  background: #fff;
+  color: #123347;
+}
+.sf-radio:checked + .sf-choice-body .sf-choice-hint { color: #3c5668; }
+.sf-radio:checked + .sf-choice-body .sf-choice-check { display: block; }
+
+/* ---------- Number fields, note ---------- */
+.sf-row {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.sf-field {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  margin-bottom: var(--space-4);
+}
+
+.sf-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* 16px text stops iPhones zooming in on focus */
+.sf-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 10px var(--space-3);
+  border: 1px solid rgb(255 255 255 / 0.4);
+  border-radius: var(--radius-md);
+  background: rgb(255 255 255 / 0.14);
+  color: #fff;
+  font: inherit;
+  font-size: 16px;
+}
+
+.sf-input::placeholder {
+  color: rgb(255 255 255 / 0.6);
+}
+
+.sf-input[aria-invalid="true"] {
+  border: 2px solid #ffc2b8;
+}
+
+.sf-textarea {
+  resize: vertical;
+}
+
+.sf-field-error {
+  display: block;
+  margin-top: 6px;
+  color: #ffd2cb;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sf-counter {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-on-primary-muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.sf-footnote {
+  margin: 0;
+  color: var(--color-on-primary-muted);
+  font-size: 13px;
+}
+
+/* ---------- Resource chips ---------- */
+.sf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.sf-chip {
+  position: relative;
+  cursor: pointer;
+}
+
+.sf-chip-body {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  box-sizing: border-box;
+  border: 2px solid rgb(255 255 255 / 0.4);
+  border-radius: var(--radius-pill);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.sf-chip-check {
+  display: none;
+}
+
+.sf-radio:checked + .sf-chip-body {
+  border-color: #fff;
+  background: #fff;
+  color: #123347;
+}
+.sf-radio:checked + .sf-chip-body .sf-chip-check { display: inline; }
+
+/* ---------- Footer: error, submit ---------- */
+.sf-footer {
+  flex: none;
+  padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
+  border-top: 1px solid rgb(255 255 255 / 0.2);
+}
+
+.sf-error {
+  margin: 0 0 var(--space-2);
+  padding: 10px var(--space-3);
+  border-radius: var(--radius-md);
+  background: #fde3df;
+  color: #7a1208;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.sf-submit {
+  width: 100%;
+  min-height: 54px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: #fff;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sf-submit:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.sf-hint {
+  margin: var(--space-2) 0 0;
+  color: var(--color-on-primary-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ===================== Confirmation toast ===================== */
+/* Same toast as before (rule lives in StatusPanel.css); this only adds a symbol in front,
+   so "saved" and "notice" are told apart by more than color. */
+.map-screen .status-toast::before {
+  content: "\2713\00a0";
+}
+.map-screen .status-toast[data-kind="notice"]::before {
+  content: "\2139\00a0";
+}
+
+/* ---------- Gray "not reported" chips, disabled Call, no-contact text ---------- */
+.fp-chip[data-on="false"] {
+  background: #e1e4ea;
+  color: #2f3542;
+}
+
+.fp-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.fp-btn-call:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.fp-no-contact {
+  margin: 0;
+  color: var(--color-on-primary-muted);
+  font-size: 15px;
+}
+
+/* Update status button: white fill, blue text (same blue as the Submit button) */
+.fp-btn.fp-btn-update {
+  border: 2px solid #fff;
+  background: #fff;
+  color: #205c80;
+}
