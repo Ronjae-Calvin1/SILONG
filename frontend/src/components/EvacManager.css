@@ -6,20 +6,20 @@
 /* Sits on the left at the same height as the round buttons on the right. */
 .add-center-btn {
   position: absolute;
-  left: 12px;
+  left: var(--ui-gutter);
   bottom: min(calc(var(--sheet-h, 0px) + 16px), calc(100% - 330px));
   z-index: 1300;
   max-width: calc(100% - 88px);
-  min-height: 52px;
+  min-height: 54px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 18px;
+  padding: 0 clamp(16px, 4.5vw, 20px);
   border: 2px solid #fff;
   border-radius: 26px;
   background: #4a55d6;
   color: #fff;
-  font-size: 15px;
+  font-size: var(--ui-text-body);
   font-weight: 700;
   cursor: pointer;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
@@ -29,7 +29,7 @@
 /* ---------- Placement banner (always has Cancel) ---------- */
 .evac-banner {
   position: absolute;
-  top: 64px;
+  top: var(--controls-top);
   left: 8px;
   right: 8px;
   z-index: 1320;
@@ -44,7 +44,7 @@
 
 .evac-banner-text {
   margin: 0 0 10px;
-  font-size: 15px;
+  font-size: var(--ui-text-body);
   font-weight: 600;
 }
 
@@ -117,7 +117,7 @@
   display: block;
   margin-top: 4px;
   color: #ff6b5e;
-  font-size: 13px;
+  font-size: var(--ui-text-small);
   font-weight: 400;
 }
 
@@ -195,7 +195,7 @@
 /* Small card under the top bar. Above the alerts sheet (1200), below the details panel (1350). */
 .removed-menu {
   position: absolute;
-  top: 60px;
+  top: var(--controls-top);
   left: 8px;
   z-index: 1250;
   box-sizing: border-box;
@@ -270,7 +270,7 @@
 }
 
 .removed-when {
-  font-size: 13px;
+  font-size: var(--ui-text-small);
 }
 
 .removed-restore-btn {

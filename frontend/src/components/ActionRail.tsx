@@ -28,7 +28,7 @@ function RailButton({
 }) {
   return (
     <button type="button" className={`rail-btn rail-btn-${tone}`} aria-label={ariaLabel} onClick={onClick}>
-      <Icon name={icon} size={23} />
+      <Icon name={icon} size={25} />
       <span className="rail-btn-label">{label}</span>
     </button>
   );
@@ -47,7 +47,7 @@ export function ActionRail({ onOpenEmergency, onOpenIncident, onOpenAlerts, onOp
         aria-label={collapsed ? "Show quick actions" : "Hide quick actions"}
         onClick={() => setCollapsed((c) => !c)}
       >
-        <Icon name="chevronUp" size={26} />
+        <Icon name="chevronUp" size={28} />
       </button>
 
       {!collapsed && (

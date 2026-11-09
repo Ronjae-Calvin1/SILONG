@@ -4,11 +4,17 @@
 /* ---------- Status pins ---------- */
 /* No `position` here: MapLibre's own .maplibregl-marker rule makes it absolute. */
 .pin {
-  width: 28px;
-  height: 28px;
+  width: clamp(32px, 8vw, 34px);
+  height: clamp(32px, 8vw, 34px);
   cursor: pointer;
   --pin-color: #e9eaf2;
   --pin-letter: #05072e;
+}
+
+.pin::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
 }
 
 /* Teardrop: a rotated square with one sharp corner pointing down. */
@@ -30,7 +36,7 @@
 .pin-letter {
   transform: rotate(45deg);
   color: var(--pin-letter);
-  font: 700 12px system-ui, sans-serif;
+  font: 700 13px system-ui, sans-serif;
   pointer-events: none;
 }
 
@@ -98,19 +104,19 @@
 .facility-name {
   margin: 0 40px 2px 0;
   color: #fff;
-  font-size: 18px;
+  font-size: clamp(19px, 5.2vw, 21px);
 }
 
 .facility-type {
   margin: 0 0 8px;
-  font-size: 13px;
+  font-size: var(--ui-text-small);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .facility-line {
   margin: 4px 0;
-  font-size: 15px;
+  font-size: var(--ui-text-body);
 }
 
 .facility-line a {
@@ -135,7 +141,7 @@
   margin: 0 8px 6px 0;
   padding: 4px 10px;
   border-radius: 14px;
-  font-size: 14px;
+  font-size: var(--ui-text-label);
   font-weight: 700;
 }
 
@@ -266,12 +272,12 @@
 
 .status-form-title {
   margin: 0;
-  font-size: 18px;
+  font-size: clamp(19px, 5.2vw, 21px);
 }
 
 .status-form-sub {
   margin: 2px 0 0;
-  font-size: 13px;
+  font-size: var(--ui-text-small);
   color: #c9cbe8;
 }
 
@@ -294,7 +300,7 @@
 .status-resources legend {
   margin-bottom: 8px;
   padding: 0;
-  font-size: 14px;
+  font-size: var(--ui-text-label);
   font-weight: 600;
 }
 
@@ -339,7 +345,7 @@
   display: block;
   flex: 1;
   margin-bottom: 16px;
-  font-size: 14px;
+  font-size: var(--ui-text-label);
   font-weight: 600;
 }
 
@@ -408,20 +414,20 @@ textarea.status-input {
 .status-form-error {
   margin: 0 0 8px;
   color: #ff6b5e;
-  font-size: 14px;
+  font-size: var(--ui-text-label);
   text-align: center;
 }
 
 .status-form-hint {
   margin: 8px 0 0;
   color: #c9cbe8;
-  font-size: 13px;
+  font-size: var(--ui-text-small);
   text-align: center;
 }
 
 .status-form-hint-left {
   margin: 0 0 16px;
-  font-size: 14px;
+  font-size: var(--ui-text-label);
   text-align: left;
 }
 

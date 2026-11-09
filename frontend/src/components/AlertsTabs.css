@@ -11,7 +11,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  min-height: 64px;
+  min-height: clamp(68px, 18vw, 72px);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   overflow: hidden; /* keeps the image inside the rounded corners */
@@ -27,7 +27,7 @@
   align-items: center;
   gap: var(--space-2);
   font-family: var(--font-heading);
-  font-size: 16px;
+  font-size: var(--ui-text-body);
   font-weight: 600;
 }
 
@@ -42,7 +42,7 @@
   background: var(--color-on-primary-muted);
   color: var(--color-primary);
   font-family: var(--font-body);
-  font-size: 13px;
+  font-size: var(--ui-text-small);
   font-weight: 800;
   cursor: pointer;
 }
@@ -59,7 +59,7 @@
 
 .weather-updated {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--ui-text-small);
   color: var(--color-on-primary-muted);
 }
 
@@ -68,7 +68,7 @@
   padding: var(--space-4);
   border-radius: var(--radius-md);
   background: var(--color-surface-soft);
-  font-size: 14px;
+  font-size: var(--ui-text-label);
 }
 
 .state-box p {
@@ -95,7 +95,7 @@
 /* "Official advisories come first" notice */
 .alerts-disclaimer {
   margin: var(--space-2) 0 0;
-  font-size: 13px;
+  font-size: var(--ui-text-small);
   line-height: 1.4;
   color: var(--color-on-primary-muted);
 }
@@ -105,7 +105,7 @@
   padding: var(--space-3);
   border-radius: var(--radius-md);
   background: var(--color-surface);
-  font-size: 14px;
+  font-size: var(--ui-text-label);
 }
 
 /* ---------- Warnings tab ---------- */
@@ -125,7 +125,7 @@
   background: var(--color-on-primary-muted);
   color: var(--color-primary);
   font-family: var(--font-heading);
-  font-size: 13px;
+  font-size: var(--ui-text-small);
   font-weight: 600;
   cursor: pointer;
 }
@@ -142,7 +142,7 @@
   padding: var(--space-4);
   border-radius: var(--radius-md);
   background: var(--color-surface);
-  font-size: 14px;
+  font-size: var(--ui-text-label);
 }
 
 .empty-card p {
@@ -169,7 +169,7 @@
   border-left: 6px solid var(--color-emergency);
   border-radius: var(--radius-md);
   background: var(--color-surface);
-  font-size: 14px;
+  font-size: var(--ui-text-label);
 }
 
 .warning-card-head {
@@ -180,7 +180,7 @@
 
 .warning-title {
   font-family: var(--font-heading);
-  font-size: 15px;
+  font-size: var(--ui-text-body);
 }
 
 .warning-details {
@@ -190,7 +190,7 @@
 
 .warning-meta {
   margin: var(--space-1) 0;
-  font-size: 13px;
+  font-size: var(--ui-text-small);
   color: var(--color-on-primary-muted);
 }
 
@@ -200,7 +200,7 @@
   border-radius: var(--radius-pill);
   background: var(--color-on-primary);
   color: var(--color-primary);
-  font-size: 12px;
+  font-size: var(--ui-text-small);
   font-weight: 700;
 }
 
@@ -226,7 +226,7 @@
   padding: var(--space-4);
   border-radius: var(--radius-md);
   background: var(--color-surface);
-  font-size: 14px;
+  font-size: var(--ui-text-label);
 }
 
 /* Circle with the organization's initials (a real logo can replace it later) */
@@ -258,7 +258,7 @@
 
 .update-org {
   font-family: var(--font-heading);
-  font-size: 15px;
+  font-size: var(--ui-text-body);
 }
 
 .update-summary {
@@ -272,5 +272,5 @@
   border: 1px solid var(--color-on-primary-muted);
   border-radius: var(--radius-pill);
   color: var(--color-on-primary-muted);
-  font-size: 12px;
+  font-size: var(--ui-text-small);
 }

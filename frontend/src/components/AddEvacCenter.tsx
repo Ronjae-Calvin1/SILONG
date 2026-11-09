@@ -27,7 +27,7 @@ interface Props {
 }
 
 // Same pin shape as the facility pins in MapPage, so the tip sits exactly on the coordinates.
-const PIN_OFFSET: [number, number] = [0, -20];
+const PIN_OFFSET: [number, number] = [0, -22];
 
 function makeMarkerElement(): HTMLDivElement {
   const el = document.createElement("div");

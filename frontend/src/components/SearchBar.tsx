@@ -41,7 +41,7 @@ export function SearchBar({ facilities, onSelect }: Props) {
     <div className="search" ref={wrapRef}>
       <div className="search-field">
         <span className="search-icon">
-          <Icon name="search" size={20} />
+          <Icon name="search" size={22} />
         </span>
         <input
           className="search-input"

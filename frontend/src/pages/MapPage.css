@@ -13,8 +13,10 @@
   inset: 0;
   background: #05072e;
   color: #fff;
+  font-size: var(--ui-text-body);
+  line-height: 1.4;
   overflow: hidden;
-  --controls-top: 72px; /* where the search bar starts. Change it here and the rail follows. */
+  --controls-top: calc(clamp(64px, 17vw, 72px) + 8px); /* gap below the header; the rail follows. */
 }
 
 /* ---------- Header (top bar) ---------- */
@@ -25,7 +27,7 @@
   right: 0;
   z-index: 1100;
   box-sizing: border-box;
-  height: 64px; 
+  height: clamp(64px, 17vw, 72px);
   padding: 0 8px 0 4px;
   display: flex;
   align-items: center;
@@ -66,7 +68,7 @@
 /* SILONG logo (white version, sits on the blue bar) */
 .topbar-logo {
   display: block;
-  height: 22px;
+  height: clamp(24px, 6.8vw, 28px);
   width: auto; /* keeps the logo's proportions */
 }
 
@@ -97,7 +99,7 @@
   align-items: center;
   gap: var(--space-2);
   box-sizing: border-box;
-  min-height: 48px;
+  min-height: var(--ui-control-height);
   padding: 0 var(--space-1) 0 var(--space-3);
   border-radius: var(--radius-md);
   background: #fff;
@@ -116,8 +118,10 @@
 
 .search-input {
   flex: 1;
+  box-sizing: border-box;
   min-width: 0; /* lets the input shrink instead of pushing the clear button out */
-  min-height: 44px;
+  min-height: var(--ui-control-height);
+  padding: 0;
   border: none;
   background: transparent;
   color: #1b2a35;
@@ -184,7 +188,7 @@
 }
 
 .search-result-name {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
 }
 
@@ -194,13 +198,13 @@
   text-overflow: ellipsis; /* long addresses end with "..." instead of wrapping */
   white-space: nowrap;
   color: #52636f;
-  font-size: 13px;
+  font-size: var(--ui-text-small);
 }
 
 .search-empty {
   padding: 12px;
   color: #52636f;
-  font-size: 14px;
+  font-size: var(--ui-text-label);
 }
 
 /* Chips: one row that scrolls sideways when it does not fit */
@@ -225,13 +229,13 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 44px;
-  padding: 0 16px;
+  min-height: 48px;
+  padding: 0 clamp(14px, 4vw, 16px);
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
   background: var(--color-primary);
   color: var(--color-on-primary);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   box-shadow: var(--shadow-card);
@@ -263,24 +267,24 @@
 .map-message {
   position: absolute;
   top: calc(var(--controls-top) + 120px); /* below the search bar and chips */
-  left: 96px; /* to the right of the rail */
+  left: calc(var(--ui-gutter) + 92px); /* clear of the wider action rail */
   right: 12px;
   z-index: 1050;
   margin: 0;
   padding: 6px 10px;
   border-radius: 8px;
   background: rgba(5, 7, 46, 0.9);
-  font-size: 14px;
+  font-size: var(--ui-text-label);
 }
 
 /* ---------- Action Rail (left side) ---------- */
 .rail {
   position: absolute;
   top: calc(var(--controls-top) + 150px); /* search bar (48) + chips (56) + gaps */
-  left: var(--space-4);
+  left: var(--ui-gutter);
   z-index: 1040; /* under the search results (1050) and every panel */
   box-sizing: border-box;
-  width: 70px;
+  width: 84px;
   /* Never grow past the alerts sheet. If space is short, the rail scrolls. */
   max-height: calc(100% - var(--controls-top) - 120px - var(--sheet-h, 0px) - 16px);
   overflow-y: auto;
@@ -288,7 +292,7 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  padding: 6px 10px 12px;
+  padding: 6px 6px 12px;
   border-radius: 24px;
   background: rgb(72 112 140 / 0.82); /* translucent grey-blue, like the design */
   backdrop-filter: blur(6px);
@@ -330,8 +334,9 @@
 /* All the square buttons share one size, spacing and shape */
 .rail-btn {
   flex: none;
-  width: 58px;
-  height: 58px;
+  box-sizing: border-box;
+  width: 72px;
+  min-height: 64px;
   display: flex;
   flex-direction: column; /* icon on top, label under it */
   align-items: center;
@@ -346,9 +351,10 @@
 }
 
 .rail-btn-label {
-  font-size: 9px;
+  font-size: clamp(0.8125rem, 3.55vw, 0.875rem);
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.05;
+  text-align: center;
 }
 
 .rail-btn-emergency { background: var(--color-emergency); }
@@ -358,8 +364,8 @@
 
 .rail-bot {
   flex: none;
-  width: 56px;
-  height: 56px;
+  width: 64px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -404,8 +410,8 @@
 }
 
 .fab {
-  width: 52px;
-  height: 52px; 
+  width: 56px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -472,7 +478,7 @@
   margin: 0;
   padding-bottom: var(--space-4);
   font-family: var(--font-heading);
-  font-size: 18px;
+  font-size: clamp(19px, 5vw, 21px);
   font-weight: 600;
   text-align: center;
   color: var(--color-on-primary);
@@ -517,7 +523,7 @@
   background: var(--color-on-primary);
   color: var(--color-primary);
   font-family: var(--font-heading);
-  font-size: 13px;
+  font-size: var(--ui-text-label);
   font-weight: 600;
   cursor: pointer;
 }
@@ -546,7 +552,7 @@
 .sheet-heading {
   margin: var(--space-3) 0 var(--space-2);
   font-family: var(--font-heading);
-  font-size: 14px;
+  font-size: var(--ui-text-label);
   text-align: center;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -564,13 +570,13 @@
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-on-primary);
-  font-size: 14px;
+  font-size: var(--ui-text-label);
 }
 
 .sheet-note {
   margin: var(--space-4) 0;
   text-align: center;
-  font-size: 14px;
+  font-size: var(--ui-text-label);
 }
 
 /* ---------- Incident report panel ---------- */
@@ -612,7 +618,7 @@
 .incident-header {
   position: relative;
   flex: none;
-  min-height: 64px;
+  min-height: clamp(64px, 17vw, 72px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -622,7 +628,7 @@
 
 .incident-title {
   margin: 0;
-  font-size: 17px;
+  font-size: clamp(18px, 4.8vw, 20px);
   font-weight: 700;
   text-align: center;
 }
@@ -674,7 +680,7 @@
   border-radius: 10px;
   background: #0d1048;
   color: #c9cbe8;
-  font-size: 13px;
+  font-size: var(--ui-text-small);
   line-height: 1.5;
 }
 
@@ -701,7 +707,7 @@
   display: block;
   margin: 0 0 8px;
   color: #fff;
-  font-size: 14px;
+  font-size: var(--ui-text-label);
   font-weight: 600;
 }
 
@@ -710,7 +716,7 @@
   display: block;
   width: 100%;
   box-sizing: border-box;
-  min-height: 46px;
+  min-height: 48px;
   padding: 11px 13px;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -765,7 +771,7 @@
 }
 
 .incident-upload small {
-  font-size: 12px;
+  font-size: var(--ui-text-small);
   opacity: 0.8;
 }
 
@@ -832,7 +838,7 @@
 
 .incident-submit {
   width: 100%;
-  min-height: 48px;
+  min-height: 52px;
   border: none;
   border-radius: 24px;
   background: #4a55d6;

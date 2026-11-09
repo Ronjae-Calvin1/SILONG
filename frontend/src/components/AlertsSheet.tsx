@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Icon, type IconName } from "./icons";
-import { WeatherTab, type WeatherStatus } from "./weatherTab";
+import { WeatherTab, type WeatherStatus } from "./WeatherTab";
 import { WarningsTab, type WarningsStatus } from "./WarningsTab";
 import { UpdatesTab, type UpdatesStatus } from "./UpdatesTab";
 
@@ -196,7 +196,7 @@ export function AlertsSheet({ onHeightChange, openRequest }: Props) {
             className={`sheet-tab${tab === t.id ? " sheet-tab-active" : ""}`}
             onClick={() => chooseTab(t.id)}
           >
-            <Icon name={t.icon} size={20} />
+            <Icon name={t.icon} size={22} />
             <span className="sheet-tab-label">{t.label}</span>
           </button>
         ))}

@@ -171,8 +171,8 @@ export function MapPage() {
             open();
           }
         });
-        // The rotated teardrop's tip sits about 20px below the element's center.
-        const marker = new maplibregl.Marker({ element: el, anchor: "center", offset: [0, -20] })
+        // The rotated teardrop's tip sits about 23px below the element's center.
+        const marker = new maplibregl.Marker({ element: el, anchor: "center", offset: [0, -22] })
           .setLngLat([f.longitude, f.latitude])
           .addTo(map);
         pin = { marker, el };
@@ -302,10 +302,6 @@ export function MapPage() {
           <FilterChips value={filter} onChange={setFilter} />
         </div>
       )}
-
-      <SearchBar facilities={facilities} onSelect={handleSearchSelect} />
-
-      <FilterChips value={filter} onChange={setFilter} />
 
       {menuOpen && !adding && <RemovedCenters onClose={() => setMenuOpen(false)} onRestored={handleRestored} />}
 

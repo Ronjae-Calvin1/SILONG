@@ -49,6 +49,13 @@
   --tap-min: 44px; /* smallest touch target */
   --focus-ring: 3px solid #ffffff; /* visible on the blue backgrounds; light surfaces set their own */
 
+  /* ---------- Responsive UI sizing (CSS pixels, not device pixels) ---------- */
+  --ui-text-small: clamp(0.8125rem, 3.55vw, 0.875rem);
+  --ui-text-label: clamp(0.875rem, 3.8vw, 0.9375rem);
+  --ui-text-body: clamp(0.9375rem, 4vw, 1rem);
+  --ui-control-height: clamp(48px, 13vw, 52px);
+  --ui-gutter: clamp(12px, 4vw, 16px);
+
   /* ---------- Elevation ---------- */
   --shadow-card: 0 3px 8px rgb(0 0 0 / 0.3);
   --shadow-sheet: 0 -4px 14px rgb(0 0 0 / 0.35);
