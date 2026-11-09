@@ -8,6 +8,7 @@ type Props = {
   onHeightChange: (px: number) => void;
   // Goes up by one each time the Alerts button (or the bell) is tapped (0 = never tapped).
   openRequest: number;
+  closeRequest: number; // optional: goes up by one each time the Close button is tapped
 };
 
 type Tab = "weather" | "warnings" | "updates";
@@ -20,7 +21,7 @@ const TABS: { id: Tab; label: string; icon: IconName }[] = [
 ];
 
 const COLLAPSED_H = 0; // 0 = fully hidden below the screen
-const HALF_RATIO = 0.55;
+const HALF_RATIO = 0.78;
 const FULL_RATIO = 0.78;
 // change this to "loading", "error" or "ready", save, and look at the Weather tab.
 const WEATHER_STATUS: WeatherStatus = "unavailable";
@@ -78,7 +79,7 @@ function TabContent({ tab }: { tab: Tab }) {
 
 }
 
-export function AlertsSheet({ onHeightChange, openRequest }: Props) {
+export function AlertsSheet({ onHeightChange, openRequest, closeRequest }: Props) {
   const [tab, setTab] = useState<Tab>("weather");
   const [snap, setSnap] = useState<Snap>("collapsed");
   const [dragHeight, setDragHeight] = useState<number | null>(null);
@@ -93,6 +94,11 @@ export function AlertsSheet({ onHeightChange, openRequest }: Props) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+    // Another panel was opened: slide the Alerts sheet down.
+  useEffect(() => {
+    if (closeRequest === 0) return;
+    setSnap("collapsed");
+  }, [closeRequest]);
     // The Alerts button / bell was tapped: show the Alerts tab and make sure the
   // sheet is open. If it is already open, only the tab changes.
   useEffect(() => {

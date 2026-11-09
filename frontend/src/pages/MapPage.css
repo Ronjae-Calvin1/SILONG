@@ -586,6 +586,7 @@
   left: 0;
   right: 0;
   bottom: 0;
+  height: 78%;
   z-index: 1400;
   display: flex;
   flex-direction: column;
@@ -602,18 +603,19 @@
   transition: transform 0.25s ease;
 }
 
-/* Desktop: slide the incident panel in from the right. */
-@media (min-width: 700px) {
+/* Wider screens: keep the Alerts and Report panels the same size as the Emergency panel. */
+@media (min-width: 600px) {
+  .sheet,
   .incident-panel {
-    left: auto;
-    width: min(440px, 45vw);
-    transform: translateX(100%);
+    max-width: 520px;
+    margin: 0 auto;
   }
+}
 
   .incident-panel-open {
     transform: translateX(0);
   }
-}
+
 
 .incident-header {
   position: relative;

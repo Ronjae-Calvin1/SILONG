@@ -158,6 +158,8 @@ export function IncidentPanel({ open, onClose }: Props) {
     setStatus({ kind: "ok", text: "Report saved on this phone" });
   }
 
+    // Same 78% height as the other panels, but never taller than the space above the phone keyboard.
+  const panelH = viewport ? Math.min(viewport.h, Math.round(window.innerHeight * 0.78)) : 0;
   const classes = ["incident-panel"];
   if (open) classes.push("incident-panel-open");
 
@@ -168,7 +170,7 @@ export function IncidentPanel({ open, onClose }: Props) {
       aria-modal="true"
       aria-labelledby="incident-title"
       aria-hidden={!open}
-      style={viewport ? { top: viewport.top, bottom: "auto", height: viewport.h } : undefined}
+      style={viewport ? { top: viewport.top, bottom: "auto", height: panelH } : undefined}
     >
       <header className="incident-header">
         <h2 className="incident-title" id="incident-title">

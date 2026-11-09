@@ -5,37 +5,45 @@ import { CATEGORIES, NATIONAL_HOTLINES, buildLocalHotlines, type HotlineCategory
 import "./EmergencyHotlines.css";
 
 type Props = {
+  open: boolean;
   facilities: Facility[];
   onClose: () => void;
 };
 
-export function EmergencyHotlines({ facilities, onClose }: Props) {
+export function EmergencyHotlines({ open, facilities, onClose }: Props) {
   // Which category chip is selected (starts on "All").
   const [category, setCategory] = useState<HotlineCategory>("all");
   const closeRef = useRef<HTMLButtonElement>(null);
 
-  // Move keyboard focus to the close button when the panel opens.
+    // When the panel opens, move keyboard focus to the close button.
   useEffect(() => {
-    closeRef.current?.focus({ preventScroll: true });
-  }, []);
+    if (open) closeRef.current?.focus({ preventScroll: true });
+  }, [open]);
 
-  // The Escape key closes the panel.
+  // The Escape key closes the panel (only while it is open).
   useEffect(() => {
+    if (!open) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [open, onClose]);
 
   const local = buildLocalHotlines(facilities);
   const shown = local.filter((h) => category === "all" || h.categories.includes(category));
   const categoryLabel = CATEGORIES.find((c) => c.id === category)?.label ?? "";
 
   return (
-    <section className="eh-panel" role="dialog" aria-labelledby="eh-title">
+    <section
+      className={`eh-panel${open ? " eh-panel-open" : ""}`}
+      role="dialog"
+      aria-labelledby="eh-title"
+      inert={!open}>
       <div className="eh-top">
-        <span className="eh-handle" aria-hidden="true" />
+        <button type="button" className="eh-handle-btn" aria-label="Close emergency hotlines" onClick={onClose}>
+          <span className="eh-handle" aria-hidden="true" />
+        </button>
         <header className="eh-header">
           <h2 className="eh-title" id="eh-title">
             Emergency Hotlines

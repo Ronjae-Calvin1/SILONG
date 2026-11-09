@@ -79,6 +79,7 @@ export function MapPage() {
   const [filter, setFilter] = useState<FilterId>("all"); // Counters that tell AddEvacCenter / AlertsSheet "start now" (see the rail).
   const [addRequest, setAddRequest] = useState(0);
   const [alertsRequest, setAlertsRequest] = useState(0);
+  const [alertsCloseRequest, setAlertsCloseRequest] = useState(0);
   const mapDiv = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const pinsRef = useRef<Map<number, Pin>>(new Map());
@@ -160,6 +161,7 @@ export function MapPage() {
         body.appendChild(letter);
         el.appendChild(body);
         const open = () => {
+          setAlertsCloseRequest((n) => n + 1);
           setSelectedId(f.id);
           setFormOpen(false);
           setMenuOpen(false);
@@ -193,8 +195,12 @@ export function MapPage() {
   }, [selectedId, facilities, filter]);
 
     // If a place gets opened (pin tap or search result), the hotlines panel steps aside.
+   // If a place gets opened (pin tap or search result), the other panels step aside.
   useEffect(() => {
-    if (selectedId !== null) setEmergencyOpen(false);
+    if (selectedId === null) return;
+    setEmergencyOpen(false);
+    setIncidentOpen(false);
+    setAlertsCloseRequest((n) => n + 1);
   }, [selectedId]);
 
   // Keep the selected pin visible above the details panel.
@@ -218,6 +224,17 @@ export function MapPage() {
 
   const selected = facilities.find((f) => f.id === selectedId) ?? null;
 
+  // Closes every pop-up except the one you name. Each trigger calls this first,
+  // then opens its own panel, so only one panel is ever open at a time.
+  function closeOtherPanels(keep?: "emergency" | "incident" | "alerts") {
+    if (keep !== "emergency") setEmergencyOpen(false);
+    if (keep !== "incident") setIncidentOpen(false);
+    if (keep !== "alerts") setAlertsCloseRequest((n) => n + 1);
+    setSelectedId(null);
+    setFormOpen(false);
+    setMenuOpen(false);
+  }
+
   function showToast(text: string, kind: "ok" | "notice" = "ok", ms = 3000) {
     setToast({ text, kind });
     window.clearTimeout(toastTimer.current);
@@ -240,6 +257,7 @@ export function MapPage() {
   function handleAddActive(active: boolean) {
     setAdding(active);
     if (active) {
+      setAlertsCloseRequest((n) => n + 1);
       setSelectedId(null);
       setFormOpen(false);
       setMenuOpen(false);
@@ -276,6 +294,7 @@ export function MapPage() {
   // A search result was tapped: open that place's details. The effect that
   // watches selectedId already moves the map to it.
   function handleSearchSelect(facility: Facility) {
+    setAlertsCloseRequest((n) => n + 1);
     if (!matchesFilter(facility, filter)) setFilter("all"); // make sure its pin is visible
     setSelectedId(facility.id);
     setFormOpen(false);
@@ -293,7 +312,10 @@ export function MapPage() {
       <TopBar
         menuOpen={menuOpen}
         onMenuClick={() => setMenuOpen((open) => !open)}
-        onBellClick={() => setAlertsRequest((n) => n + 1)}
+        onBellClick={() => {
+          closeOtherPanels("alerts");
+          setAlertsRequest((n) => n + 1);
+        }}
       />
       
       {!adding && (
@@ -311,26 +333,33 @@ export function MapPage() {
         )}
         
         {!adding && (
-          <ActionRail
-                      onOpenEmergency={() => {
-              setSelectedId(null);
-              setFormOpen(false);
-              setMenuOpen(false);
-              setEmergencyOpen(true);
+            <ActionRail
+            onOpenEmergency={() => {
+              closeOtherPanels("emergency");
+              setEmergencyOpen((open) => !open); // tap once = open, tap again = close
             }}
-
-            onOpenIncident={() => setIncidentOpen(true)}
-            onOpenAlerts={() => setAlertsRequest((n) => n + 1)}
-            onAddCenter={() => setAddRequest((n) => n + 1)}
+            onOpenIncident={() => {
+              closeOtherPanels("incident");
+              setIncidentOpen(true);
+            }}
+            onOpenAlerts={() => {
+              closeOtherPanels("alerts");
+              setAlertsRequest((n) => n + 1);
+            }}
+            onAddCenter={() => {
+              closeOtherPanels();
+              setAddRequest((n) => n + 1);
+            }}
           />
           )}
 
       <AddEvacCenter mapRef={mapRef} onActiveChange={handleAddActive} onAdded={handleAdded} startRequest={addRequest} />
 
-      <AlertsSheet onHeightChange={setSheetH} openRequest={alertsRequest} />
+      <AlertsSheet onHeightChange={setSheetH} openRequest={alertsRequest} closeRequest={alertsCloseRequest} />
 
       <IncidentPanel open={incidentOpen} onClose={() => setIncidentOpen(false)} />
-        {emergencyOpen && <EmergencyHotlines facilities={facilities} onClose={() => setEmergencyOpen(false)} />}
+      
+      <EmergencyHotlines open={emergencyOpen} facilities={facilities} onClose={() => setEmergencyOpen(false)} />
 
       {selected && !adding && (
         <FacilityPanel
