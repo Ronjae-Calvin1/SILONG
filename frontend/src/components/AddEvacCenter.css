@@ -1,0 +1,217 @@
+/* Add Evacuation Center, Step 1 (choosing the location), the pin ring, and the
+   "Discard?" dialog. Colors come from the design tokens, like the Alerts sheet. */
+
+/* The main button color on these cards. Change these two lines to restyle
+   Continue (and the form's Save button has the same two lines in its own file). */
+.evac-pick-bar {
+  --cta-bg: var(--color-on-primary);
+  --cta-fg: var(--color-primary);
+}
+
+.evac-pick-top,
+.evac-pick-bar {
+  position: absolute;
+  left: var(--space-3);
+  right: var(--space-3);
+  z-index: 1300;
+  box-sizing: border-box;
+  max-width: 520px; /* same width limit as the other panels on wide screens */
+  margin: 0 auto;   /* with max-width, this centers the card */
+  background: var(--color-primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  color: var(--color-on-primary);
+  font-family: var(--font-body);
+}
+
+/* ----- Instruction card (top) ----- */
+.evac-pick-top {
+  top: var(--controls-top); /* just under the header; search and chips are hidden while adding */
+  padding: var(--space-3) var(--space-4);
+}
+
+.evac-pick-step {
+  margin: 0 0 2px;
+  color: var(--color-on-primary-muted);
+  font-size: var(--ui-text-small);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.evac-pick-title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: clamp(17px, 4.6vw, 19px);
+  font-weight: 600;
+}
+
+.evac-pick-hint {
+  margin: 4px 0 0;
+  color: var(--color-on-primary-muted);
+  font-size: var(--ui-text-label);
+  line-height: 1.45;
+}
+
+/* ----- Action bar (bottom, easy to reach with a thumb) ----- */
+.evac-pick-bar {
+  bottom: max(var(--space-3), env(safe-area-inset-bottom));
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+
+.evac-pick-location {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px var(--space-3);
+  margin: 0 0 var(--space-3);
+  font-size: var(--ui-text-label);
+}
+
+.evac-pick-location-label,
+.evac-pick-location-empty {
+  color: var(--color-on-primary-muted);
+}
+
+.evac-pick-location-value {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums; /* digits keep the same width, so the text doesn't jiggle */
+  animation: evac-pick-flash 0.9s ease-out; /* plays again each time the element is re-created */
+}
+
+@keyframes evac-pick-flash {
+  from { background: rgb(255 255 255 / 0.2); }
+  to   { background: transparent; }
+}
+
+.evac-pick-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.evac-pick-btn {
+  flex: 1;
+  min-height: 52px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ".map-screen button" forces system-ui; this is more specific, so the heading font wins */
+.map-screen .evac-pick-btn {
+  font-family: var(--font-heading);
+}
+
+.evac-pick-btn:active:not(:disabled) {
+  transform: scale(0.97); /* small "pressed" feel, like the rail buttons */
+}
+
+.evac-pick-cancel {
+  border: 2px solid var(--color-on-primary);
+  background: transparent;
+  color: var(--color-on-primary);
+}
+
+.evac-pick-continue {
+  flex: 1.4; /* the main action is a bit wider */
+  border: 2px solid var(--cta-bg);
+  background: var(--cta-bg);
+  color: var(--cta-fg);
+}
+
+.evac-pick-continue:disabled {
+  border-color: var(--color-surface);
+  background: var(--color-surface);
+  color: var(--color-on-primary-muted);
+  cursor: not-allowed;
+}
+
+.evac-pick-danger {
+  border: 2px solid var(--color-emergency);
+  background: var(--color-emergency);
+  color: #fff;
+}
+
+.evac-pick-btn:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Phones turned sideways have very little height: drop the long hint */
+@media (max-height: 480px) {
+  .evac-pick-hint {
+    display: none;
+  }
+}
+
+/* Ring that pulses behind the pin */
+.evac-marker-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border: 3px solid var(--color-primary);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #fff; /* white edge so it shows on any map color */
+  pointer-events: none; /* taps and drags go to the pin, not the ring */
+  animation: evac-ring 1.4s ease-out 3; /* pulses 3 times, then stops */
+}
+
+@keyframes evac-ring {
+  from { transform: scale(0.4); opacity: 0.9; }
+  to   { transform: scale(1.3); opacity: 0; }
+}
+
+/* ----- "Discard?" dialog ----- */
+/* ----- "Discard?" dialog ----- */
+.evac-discard-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1500; /* above the form and the bars */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgb(0 0 0 / 0.5);
+}
+
+.evac-discard {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 360px;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-primary);
+  box-shadow: var(--shadow-sheet);
+  color: var(--color-on-primary);
+  font-family: var(--font-body);
+}
+
+.evac-discard-title {
+  margin: 0 0 6px;
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.evac-discard-text {
+  margin: 0 0 var(--space-4);
+  color: var(--color-on-primary-muted);
+  font-size: var(--ui-text-label);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .evac-pick-location-value {
+    animation: none;
+  }
+  .evac-marker-ring {
+    animation: none;
+    opacity: 0.6;
+  }
+}

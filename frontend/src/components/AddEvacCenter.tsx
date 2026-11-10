@@ -4,6 +4,7 @@ import type { Facility } from "../types";
 import { EMPTY_DRAFT, type CenterDraft } from "./evacCenterDraft";
 import { EvacCenterForm } from "./EvacCenterForm";
 import "./EvacManager.css";
+import "./AddEvacCenter.css";
 
 // idle      -> only the "Add evacuation center" button is showing
 // placing   -> banner says "Tap the map", no pin yet
@@ -34,6 +35,9 @@ function makeMarkerElement(): HTMLDivElement {
   el.className = "pin evac-marker";
   el.setAttribute("role", "img");
   el.setAttribute("aria-label", "New evacuation center location. Drag to move it.");
+  const ring = document.createElement("span");
+  ring.className = "evac-marker-ring";
+  el.appendChild(ring);
   const body = document.createElement("div");
   body.className = "pin-body";
   const letter = document.createElement("span");
@@ -49,6 +53,8 @@ export function AddEvacCenter({ mapRef, onActiveChange, onAdded, startRequest }:
   const [point, setPoint] = useState<Point | null>(null);
   const [draft, setDraft] = useState<CenterDraft>(EMPTY_DRAFT);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const [dragging, setDragging] = useState(false);
+    const [confirmingCancel, setConfirmingCancel] = useState(false); // "Discard?" dialog
 
   function go(next: Phase) {
     setPhase(next);
@@ -75,9 +81,15 @@ export function AddEvacCenter({ mapRef, onActiveChange, onAdded, startRequest }:
         .setLngLat([p.lng, p.lat])
         .addTo(map);
       const created = marker;
+      created.on("dragstart", () => setDragging(true));
+      created.on("drag", () => {
+        const at = created.getLngLat();
+        setPoint({ lng: at.lng, lat: at.lat });
+      });
       created.on("dragend", () => {
         const at = created.getLngLat();
         setPoint({ lng: at.lng, lat: at.lat });
+        setDragging(false);
       });
       markerRef.current = marker;
     }
@@ -94,7 +106,18 @@ export function AddEvacCenter({ mapRef, onActiveChange, onAdded, startRequest }:
     removeMarker();
     setPoint(null);
     setDraft(EMPTY_DRAFT);
+    setDragging(false);
+    setConfirmingCancel(false);
     go("idle");
+  }
+
+    // True when the user has typed anything into the form already.
+  const isDirty = (Object.keys(EMPTY_DRAFT) as (keyof CenterDraft)[]).some((k) => draft[k] !== EMPTY_DRAFT[k]);
+
+  // Cancel on the map: ask first only if there is something to lose.
+  function requestCancel() {
+    if (isDirty) setConfirmingCancel(true);
+    else finish();
   }
 
   // While placing, a tap on the map puts the pin there. A tap that is really a pan does not count (MapLibre decides).
@@ -125,27 +148,71 @@ export function AddEvacCenter({ mapRef, onActiveChange, onAdded, startRequest }:
     if (startRequest > 0 && phase === "idle") go("placing");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startRequest]);
-  
+
+    // Escape: closes the "Discard?" dialog, or goes back one step, or cancels.
+  useEffect(() => {
+    if (phase === "idle") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (confirmingCancel) setConfirmingCancel(false);
+      else if (phase === "form") go("placed");
+      else requestCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, confirmingCancel, draft]);
+
+    // Texts for the instruction card; they change with what the user is doing.
+  const pickTitle =
+    phase === "placing" ? "Choose the location" : dragging ? "Release to set the location" : "Location selected";
+  const pickHint =
+    phase === "placing"
+      ? "Tap the map where the evacuation center is."
+      : "Drag the pin, or tap the map, to move it. Then press Continue.";
 
   return (
     <>
 
       {picking && (
-        <div className="evac-banner" role="status">
-          <p className="evac-banner-text">
-            {phase === "placing" ? "Tap the map to place the center" : "Drag the pin to adjust it, then tap Continue"}
-          </p>
-          <div className="evac-banner-actions">
-            <button className="evac-banner-btn evac-banner-cancel" onClick={finish}>
-              Cancel
-            </button>
-            {phase === "placed" && (
-              <button className="evac-banner-btn evac-banner-go" onClick={() => go("form")}>
+        <>
+          <div className="evac-pick-top" role="status" aria-live="polite">
+            <p className="evac-pick-step">Step 1 of 2</p>
+            <h2 className="evac-pick-title">{pickTitle}</h2>
+            <p className="evac-pick-hint">{pickHint}</p>
+          </div>
+
+          <div className="evac-pick-bar">
+            <p className="evac-pick-location">
+              <span className="evac-pick-location-label">Selected location</span>
+              {point ? (
+                <strong
+                  // A new key makes React re-create the element, which replays the flash.
+                  // While dragging the key stays the same, so it doesn't flicker.
+                  key={dragging ? "dragging" : `${point.lat}-${point.lng}`}
+                  className="evac-pick-location-value"
+                >
+                  {point.lat.toFixed(5)}, {point.lng.toFixed(5)}
+                </strong>
+              ) : (
+                <span className="evac-pick-location-empty">None yet</span>
+              )}
+            </p>
+            <div className="evac-pick-actions">
+              <button type="button" className="evac-pick-btn evac-pick-cancel" onClick={requestCancel}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="evac-pick-btn evac-pick-continue"
+                disabled={phase !== "placed"}
+                onClick={() => go("form")}
+              >
                 Continue
               </button>
-            )}
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {phase === "form" && point && (
@@ -159,6 +226,39 @@ export function AddEvacCenter({ mapRef, onActiveChange, onAdded, startRequest }:
             finish();
           }}
         />
+      )}
+      {confirmingCancel && (
+        <div
+          className="evac-discard-overlay"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="evac-discard-title"
+          aria-describedby="evac-discard-text"
+        >
+          <div className="evac-discard">
+            <h2 className="evac-discard-title" id="evac-discard-title">
+              Discard this evacuation center?
+            </h2>
+            <p className="evac-discard-text" id="evac-discard-text">
+              The details you typed will be lost.
+            </p>
+            <div className="evac-pick-actions">
+              <button type="button" className="evac-pick-btn evac-pick-cancel" onClick={() => setConfirmingCancel(false)}>
+                Keep editing
+              </button>
+              <button
+                type="button"
+                className="evac-pick-btn evac-pick-danger"
+                onClick={() => {
+                  setConfirmingCancel(false);
+                  finish();
+                }}
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

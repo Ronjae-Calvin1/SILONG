@@ -77,7 +77,7 @@
 /* ---------- The draggable pin ---------- */
 /* Same teardrop as the facility pins (StatusPanel.css), in the app's accent color. */
 .pin.evac-marker {
-  --pin-color: #4a55d6;
+  --pin-color: var(--color-primary);
   --pin-letter: #fff;
   cursor: grab;
   touch-action: none; /* a finger on the pin moves the pin; the browser must not pan or zoom the page */
