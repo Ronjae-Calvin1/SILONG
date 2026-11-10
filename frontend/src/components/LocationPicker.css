@@ -1,0 +1,89 @@
+/* Mini map for the incident report. Class names start with  lp-  so they cannot clash. */
+
+.lp-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.lp-title {
+  margin: 0;
+}
+
+/* Light-blue chip like the design. Dark text on light blue passes the contrast rule. */
+.map-screen .lp-gps {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap-min);
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: #a9c4f0;
+  color: #123a57;
+  font-family: var(--font-body);
+  font-size: var(--ui-text-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lp-gps:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.lp-gps:focus-visible,
+.lp-clear:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.lp-map {
+  position: relative;
+  height: 210px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: #dfe9ef;
+}
+
+.lp-msg {
+  margin: var(--space-2) 0 0;
+  font-size: var(--ui-text-small);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.lp-msg-ok,
+.lp-msg-busy {
+  color: #b9f5bf;
+}
+
+.lp-msg-error {
+  color: #ffd6d6;
+}
+
+.lp-coords {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  color: var(--color-on-primary-muted);
+  font-size: var(--ui-text-small);
+}
+
+.map-screen .lp-clear {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-2);
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: var(--ui-text-small);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}

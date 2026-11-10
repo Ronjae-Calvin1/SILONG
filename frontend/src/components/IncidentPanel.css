@@ -1,0 +1,352 @@
+/* Incident report panel. Class names start with  ir-  so they cannot clash with other CSS.
+   Colors, spacing and radius come from src/styles/tokens.css. Built to match the Emergency panel. */
+
+.ir-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0; /* only "bottom", no "top": that is what keeps it at the bottom of the screen */
+  z-index: 1400;
+  box-sizing: border-box;
+  height: 78%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  background: var(--color-primary);
+  box-shadow: var(--shadow-sheet);
+  color: var(--color-on-primary);
+  font-family: var(--font-body);
+  transform: translateY(100%);
+  visibility: hidden;
+  transition: transform 0.25s ease, visibility 0s linear 0.25s;
+}
+
+.ir-panel-open {
+  transform: translateY(0);
+  visibility: visible;
+  transition: transform 0.25s ease;
+}
+
+@media (min-width: 600px) {
+  .ir-panel {
+    max-width: 520px;
+    margin: 0 auto;
+  }
+}
+
+/* The map screen sets a system font on every input and button.
+   Starting with ".map-screen" makes this rule more specific, so the panel fonts win. */
+.map-screen .ir-panel input,
+.map-screen .ir-panel select,
+.map-screen .ir-panel textarea,
+.map-screen .ir-panel button {
+  font-family: var(--font-body);
+}
+
+/* ---------- Top: handle + title ---------- */
+.ir-top {
+  flex: none;
+  padding: var(--space-2) var(--space-4) 0;
+}
+
+.ir-handle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 32px;
+  margin: 0 0 var(--space-1);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ir-handle {
+  display: block;
+  width: 44px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: rgb(255 255 255 / 0.7);
+}
+
+.ir-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-min);
+  padding: 0 var(--tap-min) var(--space-2); /* side room so the title stays centered */
+  border-bottom: 1px solid rgb(255 255 255 / 0.5);
+}
+
+.ir-title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 600;
+  text-align: center;
+  color: #fff;
+}
+
+.ir-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+
+.ir-close:hover {
+  background: var(--color-surface-soft);
+}
+
+/* ---------- Form: only the body scrolls ---------- */
+.ir-form {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ir-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-4) var(--space-4) var(--space-5);
+}
+
+.ir-note {
+  margin: var(--space-4) 0 0;
+  color: var(--color-on-primary-muted);
+  font-size: var(--ui-text-small);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.ir-note-danger {
+  margin: 0 0 var(--space-4);
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: #8a1f1f; /* dark red: white text stays readable */
+  color: #fff;
+  text-align: left;
+}
+
+.ir-field {
+  position: relative;
+  margin-bottom: var(--space-4);
+}
+
+.ir-label {
+  display: block;
+  margin: 0 0 var(--space-2);
+  color: #fff;
+  font-size: var(--ui-text-label);
+  font-weight: 500;
+}
+
+.ir-hint {
+  margin-left: 4px;
+  color: var(--color-on-primary-muted);
+  font-size: var(--ui-text-small);
+  font-weight: 400;
+}
+
+/* Label for the "describe the place" box under the map */
+.ir-label-sub {
+  margin-top: var(--space-3);
+}
+
+/* Muted blue-grey inputs like the design. White text on this fill passes the 4.5:1 contrast rule. */
+.ir-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 11px 14px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  background: rgb(255 255 255 / 0.18);
+  color: #fff;
+  font-size: 16px; /* 16px stops iPhones from zooming in when you tap a field */
+  color-scheme: dark; /* makes the calendar icon white */
+}
+
+.ir-input::placeholder {
+  color: rgb(255 255 255 / 0.85);
+}
+
+.ir-input[aria-invalid="true"] {
+  border-color: #ffb4ab;
+}
+
+/* The dropdown list uses the phone's own colors, so give it dark text on white. */
+.ir-input option {
+  background: #fff;
+  color: #0f2f45;
+}
+
+.ir-textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.ir-textarea-short {
+  min-height: 72px;
+}
+
+.ir-error {
+  margin: 6px 0 0;
+  color: #ffd6d6;
+  font-size: var(--ui-text-small);
+  font-weight: 600;
+}
+
+.ir-link-btn {
+  min-height: var(--tap-min);
+  margin-top: 2px;
+  padding: 0 var(--space-2);
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: var(--ui-text-small);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ir-input:focus-visible,
+.ir-submit:focus-visible,
+.ir-close:focus-visible,
+.ir-handle-btn:focus-visible,
+.ir-link-btn:focus-visible,
+.ir-preview-remove:focus-visible,
+.ir-file-input:focus-visible + .ir-upload {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ---------- Photos: dashed upload box ---------- */
+/* The real file input is hidden but still works with the keyboard. */
+.ir-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.ir-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 104px;
+  box-sizing: border-box;
+  padding: var(--space-3);
+  border: 2px dashed rgb(255 255 255 / 0.85);
+  border-radius: var(--radius-lg);
+  color: #fff;
+  font-size: var(--ui-text-small);
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+}
+
+.ir-upload small {
+  font-size: 0.75rem;
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+.ir-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ir-preview {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.ir-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ir-preview-remove {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: rgb(23 70 95 / 0.75);
+  color: #fff;
+  cursor: pointer;
+}
+
+/* ---------- Footer: message + green button ---------- */
+.ir-footer {
+  flex: none;
+  padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
+  border-top: 1px solid rgb(255 255 255 / 0.4);
+  background: var(--color-primary);
+}
+
+.ir-status {
+  margin: 0 0 var(--space-2);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.ir-status-ok {
+  color: #b9f5bf;
+}
+
+.ir-status-error {
+  color: #ffd6d6;
+}
+
+.ir-panel .ir-submit {
+  width: 100%;
+  min-height: var(--ui-control-height);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-report);
+  color: #fff;
+  font-family: var(--font-heading);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ir-panel .ir-submit:hover {
+  background: #346a1a;
+}

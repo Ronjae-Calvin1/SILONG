@@ -700,6 +700,11 @@
   font-weight: 700;
 }
 
+.incident-warning {
+  background: #8a1f1f; /* dark red, white text stays readable */
+  color: #fff;
+}
+
 .incident-field {
   position: relative;
   margin-bottom: 19px;
@@ -848,4 +853,17 @@
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+}
+
+/* The map screen forces system-ui on form controls. This puts the panel fonts back.
+   ".incident-panel button" is as specific as that rule and comes later, so it wins. */
+.incident-panel input,
+.incident-panel select,
+.incident-panel textarea,
+.incident-panel button {
+  font-family: var(--font-body);
+}
+
+.incident-panel .incident-submit {
+  font-family: var(--font-heading);
 }
