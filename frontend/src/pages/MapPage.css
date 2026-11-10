@@ -343,7 +343,7 @@
   justify-content: center;
   gap: 3px;
   padding: 0;
-  border: 1px solid rgb(255 255 255 / 0.35);
+  border: none;
   border-radius: var(--radius-md);
   color: var(--color-on-primary);
   cursor: pointer;
@@ -356,6 +356,10 @@
   line-height: 1.05;
   text-align: center;
 }
+   /* Emergency is the longest word on the rail, so its label is a little smaller. */
+   .rail-btn-emergency .rail-btn-label {
+     font-size: clamp(0.75rem, 3.1vw, 0.8125rem);
+   }
 
 .rail-btn-emergency { background: var(--color-emergency); }
 .rail-btn-report    { background: var(--color-report); }

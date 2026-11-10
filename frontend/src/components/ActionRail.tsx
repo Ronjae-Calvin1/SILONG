@@ -71,7 +71,7 @@ export function ActionRail({ onOpenEmergency, onOpenIncident, onOpenAlerts, onOp
           <RailButton
             tone="add"
             icon="plus"
-            label="Add center"
+            label="Add evac"
             ariaLabel="Add center: add an evacuation center"
             onClick={onAddCenter}
           />
