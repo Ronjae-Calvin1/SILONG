@@ -12,13 +12,13 @@ export function FloatingButtons({ onOpenIncident }: Props) {
         aria-label="Submit incident report"
         onClick={onOpenIncident}
       >
-        <Icon name="megaphone" />
+        <Icon name="megaphone" size="var(--icon-lg)" />
       </button>
       <button className="fab fab-red" aria-label="Emergency calls">
-        <Icon name="phone" />
+        <Icon name="phone" size="var(--icon-lg)" />
       </button>
       <button className="fab fab-green" aria-label="Ask box">
-        <Icon name="bot" />
+        <Icon name="bot" size="var(--icon-lg)" />
       </button>
     </div>
   );

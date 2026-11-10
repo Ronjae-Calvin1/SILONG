@@ -45,16 +45,53 @@
   --space-6: 32px;
   --space-7: 48px;
 
-  /* ---------- Accessibility ---------- */
+  /* ---------- Accessibility (fixed on purpose: these are floors, they never shrink) ---------- */
   --tap-min: 44px; /* smallest touch target */
+  --tap-primary-min: 52px; /* Emergency and other primary emergency actions */
   --focus-ring: 3px solid #ffffff; /* visible on the blue backgrounds; light surfaces set their own */
 
-  /* ---------- Responsive UI sizing (CSS pixels, not device pixels) ---------- */
-  --ui-text-small: clamp(0.8125rem, 3.55vw, 0.875rem);
-  --ui-text-label: clamp(0.875rem, 3.8vw, 0.9375rem);
-  --ui-text-body: clamp(0.9375rem, 4vw, 1rem);
-  --ui-control-height: clamp(48px, 13vw, 52px);
-  --ui-gutter: clamp(12px, 4vw, 16px);
+  /* ---------- Responsive UI sizing (CSS pixels, not device pixels) ----------
+     ONE fluid base unit. It grows in a straight line from 0.85px at a 320px
+     screen to 1.12px at 480px, then stops. It follows the SHORTER side of the
+     screen (vmin), so a phone turned sideways gets the same compact sizes as
+     the same phone upright. No media queries are needed for sizing.
+     Every size below is calc(N * var(--u)), wrapped in clamp()/max() so it can
+     never go under the tap / text minimums or grow past a comfortable size.
+       width:   320    360    375    393    412    480
+       --u:    0.850  0.918  0.943  0.973  1.005  1.120   (px) */
+  --u: clamp(0.85px, 0.31px + 0.16875vmin, 1.12px);
+
+  /* Text. rem floors keep the browser's font-size setting working. */
+  --ui-text-small: clamp(0.8125rem, calc(13.5 * var(--u)), 0.875rem); /* 13 - 14px */
+  --ui-text-label: clamp(0.875rem, calc(15 * var(--u)), 0.9375rem); /* 14 - 15px */
+  --ui-text-body: clamp(0.9375rem, calc(16 * var(--u)), 1rem); /* 15 - 16px */
+  --ui-text-input: max(16px, 1rem); /* text fields: 16px stops iPhones zooming in */
+
+  /* Controls and spacing */
+  --ui-control-height: clamp(48px, calc(52 * var(--u)), 56px); /* search field, form inputs */
+  --ui-gutter: clamp(12px, calc(14.5 * var(--u)), 16px);
+  --ui-header-height: clamp(52px, calc(60 * var(--u)), 64px);
+  --ui-logo-height: clamp(22px, calc(28 * var(--u)), 30px);
+  --ui-chip-height: clamp(var(--tap-min), calc(46 * var(--u)), 50px);
+  --ui-chip-pad: clamp(10px, calc(14 * var(--u)), 16px);
+
+  /* Icons */
+  --icon-xs: clamp(16px, calc(18 * var(--u)), 20px);
+  --icon-sm: clamp(20px, calc(22 * var(--u)), 24px);
+  --icon-md: clamp(22px, calc(24 * var(--u)), 28px);
+  --icon-lg: clamp(22px, calc(25 * var(--u)), 28px);
+  --icon-xl: clamp(24px, calc(28 * var(--u)), 32px);
+
+  /* Action rail: about 52 - 62px wide, never more than ~16% of a phone's width */
+  --rail-pad: 4px;
+  /* Button width never goes under 3.4x the label size, so "Report" still fits if the person has raised
+     the browser's font size (at the normal size this is ~44px, the same as the tap floor). */
+  --rail-btn-w: max(calc(clamp(52px, calc(60 * var(--u)), 62px) - 2 * var(--rail-pad)), calc(3.4 * var(--ui-text-small)));
+  --rail-w: calc(var(--rail-btn-w) + 2 * var(--rail-pad));
+  --rail-btn-h: clamp(54px, calc(58 * var(--u)), 62px); /* room for icon + a two-line label */
+
+  /* Round floating buttons (FloatingButtons) */
+  --fab-size: clamp(48px, calc(54 * var(--u)), 58px);
 
   /* ---------- Elevation ---------- */
   --shadow-card: 0 3px 8px rgb(0 0 0 / 0.3);

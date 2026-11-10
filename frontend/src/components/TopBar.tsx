@@ -12,14 +12,14 @@ export function TopBar({ menuOpen = false, onMenuClick, onBellClick }: Props) {
     <header className="topbar">
       <div className="topbar-left">
         <button className="topbar-btn" aria-label="Menu" aria-expanded={menuOpen} onClick={onMenuClick}>
-          <Icon name="menu" size={24} />
+          <Icon name="menu" size="var(--icon-md)" />
         </button>
 
         <img className="topbar-logo" src={logoWhite} alt="SILONG" width={800} height={228} />
       </div>
 
       <button className="topbar-btn" aria-label="Notifications" onClick={onBellClick}>
-        <Icon name="bell" size={24} />
+        <Icon name="bell" size="var(--icon-md)" />
       </button>
     </header>
   );

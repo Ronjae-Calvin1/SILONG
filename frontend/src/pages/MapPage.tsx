@@ -301,6 +301,16 @@ export function MapPage() {
     setMenuOpen(false);
   }
 
+  // Same messages as before; they show beside the rail (or under the header while adding a place).
+  const mapMessages = (
+    <>
+      {error && <p className="map-message">Error: {error}</p>}
+      {!error && facilities.length > 0 && shown.length === 0 && (
+        <p className="map-message">None found in our data. Ask your local DRRMO or call 911.</p>
+      )}
+    </>
+  );
+
   return (
     <div
       className="map-screen"
@@ -322,36 +332,35 @@ export function MapPage() {
         <div className="map-controls">
           <SearchBar facilities={facilities} onSelect={handleSearchSelect} />
           <FilterChips value={filter} onChange={setFilter} />
+
+          {/* The rail sits in the same column, under the chips, so it can never overlap them. */}
+          <div className="map-lower">
+            <ActionRail
+              onOpenEmergency={() => {
+                closeOtherPanels("emergency");
+                setEmergencyOpen((open) => !open); // tap once = open, tap again = close
+              }}
+              onOpenIncident={() => {
+                closeOtherPanels("incident");
+                setIncidentOpen(true);
+              }}
+              onOpenAlerts={() => {
+                closeOtherPanels("alerts");
+                setAlertsRequest((n) => n + 1);
+              }}
+              onAddCenter={() => {
+                closeOtherPanels();
+                setAddRequest((n) => n + 1);
+              }}
+            />
+            {mapMessages}
+          </div>
         </div>
       )}
 
       {menuOpen && !adding && <RemovedCenters onClose={() => setMenuOpen(false)} onRestored={handleRestored} />}
 
-      {error && <p className="map-message">Error: {error}</p>}
-      {!error && facilities.length > 0 && shown.length === 0 && (
-        <p className="map-message">None found in our data. Ask your local DRRMO or call 911.</p>
-        )}
-        
-        {!adding && (
-            <ActionRail
-            onOpenEmergency={() => {
-              closeOtherPanels("emergency");
-              setEmergencyOpen((open) => !open); // tap once = open, tap again = close
-            }}
-            onOpenIncident={() => {
-              closeOtherPanels("incident");
-              setIncidentOpen(true);
-            }}
-            onOpenAlerts={() => {
-              closeOtherPanels("alerts");
-              setAlertsRequest((n) => n + 1);
-            }}
-            onAddCenter={() => {
-              closeOtherPanels();
-              setAddRequest((n) => n + 1);
-            }}
-          />
-          )}
+      {adding && <div className="map-message-float">{mapMessages}</div>}
 
       <AddEvacCenter mapRef={mapRef} onActiveChange={handleAddActive} onAdded={handleAdded} startRequest={addRequest} />
 

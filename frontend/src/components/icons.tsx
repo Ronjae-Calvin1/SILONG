@@ -70,11 +70,14 @@ const PATHS = {
 
 export type IconName = keyof typeof PATHS;
 
-export function Icon({ name, size = 24 }: { name: IconName; size?: number }) {
+// size: a number (px) or a CSS length such as "var(--icon-md)", which follows the screen-size tokens.
+export function Icon({ name, size = 24 }: { name: IconName; size?: number | string }) {
+  const fluid = typeof size === "string";
   return (
     <svg
-      width={size}
-      height={size}
+      width={fluid ? undefined : size}
+      height={fluid ? undefined : size}
+      style={fluid ? { width: size, height: size, flex: "none" } : undefined}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

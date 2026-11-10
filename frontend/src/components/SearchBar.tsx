@@ -41,7 +41,7 @@ export function SearchBar({ facilities, onSelect }: Props) {
     <div className="search" ref={wrapRef}>
       <div className="search-field">
         <span className="search-icon">
-          <Icon name="search" size={22} />
+          <Icon name="search" size="var(--icon-sm)" />
         </span>
         <input
           className="search-input"
@@ -62,7 +62,7 @@ export function SearchBar({ facilities, onSelect }: Props) {
         />
         {query && (
           <button type="button" className="search-clear" aria-label="Clear search" onClick={() => setQuery("")}>
-            <Icon name="close" size={18} />
+            <Icon name="close" size="var(--icon-xs)" />
           </button>
         )}
       </div>

@@ -1,12 +1,14 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { LandingPage } from "./pages/LandingPage";
 import { MapPage } from "./pages/MapPage";
+import { DebugViewport } from "./components/DebugViewport";
 
 // "/" is the landing page (approved addition); "Get Started" opens the map at "/map".
 // Any other address goes back to the landing page.
 function App() {
   return (
     <BrowserRouter>
+      <DebugViewport />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/map" element={<MapPage />} />

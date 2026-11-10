@@ -7,7 +7,9 @@
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
-/* Main screen: dark navy theme, phone first */
+/* Main screen: dark navy theme, phone first.
+   Every size on this screen comes from the tokens in styles/tokens.css
+   (one fluid unit, --u), so it scales smoothly from 320px up to 480px. */
 .map-screen {
   position: fixed;
   inset: 0;
@@ -16,7 +18,13 @@
   font-size: var(--ui-text-body);
   line-height: 1.4;
   overflow: hidden;
-  --controls-top: calc(clamp(64px, 17vw, 72px) + 8px); /* gap below the header; the rail follows. */
+  --controls-top: calc(var(--ui-header-height) + var(--space-2)); /* gap below the header; the controls follow. */
+  /* Bottom edge of the header + search + chips. Panels that slide up from the bottom can use
+     "100% - var(--map-chrome-h)" as their tallest height so they never cover the search and chips. */
+  --map-chrome-h: calc(
+    var(--controls-top) + var(--ui-control-height) + var(--space-2) + var(--ui-chip-height) + var(--space-1) + var(--space-2)
+  );
+  --map-attrib-reserve: 36px; /* MapLibre's credit line: 24px tall + 10px margin (fixed by the library) */
 }
 
 /* ---------- Header (top bar) ---------- */
@@ -27,8 +35,8 @@
   right: 0;
   z-index: 1100;
   box-sizing: border-box;
-  height: clamp(64px, 17vw, 72px);
-  padding: 0 8px 0 4px;
+  height: var(--ui-header-height);
+  padding: 0 var(--space-2) 0 var(--space-1);
   display: flex;
   align-items: center;
   justify-content: space-between; 
@@ -68,16 +76,21 @@
 /* SILONG logo (white version, sits on the blue bar) */
 .topbar-logo {
   display: block;
-  height: clamp(24px, 6.8vw, 28px);
+  height: var(--ui-logo-height);
   width: auto; /* keeps the logo's proportions */
 }
 
-/* ---------- Search bar + filter chips ---------- */
+/* ---------- Search bar, filter chips and the action rail ----------
+   One column that starts under the header and stops above the Alerts sheet.
+   Search and chips keep their size; the rail below them takes whatever room is
+   left (and scrolls if there is not enough), so nothing can overlap. */
 .map-controls {
   position: absolute;
   top: var(--controls-top);
   left: 0;
   right: 0;
+  /* Stops above the Alerts sheet, or above MapLibre's credit line at the bottom when the sheet is closed. */
+  bottom: max(calc(var(--sheet-h, 0px) + var(--space-2)), var(--map-attrib-reserve));
   z-index: 1050;
   display: flex;
   flex-direction: column;
@@ -86,12 +99,13 @@
 }
 
 .map-controls > * {
+  flex: none;
   pointer-events: auto; /* ...but the controls themselves must stay tappable */
 }
 
 .search {
   position: relative; /* the results list is positioned against this box */
-  margin: 0 var(--space-3);
+  margin: 0 var(--ui-gutter);
 }
 
 .search-field {
@@ -126,7 +140,7 @@
   background: transparent;
   color: #1b2a35;
   font: inherit;
-  font-size: 16px; /* 16px stops iPhones zooming in when the field is tapped */
+  font-size: var(--ui-text-input); /* never under 16px: stops iPhones zooming in when the field is tapped */
 }
 
 .search-input::placeholder {
@@ -139,8 +153,8 @@
 
 .search-clear {
   flex: none;
-  width: 44px;
-  height: 44px;
+  width: var(--tap-min);
+  height: var(--tap-min);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -153,6 +167,7 @@
 
 .search-results {
   position: absolute;
+  z-index: 2; /* above the action rail, which comes after the search in the same column */
   top: calc(100% + 6px);
   left: 0;
   right: 0;
@@ -172,8 +187,8 @@
   align-items: flex-start;
   gap: 2px;
   width: 100%;
-  min-height: 44px;
-  padding: 8px 12px;
+  min-height: var(--tap-min);
+  padding: var(--space-2) var(--space-3);
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -188,7 +203,7 @@
 }
 
 .search-result-name {
-  font-size: 16px;
+  font-size: var(--ui-text-body);
   font-weight: 600;
 }
 
@@ -202,7 +217,7 @@
 }
 
 .search-empty {
-  padding: 12px;
+  padding: var(--space-3);
   color: #52636f;
   font-size: var(--ui-text-label);
 }
@@ -214,7 +229,7 @@
   gap: var(--space-2);
   width: fit-content; /* shrinks to the chips, so empty space beside them stays map */
   max-width: 100%;
-  padding: 4px var(--space-3) 8px; /* room for the chip shadows, which overflow would clip */
+  padding: var(--space-1) var(--ui-gutter) var(--space-2); /* room for the chip shadows, which overflow would clip */
   overflow-x: auto;
   white-space: nowrap;
   scrollbar-width: none;
@@ -229,13 +244,15 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 48px;
-  padding: 0 clamp(14px, 4vw, 16px);
+  min-width: var(--tap-min); /* the short "All" chip must still be a full-size tap target */
+  min-height: var(--ui-chip-height);
+  padding: 0 var(--ui-chip-pad);
+  justify-content: center;
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
   background: var(--color-primary);
   color: var(--color-on-primary);
-  font-size: 16px;
+  font-size: var(--ui-text-label);
   font-weight: 600;
   cursor: pointer;
   box-shadow: var(--shadow-card);
@@ -264,12 +281,24 @@
 .filter-btn[data-filter="temporary"] .filter-dot { background: #a6d762; }
 .filter-btn[data-filter="permanent"] .filter-dot { background: #eacb5b; }
 
+/* Row under the chips: the rail on the left, a message (if any) beside it */
+.map-lower {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-height: 0;
+  padding: 0 var(--ui-gutter);
+  flex: 0 1 auto; /* the only part of the column that gives way when room runs out */
+  pointer-events: none; /* the empty space beside the rail stays map */
+}
+
+.map-lower > * {
+  pointer-events: auto;
+}
+
 .map-message {
-  position: absolute;
-  top: calc(var(--controls-top) + 120px); /* below the search bar and chips */
-  left: calc(var(--ui-gutter) + 92px); /* clear of the wider action rail */
-  right: 12px;
-  z-index: 1050;
+  flex: 1;
+  min-width: 0;
   margin: 0;
   padding: 6px 10px;
   border-radius: 8px;
@@ -277,22 +306,49 @@
   font-size: var(--ui-text-label);
 }
 
+/* While a place is being added the search, chips and rail are hidden, so the message sits under the header */
+.map-message-float {
+  position: absolute;
+  top: var(--controls-top);
+  left: var(--ui-gutter);
+  right: var(--ui-gutter);
+  z-index: 1050;
+  display: flex;
+  pointer-events: none;
+}
+
+/* Wider screens: search and chips stay phone-sized instead of stretching across the map. */
+@media (min-width: 600px) {
+  .search {
+    max-width: 420px;
+  }
+}
+
+/* Wide enough (landscape phones, tablets) that the centered 520px sheet no longer reaches the rail on the
+   left: the rail keeps its room instead of shrinking whenever the sheet is open. Layout only. */
+@media (min-width: 700px) {
+  .map-controls {
+    bottom: var(--map-attrib-reserve);
+  }
+}
+
 /* ---------- Action Rail (left side) ---------- */
 .rail {
-  position: absolute;
-  top: calc(var(--controls-top) + 150px); /* search bar (48) + chips (56) + gaps */
-  left: var(--ui-gutter);
-  z-index: 1040; /* under the search results (1050) and every panel */
+  position: relative;
+  z-index: 1; /* under the search results */
+  flex: none;
   box-sizing: border-box;
-  width: 84px;
-  /* Never grow past the alerts sheet. If space is short, the rail scrolls. */
-  max-height: calc(100% - var(--controls-top) - 120px - var(--sheet-h, 0px) - 16px);
+  width: var(--rail-w);
+  /* Never taller than the room left above the alerts sheet. If room is short,
+     the rail scrolls (the chevron always stays reachable). */
+  max-height: 100%;
+  min-height: calc(var(--tap-min) + 2 * var(--rail-pad));
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  padding: 6px 6px 12px;
+  padding: var(--rail-pad);
   border-radius: 24px;
   background: rgb(72 112 140 / 0.82); /* translucent grey-blue, like the design */
   backdrop-filter: blur(6px);
@@ -304,18 +360,15 @@
   display: none;
 }
 
-.rail[data-collapsed="true"] {
-  padding-bottom: 6px;
-}
-
 /* Chevron at the top: folds the rail away */
 .rail-toggle {
   flex: none;
-  width: var(--tap-min);
+  width: var(--rail-btn-w);
   height: var(--tap-min);
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
@@ -335,13 +388,13 @@
 .rail-btn {
   flex: none;
   box-sizing: border-box;
-  width: 72px;
-  min-height: 64px;
+  width: var(--rail-btn-w);
+  min-height: max(var(--rail-btn-h), var(--tap-primary-min)); /* Emergency counts as primary: never under 52px */
   display: flex;
   flex-direction: column; /* icon on top, label under it */
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   padding: 0;
   border: none;
   border-radius: var(--radius-md);
@@ -351,15 +404,12 @@
 }
 
 .rail-btn-label {
-  font-size: clamp(0.8125rem, 3.55vw, 0.875rem);
+  max-width: 100%;
+  font-size: var(--ui-text-small); /* 13px or more */
   font-weight: 700;
   line-height: 1.05;
   text-align: center;
 }
-   /* Emergency is the longest word on the rail, so its label is a little smaller. */
-   .rail-btn-emergency .rail-btn-label {
-     font-size: clamp(0.75rem, 3.1vw, 0.8125rem);
-   }
 
 .rail-btn-emergency { background: var(--color-emergency); }
 .rail-btn-report    { background: var(--color-report); }
@@ -368,8 +418,9 @@
 
 .rail-bot {
   flex: none;
-  width: 64px;
-  height: 64px;
+  box-sizing: border-box;
+  width: var(--rail-btn-w);
+  height: var(--rail-btn-w); /* a circle */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -403,19 +454,24 @@
 }
 /* ---------- Floating round buttons ---------- */
 .fab-column {
+  --fab-column-h: calc(3 * var(--fab-size) + 2 * var(--space-3));
   position: absolute;
-  right: 12px;
-  bottom: min(calc(var(--sheet-h, 0px) + 16px), calc(100% - 330px));
+  right: var(--ui-gutter);
+  /* Sits above the Alerts sheet, but its top never climbs into the search field. */
+  bottom: min(
+    calc(var(--sheet-h, 0px) + var(--space-4)),
+    calc(100% - var(--fab-column-h) - var(--controls-top) - var(--ui-control-height) - var(--space-2))
+  );
   z-index: 1300;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   transition: bottom 0.25s ease;
 }
 
 .fab {
-  width: 56px;
-  height: 56px;
+  width: var(--fab-size);
+  height: var(--fab-size);
   display: flex;
   align-items: center;
   justify-content: center;
