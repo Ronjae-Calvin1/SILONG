@@ -88,7 +88,7 @@
      the browser's font size (at the normal size this is ~44px, the same as the tap floor). */
   --rail-btn-w: max(calc(clamp(52px, calc(60 * var(--u)), 62px) - 2 * var(--rail-pad)), calc(3.4 * var(--ui-text-small)));
   --rail-w: calc(var(--rail-btn-w) + 2 * var(--rail-pad));
-  --rail-btn-h: clamp(54px, calc(58 * var(--u)), 62px); /* room for icon + a two-line label */
+  --rail-btn-h: clamp(52px, calc(54 * var(--u)), 56px); /* room for a 20-24px icon + a two-line label; never under the 52px primary floor */
 
   /* Round floating buttons (FloatingButtons) */
   --fab-size: clamp(48px, calc(54 * var(--u)), 58px);

@@ -28,7 +28,7 @@ function RailButton({
 }) {
   return (
     <button type="button" className={`rail-btn rail-btn-${tone}`} aria-label={ariaLabel} onClick={onClick}>
-      <Icon name={icon} size="var(--icon-lg)" />
+      <Icon name={icon} size="var(--icon-sm)" />
       <span className="rail-btn-label">{label}</span>
     </button>
   );
@@ -36,7 +36,9 @@ function RailButton({
 
 export function ActionRail({ onOpenEmergency, onOpenIncident, onOpenAlerts, onOpenBot, onAddCenter }: Props) {
   // The chevron at the top folds the rail away so it never blocks the map on small screens.
-  const [collapsed, setCollapsed] = useState(false);
+  // On short screens (iPhone SE, any phone turned sideways) it starts folded so the map stays clear;
+  // one tap on the chevron opens it. Taller phones start with it open, as before.
+  const [collapsed, setCollapsed] = useState(() => window.matchMedia("(max-height: 700px)").matches);
 
   return (
     <nav className="rail" data-collapsed={collapsed} aria-label="Quick actions">
