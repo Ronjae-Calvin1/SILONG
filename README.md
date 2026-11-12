@@ -6,29 +6,48 @@ centers are, and (once built) whether those places still have space. It also
 shows the weather, warnings and emergency numbers, and has a chatbot that
 gives short, clear answers.
 
-- No accounts. Anyone can use it right away, with no sign-up and no login.
+- No accounts for the public. Anyone can use the map, report, and ask the
+  chatbot right away, with no sign-up and no login.
+- Staff accounts (planned): **Responders** and **Super admins** sign in. There
+  is no public sign-up. Responders use a phone or a computer; Super admins use
+  a computer.
 - Mobile first, but online only. There is no offline mode and the site is not
   meant to be installed on the home screen.
 - Official advisories (PAGASA, NDRRMC, the city) always come first.
+- This is a school project that runs on localhost. It is not deployed.
 
 The full list of functions is in the project documentation (Websys - Project
 documentation). `CHANGELOG.md` lists what changed in each update.
+
+**Redesign in progress.** The screens and rules for the next version are in
+[`docs/REDESIGN.md`](docs/REDESIGN.md). Until a part is built, this README
+describes what the code does today, and the "Planned" rows below describe what
+is designed but not built.
 
 ## What the site does
 
 | Function | What it does | Status |
 | --- | --- | --- |
 | Map | Shows hospitals, clinics and evacuation centers. All pins show automatically. Tap a pin for the name, address and a tap-to-call number. | Working |
-| Capacity and availability | Tap a pin to see whether a place is open, busy or full and when that was last updated. Evacuation centers also show a capacity bar ("85 / 100 people", "15 spaces left"). Anyone can update it, with no login. | Working |
-| Evacuation center manager | Add an evacuation center on the map, remove one, and restore a removed one. Removing hides a center, it never deletes it. | Working |
+| Capacity and availability | Tap a pin to see whether a place is open, busy or full and when that was last updated. Evacuation centers also show a capacity bar ("85 / 100 people", "15 spaces left"). Anyone can update it, with no login. | Working. Planned: "Reported by a user" and "Confirmed by official" labels |
+| Evacuation center manager | Add an evacuation center on the map, remove one, and restore a removed one. Removing hides a center, it never deletes it. | Working today. Planned: new places wait for admin approval, "hide" only affects one phone, admin removal is kept 30 days and then deleted |
 | Weather forecast | Current weather and a short forecast. | Screen only, sample data |
 | Emergency contacts | Red phone button that opens numbers to call with one tap. | Button only, not wired |
 | Early warning alerts | Bottom panel with weather, official warnings and summarized internet updates. | Screen only, sample data |
 | Incident report | Report an incident with a location from GPS or a point on the map. | Form works, saved on the phone only, not sent to a server |
-| AI chatbot | One question in, one short answer out, from a checked guide only. | Button only. Backend answers are stubbed |
+| AI chatbot | One question in, one short answer out, from a checked guide only. No follow-ups and no live place status. Every answer ends with "AI-generated. Follow official advisories first." | Button only. Backend answers are stubbed |
+| Help requests and hazard reports (replaces the incident report form) | "I need help" goes to responders only and is never shown on the map. A hazard report shows to nearby people as an approximate spot, "Unconfirmed" after 3 reports from 3 phones, "Verified" once an admin checks it. | Planned (designed, not built) |
+| Responder side | Reports list, map, places and a resolve step. Phone and computer layouts. | Planned (designed, not built) |
+| Super admin side | Everything a responder does, plus advisories, emergency numbers, the chatbot guide, accounts, the audit log and permanent delete. Computer only. | Planned (designed, not built) |
+| FAQs, support and "My reports and places" | Menu pages. | Planned (designed, not built) |
 
 Status is based on the code in this repository. Anything marked "Not built
-yet" or "not wired" is planned in the documentation but does not work yet.
+yet", "not wired" or "Planned" is designed or described in the documentation
+but does not work yet.
+
+Pins show the place type as a letter (H hospital, C clinic, E evacuation
+center) with a matching shape (cross, circle-cross, house, tent), so the type
+is never shown by color alone.
 
 ## Tech stack
 
