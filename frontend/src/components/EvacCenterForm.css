@@ -451,3 +451,21 @@
     animation-duration: 2s;
   }
 }
+/* ---------- Desktop (1024px+): step 2 is a panel on the RIGHT, like the other panels ---------- */
+@media (min-width: 1024px) {
+  .map-screen .evac-form-overlay {
+    inset: var(--topbar-h) 0 0 auto;
+    width: var(--drawer-w);
+    display: block;
+    background: none; /* no dimmed backdrop: the map stays visible beside the panel */
+    z-index: 1300;
+  }
+  .map-screen .evac-form {
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    box-shadow: -4px 0 14px rgb(0 0 0 / 0.3);
+    animation: evac-drawer-in 0.2s ease-out;
+  }
+}

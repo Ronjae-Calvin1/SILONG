@@ -1,0 +1,229 @@
+/* Your location (blue dot) */
+.user-dot {
+  width: 20px;
+  height: 20px;
+  box-sizing: border-box;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #2563eb;
+  box-shadow: 0 0 0 8px rgb(37 99 235 / 0.25), 0 2px 6px rgb(0 0 0 / 0.4);
+  pointer-events: none;
+}
+
+/* Details panel animation: slides up on phones, fades in from the right on desktop */
+@keyframes fp-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes fp-fade-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: none; }
+}
+@media (max-width: 1023px) {
+  .map-screen .fp-panel {
+    animation: fp-slide-up 0.25s ease-out;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-screen .fp-panel {
+    animation: none !important;
+  }
+}
+
+/* Zoom buttons: hidden on phones */
+.map-zoom {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  /* ---------- Zoom / locate buttons, top-left of the map ---------- */
+  .map-zoom {
+    position: absolute;
+    z-index: 1040;
+    top: calc(var(--topbar-h) + var(--space-3));
+    left: calc(var(--sidebar-w) + var(--space-3));
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .map-zoom-btn {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgb(255 255 255 / 0.35);
+    border-radius: var(--radius-md);
+    background: var(--color-primary);
+    color: #fff;
+    cursor: pointer;
+    box-shadow: var(--shadow-card);
+  }
+  .map-zoom-btn:hover {
+    background: var(--color-primary-dark);
+  }
+  .map-zoom-btn:focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: 2px;
+  }
+  .map-zoom-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+  .map-zoom-btn-locate {
+    margin-top: var(--space-1);
+    border-color: transparent;
+    background: #fff;
+    color: var(--color-primary);
+  }
+  .map-zoom-btn-locate:hover {
+    background: #e6f0f7;
+  }
+  .map-zoom-btn[aria-busy="true"] {
+    opacity: 0.7;
+    cursor: progress;
+  }
+
+  /* The "none found" message moves right so it does not sit under the buttons */
+  /* ---------- Sidebar: the list takes the free height and scrolls by itself ---------- */
+  .map-controls > * {
+    flex: none;
+  }
+  .map-controls > .map-side-extra {
+    flex: 1 1 auto;
+    min-height: 260px; /* never squeezed smaller than about two cards, the sidebar scrolls instead */
+  }
+
+  .facility-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .facility-list-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+  .facility-list-count {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  .facility-list-sort {
+    flex: none;
+    font-size: 0.8125rem;
+    color: var(--color-on-primary-muted);
+  }
+  .facility-list-hint {
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--color-on-primary-muted);
+  }
+  .facility-list-empty {
+    margin: var(--space-3) 0 0;
+    font-size: 0.9375rem;
+    color: var(--color-on-primary-muted);
+  }
+  .facility-list-items {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0 -6px 0 0; /* the thin scrollbar sits in this strip, so the cards keep their full width */
+    padding: 0 6px 2px 0;
+    list-style: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(255 255 255 / 0.45) transparent;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .facility-list-items::-webkit-scrollbar {
+    width: 6px;
+  }
+  .facility-list-items::-webkit-scrollbar-thumb {
+    border-radius: var(--radius-pill);
+    background: rgb(255 255 255 / 0.45);
+  }
+  .facility-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid rgb(255 255 255 / 0.22);
+    border-radius: var(--radius-md);
+    background: var(--color-primary-dark);
+    color: var(--color-on-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .facility-item:hover {
+    background: #1c526f;
+  }
+  .facility-item:focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: 2px;
+  }
+  .facility-item[aria-current="true"] {
+    border-color: #fff;
+    box-shadow: inset 0 0 0 1px #fff;
+  }
+  .facility-item-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+  .facility-item-name {
+    min-width: 0;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+  .facility-item .fp-badge {
+    flex: none;
+    gap: 4px;
+    padding: 3px 10px 3px 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+  .facility-item .fp-badge-symbol {
+    width: 18px;
+    height: 18px;
+    font-size: 11px;
+  }
+  .facility-item-meta {
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    color: var(--color-on-primary-muted);
+  }
+
+  /* ---------- Details panel: a card at the top right of the map ---------- */
+  .map-screen .fp-panel {
+    top: calc(var(--topbar-h) + var(--space-3));
+    right: var(--space-3);
+    left: auto;
+    bottom: auto;
+    width: clamp(340px, 28vw, 400px);
+    max-width: none;
+    margin: 0;
+    /* stays above the bottom dock */
+    max-height: calc(100% - var(--topbar-h) - var(--space-3) - 180px);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card), 0 12px 28px rgb(0 0 0 / 0.25);
+    animation: fp-fade-in 0.2s ease-out;
+  }
+  .map-screen .fp-handle {
+    display: none;
+  }
+  .map-screen .fp-top {
+    padding-top: var(--space-4);
+  }
+}

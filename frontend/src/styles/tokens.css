@@ -16,6 +16,13 @@
   --color-report: #3e7a1f; 
   --color-alert: #c9a61a; 
 
+  /* ---------- Home (map screen) buttons: added for the A1 redesign ----------
+     Emergency uses the darker red so white text passes the 4.5:1 contrast rule
+     (the same red the Emergency Hotlines panel already uses). */
+  --color-emergency-strong: #c62222;
+  --color-add: #2a6496;
+  --color-ask: #0f2f48;
+
   /* ---------- Facility status colors ----------
      Same values the map pins and badges already use. Status is always also
      shown as text, never by color alone. */
@@ -55,6 +62,11 @@
   --ui-text-body: clamp(0.9375rem, 4vw, 1rem);
   --ui-control-height: clamp(48px, 13vw, 52px);
   --ui-gutter: clamp(12px, 4vw, 16px);
+
+  /* ---------- Home (map screen) layout ---------- */
+  --sidebar-w: clamp(320px, 26vw, 400px); /* desktop sidebar: ~355px on a 1366px laptop, 400px max on big screens */
+  --drawer-w: clamp(340px, 30vw, 440px); /* desktop right-hand panels (Emergency, Report, Add evac, Ask Silo) */
+  --dock-gap: 28px; /* space under the bottom dock; keeps the map attribution visible */
 
   /* ---------- Elevation ---------- */
   --shadow-card: 0 3px 8px rgb(0 0 0 / 0.3);

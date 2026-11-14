@@ -1,0 +1,101 @@
+.pin.facility-pin {
+  --pin-size: 30px; /* was 38px */
+  --pin-slim: 0.84; /* 1 = round teardrop, smaller = slimmer. 0.84 keeps the shape easy to recognise */
+  width: var(--pin-size);
+  height: var(--pin-size);
+  translate: 0 calc(var(--pin-size) * -0.707);
+}
+
+.pin.facility-pin::after {
+  inset: -8px;
+}
+
+.pin.facility-pin .pin-body {
+  border-width: 2.5px;
+  transform: scaleX(var(--pin-slim)) rotate(-45deg);
+}
+
+.pin.facility-pin .pin-icon {
+  display: flex;
+  width: 56%;
+  height: 56%;
+  color: var(--pin-letter);
+  transform: rotate(45deg) scaleX(calc(1 / var(--pin-slim)));
+  pointer-events: none;
+}
+
+.pin.facility-pin .pin-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pin.facility-pin .pin-badge {
+  position: absolute;
+  top: -6px;
+  right: -7px;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--color-primary-dark);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--color-primary-dark);
+  font: 700 10px/1 var(--font-body);
+  pointer-events: none;
+}
+
+/* No status yet: white pin with a dark brand-blue ring and icon. It is clearly different from the grey
+   "Closed" pin and is never a fake "open" green. */
+.pin.facility-pin[data-status="unknown"] {
+  --pin-letter: var(--color-primary-dark);
+}
+.pin.facility-pin[data-status="unknown"] .pin-body {
+  border-color: var(--color-primary-dark);
+  background: #fff;
+}
+
+/* Selected: bigger, thick double ring, always on top. The tip stays on the spot. */
+.pin.facility-pin[data-selected="true"] {
+  z-index: 5;
+}
+.pin.facility-pin[data-selected="true"] .pin-body {
+  transform: translateY(calc(var(--pin-size) * -0.177)) scaleX(var(--pin-slim)) rotate(-45deg) scale(1.25);
+  border-color: #fff;
+  box-shadow: 0 0 0 2px var(--color-primary-dark), 0 0 0 5px rgb(255 255 255 / 0.85),
+    0 4px 10px rgb(0 0 0 / 0.5);
+}
+.pin.facility-pin[data-selected="true"] .pin-badge {
+  transform: translate(3px, -4px) scale(1.15);
+}
+
+/* Keyboard focus */
+.pin.facility-pin:focus-visible {
+  outline: none;
+}
+.pin.facility-pin:focus-visible .pin-body {
+  box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--color-primary-dark);
+}
+
+/* Phones: a touch smaller again */
+@media (max-width: 599px) {
+  .pin.facility-pin {
+    --pin-size: 28px;
+  }
+}
+
+/* Big monitors: slightly larger, still slimmer than before */
+@media (min-width: 1600px) {
+  .pin.facility-pin {
+    --pin-size: 34px;
+  }
+  .pin.facility-pin .pin-badge {
+    width: 18px;
+    height: 18px;
+    font-size: 11px;
+  }
+}

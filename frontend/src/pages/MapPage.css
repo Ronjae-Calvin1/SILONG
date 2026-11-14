@@ -16,7 +16,23 @@
   font-size: var(--ui-text-body);
   line-height: 1.4;
   overflow: hidden;
-  --controls-top: calc(clamp(64px, 17vw, 72px) + 8px); /* gap below the header; the rail follows. */
+  --topbar-h: clamp(64px, 17vw, 72px);
+  --controls-top: calc(var(--topbar-h) + 8px); /* gap below the header */
+}
+
+.map-screen .map-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.map-screen .topbar,
+.map-screen .topbar button,
+.map-screen .map-controls,
+.map-screen .map-controls input,
+.map-screen .map-controls button,
+.map-screen .dock,
+.map-screen .dock button {
+  font-family: var(--font-body);
 }
 
 /* ---------- Header (top bar) ---------- */
@@ -27,11 +43,11 @@
   right: 0;
   z-index: 1100;
   box-sizing: border-box;
-  height: clamp(64px, 17vw, 72px);
-  padding: 0 8px 0 4px;
+  height: var(--topbar-h);
+  padding: 0 var(--space-2) 0 var(--space-1);
   display: flex;
   align-items: center;
-  justify-content: space-between; 
+  justify-content: space-between;
   background: var(--color-primary);
   box-shadow: var(--shadow-card);
 }
@@ -43,7 +59,7 @@
 }
 
 .topbar-btn {
-  min-width: var(--tap-min); 
+  min-width: var(--tap-min);
   min-height: var(--tap-min);
   display: flex;
   align-items: center;
@@ -60,7 +76,8 @@
   background: var(--color-surface-soft); /* soft white glow when pressed */
 }
 
-.topbar-btn:focus-visible {
+.topbar-btn:focus-visible,
+.topbar-emergency:focus-visible {
   outline: var(--focus-ring); /* visible outline for keyboard users */
   outline-offset: -3px;
 }
@@ -72,7 +89,31 @@
   width: auto; /* keeps the logo's proportions */
 }
 
-/* ---------- Search bar + filter chips ---------- */
+/* Red Emergency button in the bar: desktop only (phones have it in the bottom row). */
+.topbar-emergency {
+  display: none;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-emergency-strong);
+  color: var(--color-on-primary);
+  font-size: var(--ui-text-body);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.topbar-emergency:hover {
+  background: #a91c1c;
+}
+
+.topbar-emergency:active {
+  transform: scale(0.97);
+}
+
+/* ---------- Search bar + filter chips (phone: floats over the map) ---------- */
 .map-controls {
   position: absolute;
   top: var(--controls-top);
@@ -87,6 +128,22 @@
 
 .map-controls > * {
   pointer-events: auto; /* ...but the controls themselves must stay tappable */
+}
+
+/* Parts that only the desktop side card shows. Phones hide them (the title stays for screen readers). */
+.map-intro-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.map-intro-text,
+.map-side-extra {
+  display: none;
 }
 
 .search {
@@ -242,7 +299,7 @@
 }
 
 .filter-btn[aria-pressed="true"] {
-  background: #d6dee6;
+  background: #fff;
   color: var(--color-primary);
   font-weight: 700;
 }
@@ -252,155 +309,469 @@
   outline-offset: -3px;
 }
 
-.filter-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #fff;
-}
-
-.filter-btn[data-filter="hospital"] .filter-dot { background: #72bcd3; }
-.filter-btn[data-filter="clinic"] .filter-dot { background: #f0a6e8; }
-.filter-btn[data-filter="temporary"] .filter-dot { background: #a6d762; }
-.filter-btn[data-filter="permanent"] .filter-dot { background: #eacb5b; }
-
 .map-message {
   position: absolute;
   top: calc(var(--controls-top) + 120px); /* below the search bar and chips */
-  left: calc(var(--ui-gutter) + 92px); /* clear of the wider action rail */
-  right: 12px;
+  left: var(--ui-gutter);
+  right: var(--ui-gutter);
   z-index: 1050;
   margin: 0;
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: rgba(5, 7, 46, 0.9);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(5, 7, 46, 0.92);
   font-size: var(--ui-text-label);
 }
 
-/* ---------- Action Rail (left side) ---------- */
-.rail {
+/* ---------- Bottom dock: pin legend, weather strip, four action buttons ---------- */
+.dock {
   position: absolute;
-  top: calc(var(--controls-top) + 150px); /* search bar (48) + chips (56) + gaps */
   left: var(--ui-gutter);
+  right: var(--ui-gutter);
+  /* Small gap under the dock keeps the map attribution (the little "i") visible and tappable. */
+  bottom: calc(var(--dock-gap) + env(safe-area-inset-bottom, 0px));
   z-index: 1040; /* under the search results (1050) and every panel */
-  box-sizing: border-box;
-  width: 84px;
-  /* Never grow past the alerts sheet. If space is short, the rail scrolls. */
-  max-height: calc(100% - var(--controls-top) - 120px - var(--sheet-h, 0px) - 16px);
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: var(--space-2);
-  padding: 6px 6px 12px;
-  border-radius: 24px;
-  background: rgb(72 112 140 / 0.82); /* translucent grey-blue, like the design */
-  backdrop-filter: blur(6px);
-  box-shadow: var(--shadow-card);
-  scrollbar-width: none;
+  box-sizing: border-box;
+  pointer-events: none; /* empty space between the parts stays map */
 }
 
-.rail::-webkit-scrollbar {
-  display: none;
+.dock > * {
+  pointer-events: auto;
 }
 
-.rail[data-collapsed="true"] {
-  padding-bottom: 6px;
+/* Pin color key */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-/* Chevron at the top: folds the rail away */
-.rail-toggle {
-  flex: none;
-  width: var(--tap-min);
-  height: var(--tap-min);
+.legend-item {
   display: flex;
   align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-on-primary);
-  cursor: pointer;
+  gap: 6px;
+  font-size: var(--ui-text-small);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
-.rail-toggle svg {
-  transition: transform 0.2s ease;
-}
-
-.rail[data-collapsed="true"] .rail-toggle svg {
-  transform: rotate(180deg); /* chevron points down when folded */
-}
-
-/* All the square buttons share one size, spacing and shape */
-.rail-btn {
+.legend-dot {
   flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid rgb(255 255 255 / 0.9);
+}
+
+.legend-dot[data-status="open"] { background: var(--status-open); }
+.legend-dot[data-status="almost-full"] { background: var(--status-almost-full); }
+.legend-dot[data-status="full"] { background: var(--status-full); }
+.legend-dot[data-status="closed"] { background: var(--status-closed); }
+
+/* On the map (phones): a white pill that stays readable on any map color */
+.legend-map {
+  align-self: flex-start;
+  padding: 6px var(--space-3);
+  border-radius: var(--radius-pill);
+  background: rgb(255 255 255 / 0.96);
+  color: var(--color-primary-dark);
+  box-shadow: var(--shadow-card);
+}
+
+.legend-map .legend-dot {
+  border-color: var(--color-primary-dark);
+}
+
+/* In the desktop side card */
+.legend-side {
+  color: var(--color-on-primary);
+}
+
+/* Weather and warnings strip: opens the Early Warning Alerts sheet */
+.weather-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   box-sizing: border-box;
-  width: 72px;
+  width: 100%;
+  min-height: 56px;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid rgb(255 255 255 / 0.22);
+  border-radius: var(--radius-lg);
+  background: var(--color-primary-dark);
+  color: var(--color-on-primary);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+}
+
+.weather-strip:hover {
+  background: #1c526f;
+}
+
+.weather-strip:active {
+  transform: scale(0.99);
+}
+
+.weather-strip-icon {
+  flex: none;
+  display: flex;
+  color: #f3c94a; /* warm accent so the cloud reads as weather */
+}
+
+.weather-strip-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.weather-strip-title {
+  font-size: var(--ui-text-body);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.weather-strip-sub {
+  font-size: var(--ui-text-small);
+  line-height: 1.25;
+  color: var(--color-on-primary-muted);
+}
+
+.weather-strip-chevron {
+  flex: none;
+  display: flex;
+}
+
+/* The four action buttons: one equal-width row */
+.action-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.action-btn {
+  position: relative;
+  box-sizing: border-box;
   min-height: 64px;
   display: flex;
   flex-direction: column; /* icon on top, label under it */
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  padding: 0;
-  border: none;
+  gap: 4px;
+  padding: 6px 2px;
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   color: var(--color-on-primary);
   cursor: pointer;
   box-shadow: var(--shadow-card);
 }
 
-.rail-btn-label {
-  font-size: clamp(0.8125rem, 3.55vw, 0.875rem);
+.action-btn-label {
+  font-size: clamp(0.75rem, 3.2vw, 0.875rem);
   font-weight: 700;
-  line-height: 1.05;
+  line-height: 1.1;
   text-align: center;
 }
-   /* Emergency is the longest word on the rail, so its label is a little smaller. */
-   .rail-btn-emergency .rail-btn-label {
-     font-size: clamp(0.75rem, 3.1vw, 0.8125rem);
-   }
 
-.rail-btn-emergency { background: var(--color-emergency); }
-.rail-btn-report    { background: var(--color-report); }
-.rail-btn-alerts    { background: var(--color-alert); }
-.rail-btn-add       { background: var(--color-primary); }
+.action-btn-emergency { background: var(--color-emergency-strong); }
+.action-btn-report    { background: var(--color-report); }
+.action-btn-add       { background: var(--color-add); }
+.action-btn-ask       { background: var(--color-primary-dark); border-color: rgb(255 255 255 / 0.4); }
 
-.rail-bot {
-  flex: none;
-  width: 64px;
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;        /* no gap between the circle edge and the picture */
-  overflow: hidden;  /* clips the square image to the round shape */
-  border: 2px solid rgb(255 255 255 / 0.6);
-  border-radius: 50%;
-  background: var(--color-primary-dark);
-  color: var(--color-on-primary);
-  cursor: pointer;
-  box-shadow: var(--shadow-card);
-}
+.action-btn:hover { filter: brightness(1.08); }
+.action-btn:active { transform: scale(0.97); }
 
-.rail-bot-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;    /* fills the whole circle */
-  pointer-events: none; /* taps go to the button, not the image */
-}
-
-.rail-btn:active,
-.rail-bot:active {
-  transform: scale(0.96); /* small "pressed" feel */
-}
-
-.rail-btn:focus-visible,
-.rail-bot:focus-visible,
-.rail-toggle:focus-visible {
+.action-btn:focus-visible,
+.weather-strip:focus-visible {
   outline: var(--focus-ring);
   outline-offset: 2px;
 }
+
+/* Ask Silo picture: transparent PNG, so it needs no blending and has no background or circle. */
+.action-bot-img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* ---------- Desktop (1024px+): top bar, full-height left sidebar, map beside it ---------- */
+@media (min-width: 1024px) {
+  .map-screen {
+    --topbar-h: 60px;
+    --controls-top: var(--topbar-h);
+    --map-left: calc(var(--sidebar-w) + var(--space-4)); /* where the free map area starts */
+    --drawer-offset: 0px; /* how much room the right-hand panel takes (0 = no panel open) */
+  }
+  /* A right-hand panel is open: the map and the bottom dock shrink to the space that is left. */
+  .map-screen[data-drawer="true"] {
+    --drawer-offset: var(--drawer-w);
+  }
+
+  /* The map sits BESIDE the sidebar, never under it. While adding a center, the sidebar is hidden, so the map goes full width. */
+  .map-screen .map-canvas {
+    top: var(--topbar-h);
+    left: var(--sidebar-w);
+    right: 0; /* the map stays full width; right-hand panels slide over it (no empty strip behind them) */
+    bottom: 0;
+  }
+  /* ...but the map credit (bottom right) moves left so a panel never covers it. */
+  .map-screen .maplibregl-ctrl-bottom-right {
+    right: var(--drawer-offset);
+  }
+  .map-screen[data-adding="true"] .map-canvas {
+    left: 0;
+  }
+
+  .topbar {
+    padding: 0 var(--space-4);
+  }
+  .topbar-logo {
+    height: 30px;
+  }
+  .topbar-emergency {
+    display: inline-flex;
+    min-height: 40px;
+    padding: 0 var(--space-4);
+    font-size: 0.9375rem;
+  }
+  .topbar-emergency svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Sidebar: full height. The facility list takes the free height and scrolls by itself. */
+  .map-controls {
+    top: var(--topbar-h);
+    bottom: 0;
+    left: 0;
+    right: auto;
+    width: var(--sidebar-w);
+    max-width: none;
+    box-sizing: border-box;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    overflow-y: auto;
+    border-radius: 0;
+    background: var(--color-primary);
+    box-shadow: 4px 0 14px rgb(0 0 0 / 0.25);
+    pointer-events: auto;
+  }
+
+  .map-intro-title {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+    font-family: var(--font-heading);
+    font-size: 1.375rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .map-intro-text {
+    display: block;
+    margin: var(--space-1) 0 0;
+    font-size: 0.875rem;
+    line-height: 1.45;
+    color: var(--color-on-primary-muted);
+  }
+
+  /* Search */
+  .search {
+    margin: 0;
+  }
+  .search-field {
+    min-height: 44px;
+    gap: var(--space-2);
+    padding-left: var(--space-3);
+  }
+  .search-input {
+    min-height: 44px;
+    font-size: 0.9375rem;
+  }
+  .search-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+  /* Results open inside the sidebar instead of floating over the map */
+  .map-controls .search-results {
+    position: static;
+    margin-top: var(--space-2);
+    max-height: 280px;
+  }
+
+  /* Filter chips: same colours for every category; selected = white */
+  .filter-row {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    width: auto;
+    padding: 0;
+    overflow: visible;
+  }
+  .filter-btn {
+    min-height: 36px;
+    gap: 6px;
+    padding: 0 14px;
+    border-color: rgb(255 255 255 / 0.35);
+    background: rgb(255 255 255 / 0.1);
+    font-size: 0.875rem;
+    box-shadow: none;
+  }
+  .filter-btn:hover {
+    background: rgb(255 255 255 / 0.2);
+  }
+  .filter-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+  .filter-btn[aria-pressed="true"] {
+    background: #fff;
+    border-color: #fff;
+  }
+
+  /* Legend, count, note */
+  .map-side-extra {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid rgb(255 255 255 / 0.2);
+  }
+  .legend-side {
+    gap: 4px 14px;
+  }
+  .legend-side .legend-item {
+    gap: 6px;
+    font-size: 0.8125rem;
+  }
+  .legend-side .legend-dot {
+    width: 12px;
+    height: 12px;
+  }
+  .map-count {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  .map-note {
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: var(--color-on-primary-muted);
+  }
+
+  /* The pin colour key lives in the sidebar on desktop */
+  .legend-map {
+    display: none;
+  }
+
+  /* Bottom dock: centred in the free map area (between the sidebar and any open right-hand panel). */
+  .dock {
+    left: var(--sidebar-w);
+    right: var(--drawer-offset);
+    bottom: 34px; /* leaves the map attribution (bottom right) uncovered */
+    padding: 0 var(--space-4);
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .dock > * {
+    width: min(100%, 520px);
+  }
+  .weather-strip {
+    min-height: 52px;
+    padding: var(--space-2) var(--space-4);
+  }
+  .weather-strip-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+  .weather-strip-chevron svg {
+    width: 20px;
+    height: 20px;
+  }
+  .weather-strip-title {
+    font-size: 0.9375rem;
+  }
+  .weather-strip-sub {
+    font-size: 0.8125rem;
+  }
+  .action-row {
+    gap: var(--space-2);
+  }
+  .action-btn {
+    min-height: 60px;
+    gap: 4px;
+  }
+  .action-btn svg {
+    width: 22px;
+    height: 22px;
+  }
+  .action-bot-img {
+    width: 26px;
+    height: 26px;
+  }
+  .action-btn-label {
+    font-size: 0.875rem;
+  }
+
+  .map-message {
+    top: calc(var(--topbar-h) + var(--space-4));
+    left: calc(var(--sidebar-w) + 64px);
+    right: auto;
+    width: fit-content;
+    max-width: 520px;
+    font-size: 0.9375rem;
+  }
+
+  /* The alerts sheet still opens in the middle of the free map area, so it never covers the sidebar */
+  .map-screen .sheet,
+  .map-screen .fp-panel {
+    left: var(--map-left);
+    right: var(--space-4);
+  }
+
+  /* Facility details: a bit wider, text and buttons slightly larger than on phones */
+  .map-screen .fp-panel {
+    max-width: 600px;
+  }
+  .map-screen .fp-kind { font-size: 0.875rem; }
+  .map-screen .fp-name { font-size: 1.25rem; }
+  .map-screen .fp-address { font-size: 0.9375rem; }
+  .map-screen .fp-badge { font-size: 0.875rem; }
+  .map-screen .fp-capacity-numbers { font-size: 0.9375rem; }
+  .map-screen .fp-capacity-numbers strong { font-size: 1rem; }
+  .map-screen .fp-section-title { font-size: 0.9375rem; }
+  .map-screen .fp-chip { font-size: 0.9375rem; }
+  .map-screen .fp-note { font-size: 0.9375rem; }
+  .map-screen .fp-contact-link { font-size: 1rem; }
+  .map-screen .fp-btn { font-size: 1rem; }
+}
+
+/* Large monitors: a little more room, still not oversized */
+@media (min-width: 1600px) {
+  .map-screen {
+    --topbar-h: 64px;
+  }
+  .map-intro-title { font-size: 1.5rem; }
+  .map-intro-text { font-size: 0.9375rem; }
+  .filter-btn { min-height: 40px; font-size: 0.9375rem; }
+  .dock > * { width: min(100%, 580px); }
+  .weather-strip { min-height: 58px; }
+  .action-btn { min-height: 66px; }
+  .action-btn-label { font-size: 0.9375rem; }
+}
+
 /* ---------- Floating round buttons ---------- */
 .fab-column {
   position: absolute;

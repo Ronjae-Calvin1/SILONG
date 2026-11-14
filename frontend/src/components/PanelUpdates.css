@@ -1,0 +1,620 @@
+.eh-panel .eh-header {
+  justify-content: flex-start;
+  padding-right: var(--tap-min); 
+}
+.eh-panel .eh-title {
+  text-align: left;
+}
+
+.ir-panel .ir-header {
+  justify-content: flex-start;
+  padding: 0 var(--tap-min) var(--space-2) 0;
+}
+.ir-panel .ir-title {
+  text-align: left;
+}
+
+.sheet .sheet-title {
+  text-align: left;
+}
+
+.evac-form .evac-form-header {
+  justify-content: flex-start;
+  text-align: left;
+  padding: 8px 60px 8px var(--space-4);
+}
+
+@media (min-width: 1024px) {
+  .map-screen .sheet.sheet-drawer {
+    top: var(--topbar-h);
+    right: 0;
+    bottom: 0;
+    left: auto;
+    width: var(--drawer-w);
+    max-width: none;
+    height: auto;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: -4px 0 14px rgb(0 0 0 / 0.3);
+    transform: translateX(100%);
+    z-index: 1600;
+  }
+  .map-screen .sheet.sheet-drawer.sheet-drawer-open {
+    transform: translateX(0);
+  }
+  
+  .map-screen .sheet.sheet-drawer.sheet-closed {
+    transform: translateX(100%);
+  }
+ 
+  .map-screen .sheet.sheet-drawer .sheet-handle {
+    display: none;
+  }
+  .map-screen .sheet.sheet-drawer .sheet-drag {
+    cursor: default;
+    touch-action: auto;
+    padding-top: var(--space-3);
+  }
+  .map-screen .sheet.sheet-drawer .sheet-close {
+    top: var(--space-2);
+  }
+  .map-screen .sheet.sheet-drawer .sheet-tab {
+    padding: 0 var(--space-1);
+    gap: 4px;
+  }
+}
+
+/* ---------- 3) Hotline Copy button ---------- */
+.eh-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.eh-copy {
+  flex: none;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 0.7);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-on-primary);
+  cursor: pointer;
+}
+.eh-copy:hover {
+  background: rgb(255 255 255 / 0.15);
+}
+.eh-copy:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+.eh-copy[data-copied="true"] {
+  border-color: #fff;
+  background: #1f7a35;
+  color: #fff;
+}
+
+/* ---------- National cards (911 / 143) ---------- */
+/* Both sizes: one row, number + name on the left, buttons on the right. */
+.eh-panel .eh-national-card {
+  flex-wrap: nowrap;
+  gap: var(--space-2);
+}
+.eh-panel .eh-national-card > div:first-child {
+  min-width: 0; /* a long name wraps instead of pushing the buttons out */
+}
+.eh-panel .eh-org {
+  margin-top: 0;
+  line-height: 1.25;
+}
+.eh-panel .eh-national .eh-call-now {
+  min-width: 0;
+  gap: 6px;
+}
+
+/* Phones and tablets: compact, like the design reference */
+@media (max-width: 1023px) {
+  .eh-panel .eh-national {
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+  .eh-panel .eh-national-card {
+    padding: var(--space-2) var(--space-3);
+  }
+  .eh-panel .eh-number {
+    font-size: 1.625rem;
+  }
+  .eh-panel .eh-org {
+    font-size: 0.8125rem;
+  }
+  .eh-panel .eh-national .eh-call-now {
+    min-height: var(--tap-min);
+    padding: 0 var(--space-3);
+    font-size: 0.9375rem;
+  }
+}
+
+/* Desktop: same text sizes as the left sidebar, and slimmer red cards */
+@media (min-width: 1024px) {
+  .eh-panel .eh-national {
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+  .eh-panel .eh-national-card {
+    padding: 8px var(--space-3);
+  }
+  .eh-panel .eh-number {
+    font-size: 1.5rem; /* same as the "Find a safe place" title on the left */
+    line-height: 1.15;
+  }
+  .eh-panel .eh-org {
+    font-size: 0.9375rem; /* same as the facility names and intro text on the left */
+  }
+  .eh-panel .eh-national .eh-call-now {
+    min-height: 40px;
+    padding: 0 var(--space-3);
+    font-size: 0.9375rem;
+  }
+  .eh-panel .eh-national .eh-copy {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+.eh-phone-row .eh-call {
+  min-width: 88px;
+}
+
+/* "Copied" / "Couldn't copy" message at the bottom of the panel */
+.eh-toast {
+  position: absolute;
+  left: var(--space-4);
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 2;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: #fff;
+  color: var(--color-primary-dark);
+  font-size: var(--ui-text-label);
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.35);
+}
+.eh-toast[data-kind="error"] {
+  background: #fde8e8;
+  color: #7a1010;
+}
+
+/* ---------- Mobile: smaller Emergency Hotlines panel (desktop is not affected) ---------- */
+@media (max-width: 1023px) {
+  /* Header */
+  .eh-panel .eh-title {
+    font-size: 1.125rem;
+  }
+  .eh-panel .eh-header {
+    min-height: 40px;
+    padding-right: 40px;
+  }
+  .eh-panel .eh-close {
+    width: 40px;
+    height: 40px;
+  }
+  .eh-panel .eh-scroll {
+    padding: var(--space-2) var(--space-3) var(--space-4);
+  }
+  .eh-panel .eh-note {
+    font-size: 0.8125rem;
+    margin-bottom: var(--space-2);
+  }
+
+  /* 911 / 143 cards */
+  .eh-panel .eh-national {
+    gap: 6px;
+    margin-bottom: var(--space-2);
+  }
+  .eh-panel .eh-national-card {
+    padding: 6px 10px;
+  }
+  .eh-panel .eh-number {
+    font-size: 1.375rem;
+  }
+  .eh-panel .eh-org {
+    font-size: 0.75rem;
+  }
+  .eh-panel .eh-national .eh-call-now {
+    min-height: 38px;
+    padding: 0 10px;
+    font-size: 0.875rem;
+  }
+  .eh-panel .eh-national .eh-copy {
+    width: 38px;
+    height: 38px;
+  }
+  .eh-panel .eh-call-now svg,
+  .eh-panel .eh-call svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* "What's your emergency?" + chips */
+  .eh-panel .eh-subtitle {
+    font-size: 0.9375rem;
+    margin: var(--space-2) 0 6px;
+  }
+  .eh-panel .eh-chips {
+    gap: 6px;
+  }
+  .eh-panel .eh-chip {
+    min-height: 34px;
+    padding: 0 12px;
+    font-size: 0.8125rem;
+  }
+
+  /* Hospital / clinic cards */
+  .eh-panel .eh-card {
+    padding: 10px 12px;
+  }
+  .eh-panel .eh-card-name {
+    font-size: 0.9375rem;
+  }
+  .eh-panel .eh-card-desc {
+    font-size: 0.75rem;
+  }
+  .eh-panel .eh-tag {
+    padding: 3px 10px;
+    font-size: 0.75rem;
+  }
+  .eh-panel .eh-phones {
+    gap: 6px;
+    margin-top: var(--space-2);
+  }
+  .eh-panel .eh-phone-row {
+    padding: 6px 10px;
+    gap: var(--space-2);
+  }
+  .eh-panel .eh-phone-text {
+    font-size: 0.9375rem;
+  }
+  .eh-panel .eh-phone-row .eh-call {
+    min-width: 0;
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: 0.875rem;
+  }
+  .eh-panel .eh-phone-row .eh-copy {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* ---------- Mobile: same compact sizes as the Emergency Hotlines panel ----------
+   Report, Add evacuation center, Early Warning Alerts, Ask Silo and the weather strip.
+   Phones and tablets only (under 1024px). Desktop is not affected.
+   The inputs stay at 16px on purpose: smaller text makes iPhones zoom in when a field is tapped. */
+@media (max-width: 1023px) {
+  /* ----- Report ("I need help" / "Report a hazard") ----- */
+  .map-screen .ir-panel .ir-top {
+    padding-left: var(--space-3); /* same side space as the content below, so the title lines up */
+    padding-right: var(--space-3);
+  }
+  .map-screen .ir-panel .ir-header {
+    min-height: 40px;
+    padding-right: 40px;
+  }
+  .map-screen .ir-panel .ir-title {
+    font-size: 1.125rem;
+  }
+  .map-screen .ir-panel .ir-close {
+    width: 40px;
+    height: 40px;
+  }
+  .map-screen .ir-panel .ir-body {
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
+  }
+  .map-screen .ir-panel .ir-danger {
+    margin-bottom: var(--space-2);
+    padding: 6px 6px 6px 10px;
+    font-size: 0.8125rem;
+  }
+  .map-screen .ir-panel .ir-danger-call {
+    min-height: 38px;
+    padding: 0 10px;
+    font-size: 0.875rem;
+  }
+  .map-screen .ir-panel .ir-modes {
+    gap: 6px;
+    margin-bottom: var(--space-3);
+  }
+  .map-screen .ir-panel .ir-mode {
+    gap: var(--space-2);
+    padding: 8px 10px;
+  }
+  .map-screen .ir-panel .ir-mode-icon {
+    width: 38px;
+    height: 38px;
+  }
+  .map-screen .ir-panel .ir-mode-text strong {
+    font-size: 0.9375rem;
+  }
+  .map-screen .ir-panel .ir-mode-text small {
+    font-size: 0.75rem;
+  }
+  .map-screen .ir-panel .ir-label {
+    font-size: 0.875rem;
+  }
+  .map-screen .ir-panel .ir-hint,
+  .map-screen .ir-panel .ir-counter,
+  .map-screen .ir-panel .ir-error,
+  .map-screen .ir-panel .ir-where-msg,
+  .map-screen .ir-panel .ir-gps-off-text {
+    font-size: 0.75rem;
+  }
+  .map-screen .ir-panel .ir-chips {
+    gap: 6px;
+  }
+  .map-screen .ir-panel .ir-chip {
+    min-height: 34px;
+    padding: 0 12px;
+    font-size: 0.8125rem;
+  }
+  .map-screen .ir-panel .ir-where-btn,
+  .map-screen .ir-panel .ir-gps-off .ir-where-btn {
+    min-height: 40px;
+    font-size: 0.8125rem;
+  }
+  .map-screen .ir-panel .ir-stepper-btn {
+    width: 42px;
+    min-height: 42px;
+    font-size: 1.25rem;
+  }
+  .map-screen .ir-panel .ir-footer {
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
+  }
+  .map-screen .ir-panel .ir-submit {
+    min-height: 46px;
+    font-size: 1rem;
+  }
+  .map-screen .ir-panel .ir-footnote,
+  .map-screen .ir-panel .ir-status {
+    font-size: 0.75rem;
+  }
+
+  /* ----- Add evacuation center: step 1 (the two cards) ----- */
+  .map-screen .evac-pick-title {
+    font-size: 1.0625rem;
+  }
+  .map-screen .evac-pick-step {
+    font-size: 0.75rem;
+  }
+  .map-screen .evac-pick-hint,
+  .map-screen .evac-pick-location {
+    font-size: 0.8125rem;
+  }
+  .map-screen .evac-pick-btn {
+    min-height: 44px;
+    font-size: 0.9375rem;
+  }
+
+  /* ----- Add evacuation center: step 2 (the form) ----- */
+  .map-screen .evac-form .evac-form-title {
+    font-size: 1.125rem;
+  }
+  .map-screen .evac-form .evac-form-step,
+  .map-screen .evac-form .evac-form-note,
+  .map-screen .evac-form .evac-counter,
+  .map-screen .evac-form .evac-type-desc,
+  .map-screen .evac-form .evac-location-label {
+    font-size: 0.75rem;
+  }
+  .map-screen .evac-form .evac-section-title,
+  .map-screen .evac-form .evac-tag {
+    font-size: 0.75rem;
+  }
+  .map-screen .evac-form .evac-legend,
+  .map-screen .evac-form .evac-error {
+    font-size: 0.875rem;
+  }
+  .map-screen .evac-form .evac-type-name,
+  .map-screen .evac-form .evac-location-value {
+    font-size: 0.9375rem;
+  }
+  .map-screen .evac-form .evac-secondary-btn,
+  .map-screen .evac-form .evac-form-error {
+    font-size: 0.875rem;
+  }
+  .map-screen .evac-form .evac-save-btn {
+    min-height: 46px;
+    font-size: 1rem;
+  }
+
+  /* ----- Early Warning Alerts (Weather / Warnings / Updates) ----- */
+  .map-screen .sheet .sheet-title {
+    font-size: 1.125rem;
+    padding-bottom: var(--space-3);
+  }
+  .map-screen .sheet .sheet-tabs {
+    gap: 6px;
+    margin: var(--space-2) var(--space-3);
+  }
+  /* min-width: 0 lets the three tabs shrink, so "Updates" is no longer pushed out of the panel */
+  .map-screen .sheet .sheet-tab {
+    min-width: 0;
+    min-height: 38px;
+    gap: 4px;
+    padding: 0 6px;
+    font-size: 0.8125rem;
+  }
+  .map-screen .sheet .sheet-tab svg {
+    width: 18px;
+    height: 18px;
+  }
+  .map-screen .sheet .sheet-body {
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
+  }
+  .map-screen .sheet .weather-tab,
+  .map-screen .sheet .warnings-tab {
+    gap: var(--space-2);
+  }
+  .map-screen .sheet .weather-location {
+    min-height: 60px;
+  }
+  .map-screen .sheet .weather-location-name {
+    font-size: 0.9375rem;
+  }
+  .map-screen .sheet .weather-refresh {
+    min-height: 38px;
+    padding: 0 var(--space-3);
+    font-size: 0.8125rem;
+  }
+  .map-screen .sheet .weather-updated,
+  .map-screen .sheet .alerts-disclaimer,
+  .map-screen .sheet .warning-meta,
+  .map-screen .sheet .warning-badge,
+  .map-screen .sheet .ai-chip {
+    font-size: 0.75rem;
+  }
+  .map-screen .sheet .state-box,
+  .map-screen .sheet .weather-cyclone,
+  .map-screen .sheet .empty-card,
+  .map-screen .sheet .warning-card,
+  .map-screen .sheet .update-card {
+    font-size: 0.8125rem;
+  }
+  .map-screen .sheet .state-box {
+    padding: var(--space-3);
+  }
+  .map-screen .sheet .state-button {
+    min-height: 38px;
+    font-size: 0.8125rem;
+  }
+  .map-screen .sheet .warning-title,
+  .map-screen .sheet .update-org {
+    font-size: 0.9375rem;
+  }
+
+  /* ----- Ask Silo ----- */
+  .map-screen .ask-soon-title {
+    font-size: 1rem;
+  }
+  .map-screen .ask-soon-text {
+    font-size: 0.8125rem;
+  }
+
+  /* ----- Weather and warnings strip ----- */
+  .map-screen .weather-strip {
+    min-height: 48px;
+    padding: 6px var(--space-3);
+    gap: var(--space-2);
+  }
+  .map-screen .weather-strip-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+  .map-screen .weather-strip-title {
+    font-size: 0.875rem;
+  }
+  .map-screen .weather-strip-sub {
+    font-size: 0.75rem;
+  }
+}
+
+/* ---------- Desktop / laptop: same font sizes as the Emergency Hotlines panel ----------
+   Emergency is the reference: title 20px, section headings 16px bold, text 15px, buttons 15-16px bold.
+   Applies to Report, Add evacuation center, Early Warning Alerts, Ask Silo and the weather strip.
+   Phones are handled by the block above. */
+@media (min-width: 1024px) {
+  /* ----- Weather and warnings strip ----- */
+  .map-screen .weather-strip-title {
+    font-size: 1rem;
+  }
+  .map-screen .weather-strip-sub {
+    font-size: 0.875rem;
+  }
+
+  /* ----- Report ----- */
+  .map-screen .ir-panel .ir-title {
+    font-size: 1.25rem;
+  }
+  .map-screen .ir-panel .ir-label {
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  .map-screen .ir-panel .ir-hint {
+    font-size: 0.875rem;
+    font-weight: 400;
+  }
+  .map-screen .ir-panel .ir-mode-text small {
+    font-size: 0.9375rem;
+  }
+  .map-screen .ir-panel .ir-chip {
+    min-height: 44px;
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  .map-screen .ir-panel .ir-where-btn {
+    font-size: 0.9375rem;
+    font-weight: 700;
+  }
+  .map-screen .ir-panel .ir-submit {
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  .map-screen .ir-panel .ir-footnote,
+  .map-screen .ir-panel .ir-status {
+    font-size: 0.875rem;
+  }
+
+  /* ----- Add evacuation center ----- */
+  .map-screen .evac-pick-title,
+  .map-screen .evac-form .evac-form-title {
+    font-size: 1.25rem;
+  }
+  .map-screen .evac-pick-btn {
+    min-height: 44px;
+    font-size: 0.9375rem;
+  }
+  .map-screen .evac-form .evac-form-note,
+  .map-screen .evac-form .evac-type-desc,
+  .map-screen .evac-form .evac-location-label {
+    font-size: 0.9375rem;
+  }
+  .map-screen .evac-form .evac-legend {
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  .map-screen .evac-form .evac-secondary-btn {
+    font-size: 0.9375rem;
+  }
+  .map-screen .evac-form .evac-save-btn {
+    min-height: 48px;
+    font-size: 1rem;
+  }
+
+  /* ----- Early Warning Alerts ----- */
+  .map-screen .sheet .sheet-title {
+    font-size: 1.25rem;
+  }
+  .map-screen .sheet .sheet-tab {
+    font-size: 0.9375rem;
+    font-weight: 700;
+  }
+  .map-screen .sheet .weather-refresh {
+    font-size: 0.9375rem;
+    font-weight: 700;
+  }
+
+  /* ----- Ask Silo ----- */
+  .map-screen .ask-soon-title {
+    font-size: 1rem;
+    font-weight: 700;
+  }
+}

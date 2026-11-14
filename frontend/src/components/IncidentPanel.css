@@ -350,3 +350,32 @@
 .ir-panel .ir-submit:hover {
   background: #346a1a;
 }
+/* ---------- Desktop (1024px+): opens as a panel on the RIGHT side of the screen ----------
+   Sits under the top bar, never covers the left sidebar, and the map shrinks to the space that is left.
+   Phones keep the bottom sheet above. The "map-screen" part makes this win over the 600px rule. */
+@media (min-width: 1024px) {
+  .map-screen .ir-panel {
+    top: var(--topbar-h);
+    right: 0;
+    bottom: 0;
+    left: auto;
+    width: var(--drawer-w);
+    max-width: none;
+    height: auto;
+    max-height: none;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: -4px 0 14px rgb(0 0 0 / 0.3);
+    transform: translateX(100%);
+    z-index: 1400;
+  }
+  .map-screen .ir-panel.ir-panel-open {
+    transform: translateX(0);
+  }
+  .map-screen .ir-handle-btn {
+    display: none; /* the drag handle is a phone thing; desktop has the X button */
+  }
+  .map-screen .ir-top {
+    padding-top: var(--space-3);
+  }
+}

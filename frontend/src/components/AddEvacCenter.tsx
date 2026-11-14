@@ -3,6 +3,7 @@ import maplibregl from "maplibre-gl";
 import type { Facility } from "../types";
 import { EMPTY_DRAFT, type CenterDraft } from "./evacCenterDraft";
 import { EvacCenterForm } from "./EvacCenterForm";
+import { Icon } from "./icons";
 import "./EvacManager.css";
 import "./AddEvacCenter.css";
 
@@ -175,7 +176,12 @@ export function AddEvacCenter({ mapRef, onActiveChange, onAdded, startRequest }:
     <>
 
       {picking && (
-        <>
+        // Phones: this wrapper is invisible ("display: contents"), so the layout is unchanged.
+        // Desktop: it becomes the right-hand panel that holds both cards.
+        <div className="evac-pick-drawer">
+          <button type="button" className="evac-pick-x" aria-label="Cancel adding an evacuation center" onClick={requestCancel}>
+            <Icon name="close" />
+          </button>
           <div className="evac-pick-top" role="status" aria-live="polite">
             <p className="evac-pick-step">Step 1 of 2</p>
             <h2 className="evac-pick-title">{pickTitle}</h2>
@@ -212,7 +218,7 @@ export function AddEvacCenter({ mapRef, onActiveChange, onAdded, startRequest }:
               </button>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {phase === "form" && point && (

@@ -74,3 +74,10 @@ export interface RemovedCenter {
   removed_at: string; // ISO time, UTC
   message: string | null;
 }
+
+// One answer from the SILONG chatbot (Silo). `topic` is the checked-guide entry the answer came from,
+// or null when nothing in the guide matched (then `answer` is the fixed "I don't have that info" line).
+export interface SiloAnswer {
+  answer: string;
+  topic: string | null;
+}

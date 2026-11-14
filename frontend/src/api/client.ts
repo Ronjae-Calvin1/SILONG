@@ -1,7 +1,7 @@
 // Single place that knows how to reach the backend.
 // Map slice + status updates + adding/removing/restoring evacuation centers for now — more endpoints get added back as features return.
 
-import type { Facility, FacilityStatus, NewEvacuationCenter, RemovedCenter, StatusPayload } from "../types";
+import type { Facility, FacilityStatus, NewEvacuationCenter, RemovedCenter, SiloAnswer, StatusPayload } from "../types";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api";
 
@@ -66,4 +66,13 @@ export const api = {
   // Brings a removed center back. Returns it shaped like an item of getFacilities().
   restoreEvacuationCenter: (facilityId: number) =>
     request<Facility>(`/evacuation-centers/${facilityId}/restore`, { method: "POST" }),
+  // Silo, the chatbot: one question in, one short answer out. Nothing is kept between questions.
+  // ASSUMPTION: the chatbot route lives in backend/app/routes.py, which is not in this copy of the project.
+  // "/chat" is the assumed route and { question } the assumed body. Change only this line if the real route differs.
+  askSilo: (question: string) =>
+    request<SiloAnswer>("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    }),
 };

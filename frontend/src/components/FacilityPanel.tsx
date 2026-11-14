@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { api, ApiError } from "../api/client";
 import type { Facility } from "../types";
 import { CapacityIndicator } from "./CapacityIndicator";
 import { Icon } from "./icons";
@@ -38,16 +37,15 @@ interface Props {
   onClose: () => void;
   onUpdateStatus: () => void;
   onSetCapacity: () => void; // opens the update form with the capacity field ready (centers without a capacity)
-  onRemoved: (facilityId: number) => void; // the server hid the center; the page removes its pin
+  onHide: (facility: Facility) => void; // "Hide on this phone": the page hides the pin on this device only
 }
 
 // Details for the tapped pin: info, current status, capacity (evacuation centers) and the
-// "Update status" button. Evacuation centers also get "Remove from map" (with a confirmation step).
-export function FacilityPanel({ facility: f, onClose, onUpdateStatus, onSetCapacity, onRemoved }: Props) {
+// "Update status" button. Evacuation centers also get "Hide on this phone" (with a confirmation step).
+// Hiding only changes this phone: nothing is removed from the server and other people still see the center.
+export function FacilityPanel({ facility: f, onClose, onUpdateStatus, onSetCapacity, onHide }: Props) {
   const now = useNow();
   const [confirming, setConfirming] = useState(false);
-  const [removing, setRemoving] = useState(false);
-  const [removeError, setRemoveError] = useState<string | null>(null);
   const confirmRef = useRef<HTMLDivElement>(null);
 
   // The confirmation appears at the bottom of a scrolling panel: scroll the panel
@@ -56,19 +54,6 @@ export function FacilityPanel({ facility: f, onClose, onUpdateStatus, onSetCapac
     const panel = confirmRef.current?.parentElement;
     if (confirming && panel) panel.scrollTop = panel.scrollHeight;
   }, [confirming]);
-
-  async function remove() {
-    if (removing) return;
-    setRemoving(true);
-    setRemoveError(null);
-    try {
-      await api.removeEvacuationCenter(f.id);
-      onRemoved(f.id); // parent hides the pin and closes this panel
-    } catch (err) {
-      setRemoveError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
-      setRemoving(false);
-    }
-  }
 
   const s = f.status;
   const key = statusKey(f);
@@ -164,33 +149,23 @@ export function FacilityPanel({ facility: f, onClose, onUpdateStatus, onSetCapac
 
       {f.type === "evacuation_center" &&
         (confirming ? (
-          <div className="evac-confirm" role="group" aria-label="Confirm removal" ref={confirmRef}>
-            <p className="evac-confirm-text">Remove this evacuation center from the map?</p>
-            {removeError && (
-              <p className="status-form-error" role="alert">
-                {removeError}
-              </p>
-            )}
+          <div className="evac-confirm" role="group" aria-label="Confirm hiding" ref={confirmRef}>
+            <p className="evac-confirm-text">Hide this center on this phone?</p>
+            <p className="fp-hide-help">
+              Other people still see it. You can show it again from the menu, under Hidden on this phone.
+            </p>
             <div className="evac-confirm-actions">
-              <button
-                type="button"
-                className="evac-confirm-keep"
-                disabled={removing}
-                onClick={() => {
-                  setConfirming(false);
-                  setRemoveError(null);
-                }}
-              >
-                Keep it
+              <button type="button" className="evac-confirm-keep" onClick={() => setConfirming(false)}>
+                Cancel
               </button>
-              <button type="button" className="evac-confirm-yes" disabled={removing} onClick={remove}>
-                {removing ? "Removing…" : removeError ? "Try again" : "Yes, remove"}
+              <button type="button" className="evac-confirm-yes" onClick={() => onHide(f)}>
+                Yes, hide
               </button>
             </div>
           </div>
         ) : (
           <button type="button" className="fp-remove-btn" onClick={() => setConfirming(true)}>
-            Remove from map
+            Hide on this phone
           </button>
         ))}
       </div>

@@ -1,53 +1,69 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Icon } from "./icons";
 import { LocationPicker, type Point } from "./LocationPicker";
+import { REPORTS_KEY } from "./myActivity"; // the same list the menu's "My reports" reads
 import "./IncidentPanel.css";
+import "./ReportContent.css";
 
 type Props = {
   open: boolean;
   onClose: () => void;
 };
 
+// "help" = the person needs help (responders only). "hazard" = a danger on the road, shown nearby after it is checked.
+type Mode = "help" | "hazard";
+
 type Form = {
-  name: string;
-  contact: string;
+  mode: Mode;
   kind: string;
   details: string;
-  when: string;
-  location: string;
+  contact: string; // only asked in "I need help" mode, so responders can call back (required there)
+  people: number; // only "I need help": how many people need help
+  canMove: "" | "yes" | "no"; // only "I need help": can the person move?
 };
 
-// Messages shown under the required fields.
-type Errors = { kind?: string; details?: string; location?: string };
+// Messages shown under the fields.
+type Errors = { kind?: string; contact?: string; canMove?: string; location?: string };
 
-type Preview = { id: string; name: string; url: string };
+type WhereMode = "gps" | "map" | null;
+type GpsState = { kind: "idle" | "busy" | "ok" | "error"; text: string };
 
 const DRAFT_KEY = "typhoon-prep:incident-draft"; // unfinished form
-const REPORTS_KEY = "typhoon-prep:incident-reports"; // list of saved reports
 
-const KINDS = ["Medical", "Missing person", "Flood", "Accident", "Violence", "Road blocked", "Other"];
+const KINDS: Record<Mode, string[]> = {
+  help: ["Medical", "Trapped", "Injured", "Need rescue", "Other"],
+  hazard: ["Flooded road", "Fallen tree or pole", "Blocked road", "Landslide", "Other"],
+};
 
-const EMPTY: Form = { name: "", contact: "", kind: "", details: "", when: "", location: "" };
+const MAX_DETAILS = 200;
+const MAX_KIND = 60; // longest "something else" a person can type
 
-// Gives the current time in the format <input type="datetime-local"> expects.
-function nowLocal(): string {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); // convert to local time
-  return d.toISOString().slice(0, 16);
+const MAX_PEOPLE = 99;
+
+// A phone number needs at least 7 digits and may only use digits, spaces, + - ( ).
+function isPhoneOk(value: string): boolean {
+  const v = value.trim();
+  return /^[\d\s+\-()]+$/.test(v) && v.replace(/\D/g, "").length >= 7;
 }
+
+const EMPTY: Form = { mode: "hazard", kind: "", details: "", contact: "", people: 1, canMove: "" };
 
 function loadDraft(): Form {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
     if (!raw) return EMPTY;
     const data = JSON.parse(raw) as Partial<Form>;
+    const mode: Mode = data.mode === "help" ? "help" : "hazard";
+    // A saved kind is either one of the chips or something the person typed themselves.
+    const kind = typeof data.kind === "string" ? data.kind.slice(0, MAX_KIND) : "";
     return {
-      name: typeof data.name === "string" ? data.name : "",
+      mode,
+      kind,
+      details: typeof data.details === "string" ? data.details.slice(0, MAX_DETAILS) : "",
       contact: typeof data.contact === "string" ? data.contact : "",
-      kind: typeof data.kind === "string" ? data.kind : "",
-      details: typeof data.details === "string" ? data.details : "",
-      when: typeof data.when === "string" ? data.when : "",
-      location: typeof data.location === "string" ? data.location : "",
+      people:
+        typeof data.people === "number" && data.people >= 1 && data.people <= MAX_PEOPLE ? Math.round(data.people) : 1,
+      canMove: data.canMove === "yes" || data.canMove === "no" ? data.canMove : "",
     };
   } catch {
     return EMPTY;
@@ -56,8 +72,9 @@ function loadDraft(): Form {
 
 function saveDraft(form: Form) {
   try {
-    // A date on its own is not a draft, so ignore "when" when checking if the form is empty.
-    const isEmpty = Object.entries(form).every(([key, v]) => key === "when" || v === "");
+    // Choosing a mode on its own is not a draft, so ignore "mode" when checking if the form is empty.
+    const isEmpty =
+      form.kind === "" && form.details === "" && form.contact === "" && form.canMove === "" && form.people === 1;
     if (isEmpty) localStorage.removeItem(DRAFT_KEY);
     else localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
   } catch {
@@ -65,16 +82,21 @@ function saveDraft(form: Form) {
   }
 }
 
-function saveReport(form: Form, point: Point | null, imageNames: string[]): boolean {
+function saveReport(form: Form, point: Point): boolean {
   try {
     const raw = localStorage.getItem(REPORTS_KEY);
     const list: unknown = raw ? JSON.parse(raw) : [];
     const reports = Array.isArray(list) ? list : [];
+    const help = form.mode === "help";
     reports.push({
-      ...form,
-      latitude: point ? point.lat : null,
-      longitude: point ? point.lng : null,
-      imageNames,
+      mode: form.mode,
+      kind: form.kind.trim(),
+      details: form.details,
+      // Only "I need help" reports keep a phone number, a head count and "can they move".
+      contact: help ? form.contact.trim() : "",
+      ...(help ? { people: form.people, canMove: form.canMove } : {}),
+      latitude: point.lat,
+      longitude: point.lng,
       savedAt: new Date().toISOString(),
     });
     localStorage.setItem(REPORTS_KEY, JSON.stringify(reports));
@@ -86,16 +108,14 @@ function saveReport(form: Form, point: Point | null, imageNames: string[]): bool
 
 export function IncidentPanel({ open, onClose }: Props) {
   const [form, setForm] = useState<Form>(loadDraft);
-  const [point, setPoint] = useState<Point | null>(null); // the pin on the mini map
-  const [mapReady, setMapReady] = useState(false); // becomes true the first time the panel opens
-  const [previews, setPreviews] = useState<Preview[]>([]);
+  const [point, setPoint] = useState<Point | null>(null); // where it happened (GPS or a pin on the mini map)
+  const [whereMode, setWhereMode] = useState<WhereMode>(null);
+  const [gps, setGps] = useState<GpsState>({ kind: "idle", text: "" });
   const [errors, setErrors] = useState<Errors>({});
   const [status, setStatus] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   // Size of the area not covered by the phone keyboard (null = use full screen).
   const [viewport, setViewport] = useState<{ h: number; top: number } | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const previewsRef = useRef<Preview[]>([]);
-  previewsRef.current = previews;
 
   useEffect(() => {
     saveDraft(form);
@@ -106,16 +126,14 @@ export function IncidentPanel({ open, onClose }: Props) {
       setStatus(null);
     } else {
       closeRef.current?.focus({ preventScroll: true });
-      setMapReady(true); // the mini map is only created once someone opens the panel
-      // "When did it happen?" starts as now. The person can still change it.
-      setForm((f) => (f.when ? f : { ...f, when: nowLocal() }));
     }
   }, [open]);
 
-  // Follow the visible screen so the phone keyboard never hides the Submit button.
+  // Follow the visible screen so the phone keyboard never hides the Send button.
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!open || !vv) return;
+    // On desktop the panel is a right-hand drawer sized by CSS, so skip this.
+    if (!open || !vv || window.matchMedia("(min-width: 1024px)").matches) return;
     function update() {
       if (vv) setViewport({ h: vv.height, top: vv.offsetTop });
     }
@@ -129,86 +147,121 @@ export function IncidentPanel({ open, onClose }: Props) {
     };
   }, [open]);
 
-  // Free the photo previews when the panel is removed.
-  useEffect(() => {
-    return () => {
-      previewsRef.current.forEach((p) => URL.revokeObjectURL(p.url));
-    };
-  }, []);
+  function chooseMode(mode: Mode) {
+    if (mode === form.mode) return;
+    // The list of choices is different for each mode, so the old choice is cleared.
+    setForm((f) => ({ ...f, mode, kind: "" }));
+    setErrors({});
+    setStatus(null);
+  }
 
-  function change(field: keyof Form, value: string) {
+  function chooseKind(kind: string) {
+    setForm((f) => ({ ...f, kind }));
+    setErrors((e) => ({ ...e, kind: undefined }));
+    setStatus(null);
+  }
+
+  // The text box under the chips: what the person types becomes the "kind" and un-selects any chip.
+  function typeKind(value: string) {
+    setForm((f) => ({ ...f, kind: value.slice(0, MAX_KIND) }));
+    setErrors((e) => ({ ...e, kind: undefined }));
+    setStatus(null);
+  }
+
+  function change(field: "details" | "contact", value: string) {
     setForm((f) => ({ ...f, [field]: value }));
-    setErrors({}); // the person is fixing it, so remove old error messages
+    if (field === "contact") setErrors((e) => ({ ...e, contact: undefined }));
+    setStatus(null);
+  }
+
+  function setPeople(n: number) {
+    setForm((f) => ({ ...f, people: Math.min(MAX_PEOPLE, Math.max(1, Math.round(n) || 1)) }));
+    setStatus(null);
+  }
+
+  function chooseCanMove(v: "yes" | "no") {
+    setForm((f) => ({ ...f, canMove: v }));
+    setErrors((e) => ({ ...e, canMove: undefined }));
     setStatus(null);
   }
 
   function onPinChange(p: Point | null) {
     setPoint(p);
-    setErrors({});
+    setErrors((e) => ({ ...e, location: undefined }));
     setStatus(null);
   }
 
-  function onPickImages(e: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith("image/"));
-    const added = files.map((f, i) => ({
-      id: `${Date.now()}-${i}-${f.name}`,
-      name: f.name,
-      url: URL.createObjectURL(f), // temporary link used only to show the preview
-    }));
-    setPreviews((p) => [...p, ...added]);
+  function findMyLocation() {
+    setWhereMode("gps");
     setStatus(null);
-    e.target.value = ""; // lets the person pick the same photo again
+    if (!("geolocation" in navigator)) {
+      setGps({ kind: "error", text: "This browser can't share your location. Use \"Pick on map\" instead." });
+      return;
+    }
+    setGps({ kind: "busy", text: "Finding your location…" });
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setPoint({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setGps({ kind: "ok", text: `Location found · accurate to about ${Math.round(pos.coords.accuracy)} m` });
+        setErrors((e) => ({ ...e, location: undefined }));
+      },
+      (err) => {
+        let text = "Could not get your location. Use \"Pick on map\" instead.";
+        if (err.code === err.PERMISSION_DENIED) {
+          text = "Location is turned off for this site. Allow it in your browser settings, or use \"Pick on map\".";
+        } else if (err.code === err.TIMEOUT) {
+          text = "Finding your location took too long. Try again, or use \"Pick on map\".";
+        }
+        setGps({ kind: "error", text });
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
   }
 
-  function removeImage(id: string) {
-    setPreviews((list) => {
-      const gone = list.find((p) => p.id === id);
-      if (gone) URL.revokeObjectURL(gone.url);
-      return list.filter((p) => p.id !== id);
-    });
+  function pickOnMap() {
+    setWhereMode("map");
+    setGps({ kind: "idle", text: "" });
+    setStatus(null);
   }
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     const next: Errors = {};
-    if (!form.kind) next.kind = "Please choose the type of incident.";
-    if (!form.details.trim()) next.details = "Please describe what happened.";
-    // The location can be a pin (map or GPS) OR a typed description.
-    if (!point && !form.location.trim()) {
-      next.location = "Please drop a pin on the map, use your GPS, or describe the place.";
-    }
-    if (next.kind || next.details || next.location) {
+    const help = form.mode === "help";
+    if (!form.kind.trim()) next.kind = help ? "Please choose what happened." : "Please choose what it is.";
+    if (help && !form.canMove) next.canMove = "Please choose Yes or No.";
+    if (help && !form.contact.trim()) next.contact = "Please enter a phone number so responders can reach you.";
+    else if (help && !isPhoneOk(form.contact)) next.contact = "Please enter a valid phone number.";
+    if (!point) next.location = "Please use your GPS location or pick the spot on the map.";
+    if (next.kind || next.canMove || next.contact || next.location || !point) {
       setErrors(next);
       setStatus({ kind: "error", text: "Please fix the highlighted fields." });
       return;
     }
     setErrors({});
 
-    const ok = saveReport(
-      form,
-      point,
-      previews.map((p) => p.name)
-    );
-    if (!ok) {
+    if (!saveReport(form, point)) {
       setStatus({
         kind: "error",
         text: "Could not save on this phone (storage may be blocked or full).",
       });
       return;
     }
-    previews.forEach((p) => URL.revokeObjectURL(p.url));
-    setPreviews([]);
     setPoint(null);
-    setForm(EMPTY);
+    setWhereMode(null);
+    setGps({ kind: "idle", text: "" });
+    setForm((f) => ({ ...EMPTY, mode: f.mode }));
     // Only shown after the save really worked.
-    setStatus({ kind: "ok", text: "Report saved on this phone" });
+    setStatus({ kind: "ok", text: help ? "Request saved on this phone" : "Report saved on this phone" });
   }
 
   // Same 78% height as the other panels, but never taller than the space above the phone keyboard.
   const panelH = viewport ? Math.min(viewport.h, Math.round(window.innerHeight * 0.78)) : 0;
   const classes = ["ir-panel"];
   if (open) classes.push("ir-panel-open");
+
+  const isHelp = form.mode === "help";
 
   return (
     <section
@@ -242,164 +295,244 @@ export function IncidentPanel({ open, onClose }: Props) {
 
       <form className="ir-form" onSubmit={onSubmit} noValidate>
         <div className="ir-body">
-          <div className="ir-note ir-note-danger" role="note">
-            <strong>If someone is in danger, call 911 first.</strong>
+          {/* 911 shortcut */}
+          <div className="ir-danger" role="note">
+            <strong>In danger? Call 911 first.</strong>
+            <a className="ir-danger-call" href="tel:911" aria-label="Call 911, the national emergency number">
+              <Icon name="phone" size={18} />
+              <span>Call 911</span>
+            </a>
           </div>
 
-          <div className="ir-field">
-            <label className="ir-label" htmlFor="incident-kind">
-              What is the incident? <span className="ir-hint">required</span>
-            </label>
-            <select
-              id="incident-kind"
-              className="ir-input ir-select"
-              value={form.kind}
-              aria-invalid={errors.kind ? true : undefined}
-              aria-describedby={errors.kind ? "incident-kind-error" : undefined}
-              onChange={(e) => change("kind", e.target.value)}
+          {/* Two choices: I need help / Report a hazard */}
+          <div className="ir-modes" role="radiogroup" aria-label="Type of report">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={isHelp}
+              className="ir-mode ir-mode-help"
+              onClick={() => chooseMode("help")}
             >
-              <option value="">Type of incident</option>
-              {KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {k}
-                </option>
-              ))}
-            </select>
-            {errors.kind && (
-              <p className="ir-error" id="incident-kind-error">
-                {errors.kind}
-              </p>
-            )}
-          </div>
+              <span className="ir-mode-icon" aria-hidden="true">
+                <Icon name="warning" size={22} />
+              </span>
+              <span className="ir-mode-text">
+                <strong>I need help</strong>
+                <small>Goes to responders only. It is never shown on the map.</small>
+              </span>
+              {isHelp && <CheckMark />}
+            </button>
 
-          <div className="ir-field">
-            <label className="ir-label" htmlFor="incident-details">
-              What happened? <span className="ir-hint">required</span>
-            </label>
-            <textarea
-              id="incident-details"
-              className="ir-input ir-textarea"
-              placeholder="Describe what you saw"
-              value={form.details}
-              aria-invalid={errors.details ? true : undefined}
-              aria-describedby={errors.details ? "incident-details-error" : undefined}
-              onChange={(e) => change("details", e.target.value)}
-            />
-            {errors.details && (
-              <p className="ir-error" id="incident-details-error">
-                {errors.details}
-              </p>
-            )}
-          </div>
-
-          <div className="ir-field">
-            <label className="ir-label" htmlFor="incident-when">
-              When did the incident happen? <span className="ir-hint">optional</span>
-            </label>
-            <input
-              id="incident-when"
-              className="ir-input"
-              type="datetime-local"
-              value={form.when}
-              onChange={(e) => change("when", e.target.value)}
-            />
-            <button type="button" className="ir-link-btn" onClick={() => change("when", nowLocal())}>
-              Use current time
+            <button
+              type="button"
+              role="radio"
+              aria-checked={!isHelp}
+              className="ir-mode ir-mode-hazard"
+              onClick={() => chooseMode("hazard")}
+            >
+              <span className="ir-mode-icon" aria-hidden="true">
+                <Icon name="megaphone" size={22} />
+              </span>
+              <span className="ir-mode-text">
+                <strong>Report a hazard</strong>
+                <small>Nearby people may see it after it is checked.</small>
+              </span>
+              {!isHelp && <CheckMark />}
             </button>
           </div>
 
+          {/* What happened? / What is it? */}
           <div className="ir-field">
-            {mapReady && <LocationPicker value={point} onChange={onPinChange} />}
+            <p className="ir-label" id="incident-kind-label">
+              {isHelp ? "What happened?" : "What is it?"}
+            </p>
+            <div className="ir-chips" role="group" aria-labelledby="incident-kind-label">
+              {KINDS[form.mode].map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  className="ir-chip"
+                  aria-pressed={form.kind === k}
+                  onClick={() => chooseKind(k)}
+                >
+                  {k}
+                </button>
+              ))}
+            </div>
+            {/* Not in the list? They can type it here. Typing un-selects the chips, picking a chip clears this box. */}
+            <input
+              className="ir-input ir-input-light ir-kind-input"
+              type="text"
+              maxLength={MAX_KIND}
+              aria-label={isHelp ? "Something else that happened" : "Something else you want to report"}
+              aria-invalid={errors.kind ? true : undefined}
+              placeholder={isHelp ? "Not in the list? Type what happened" : "Not in the list? Type what you want to report"}
+              value={KINDS[form.mode].includes(form.kind) ? "" : form.kind}
+              onChange={(e) => typeKind(e.target.value)}
+            />
+            {errors.kind && <p className="ir-error">{errors.kind}</p>}
+          </div>
 
-            <label className="ir-label ir-label-sub" htmlFor="incident-location">
-              Describe the place <span className="ir-hint">landmark, street or barangay</span>
+          {/* Only for "I need help": how many people, can they move, phone number */}
+          {isHelp && (
+            <>
+              <div className="ir-field">
+                <p className="ir-label" id="incident-people-label">
+                  How many people need help?
+                </p>
+                <div className="ir-stepper" role="group" aria-labelledby="incident-people-label">
+                  <button
+                    type="button"
+                    className="ir-stepper-btn"
+                    aria-label="One less person"
+                    disabled={form.people <= 1}
+                    onClick={() => setPeople(form.people - 1)}
+                  >
+                    <span aria-hidden="true">−</span>
+                  </button>
+                  <input
+                    className="ir-input ir-input-light ir-stepper-input"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={MAX_PEOPLE}
+                    aria-label="Number of people"
+                    value={form.people}
+                    onChange={(e) => setPeople(Number(e.target.value))}
+                  />
+                  <button
+                    type="button"
+                    className="ir-stepper-btn"
+                    aria-label="One more person"
+                    disabled={form.people >= MAX_PEOPLE}
+                    onClick={() => setPeople(form.people + 1)}
+                  >
+                    <span aria-hidden="true">+</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="ir-field">
+                <p className="ir-label" id="incident-move-label">
+                  Can the person move?
+                </p>
+                <div className="ir-yesno" role="group" aria-labelledby="incident-move-label">
+                  <button
+                    type="button"
+                    className="ir-chip"
+                    aria-pressed={form.canMove === "yes"}
+                    onClick={() => chooseCanMove("yes")}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    className="ir-chip"
+                    aria-pressed={form.canMove === "no"}
+                    onClick={() => chooseCanMove("no")}
+                  >
+                    No
+                  </button>
+                </div>
+                {errors.canMove && <p className="ir-error">{errors.canMove}</p>}
+              </div>
+
+              <div className="ir-field">
+                <label className="ir-label" htmlFor="incident-contact">
+                  Phone number <span className="ir-hint">(required, only responders see it)</span>
+                </label>
+                <input
+                  id="incident-contact"
+                  className="ir-input ir-input-light"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="e.g. 0917 123 4567"
+                  aria-required="true"
+                  aria-invalid={errors.contact ? true : undefined}
+                  value={form.contact}
+                  onChange={(e) => change("contact", e.target.value)}
+                />
+                {errors.contact && <p className="ir-error">{errors.contact}</p>}
+              </div>
+            </>
+          )}
+
+          {/* Where? */}
+          <div className="ir-field ir-where">
+            <p className="ir-label" id="incident-where-label">
+              Where?
+            </p>
+            <div className="ir-where-buttons" role="group" aria-labelledby="incident-where-label">
+              <button
+                type="button"
+                className="ir-where-btn"
+                aria-pressed={whereMode === "gps"}
+                onClick={findMyLocation}
+                disabled={gps.kind === "busy"}
+              >
+                {whereMode === "gps" && gps.kind === "ok" && <CheckMark small />}
+                <span>{gps.kind === "busy" ? "Locating…" : "My GPS location"}</span>
+              </button>
+              <button type="button" className="ir-where-btn" aria-pressed={whereMode === "map"} onClick={pickOnMap}>
+                <Icon name="pin" size={18} />
+                <span>Pick on map</span>
+              </button>
+            </div>
+
+            {/* "I need help" + GPS failed: the "Location is off" note from the redesign (screen 41) */}
+            {isHelp && whereMode === "gps" && gps.kind === "error" ? (
+              <div className="ir-gps-off" role="alert">
+                <p className="ir-gps-off-title">Location is off</p>
+                <p className="ir-gps-off-text">We can&rsquo;t see where you are. You can still pick a spot on the map.</p>
+                <div className="ir-gps-off-actions">
+                  <button type="button" className="ir-where-btn" onClick={pickOnMap}>
+                    <Icon name="pin" size={18} />
+                    <span>Pick on map</span>
+                  </button>
+                  <button type="button" className="ir-where-btn" onClick={findMyLocation}>
+                    <span>Try again</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              whereMode === "gps" &&
+              gps.text && (
+                <p
+                  className={`ir-where-msg${gps.kind === "error" ? " ir-where-msg-error" : ""}`}
+                  role={gps.kind === "error" ? "alert" : "status"}
+                >
+                  {gps.text}
+                </p>
+              )
+            )}
+
+            {/* The mini map only exists while "Pick on map" is chosen. The pin is kept if you switch. */}
+            {whereMode === "map" && (
+              <div className="ir-where-map">
+                <LocationPicker value={point} onChange={onPinChange} />
+              </div>
+            )}
+            {errors.location && <p className="ir-error">{errors.location}</p>}
+          </div>
+
+          {/* Short note / Details */}
+          <div className="ir-field">
+            <label className="ir-label" htmlFor="incident-details">
+              {isHelp ? "Short note" : "Details"} <span className="ir-hint">(optional)</span>
             </label>
             <textarea
-              id="incident-location"
-              className="ir-input ir-textarea ir-textarea-short"
-              placeholder="e.g. In front of the barangay hall"
-              value={form.location}
-              aria-invalid={errors.location ? true : undefined}
-              aria-describedby={errors.location ? "incident-location-error" : undefined}
-              onChange={(e) => change("location", e.target.value)}
+              id="incident-details"
+              className="ir-input ir-input-light ir-textarea"
+              placeholder={isHelp ? "Grandmother cannot walk, water at the door." : "Water is knee-deep near the school."}
+              maxLength={MAX_DETAILS}
+              value={form.details}
+              onChange={(e) => change("details", e.target.value)}
             />
-            {errors.location && (
-              <p className="ir-error" id="incident-location-error">
-                {errors.location}
-              </p>
-            )}
-          </div>
-
-          <div className="ir-field">
-            <p className="ir-label">
-              Photos <span className="ir-hint">optional</span>
+            <p className="ir-counter" aria-live="off">
+              {form.details.length} / {MAX_DETAILS}
             </p>
-            <input
-              id="incident-images"
-              className="ir-file-input"
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={onPickImages}
-            />
-            <label className="ir-upload" htmlFor="incident-images">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 16V4M7 9l5-5 5 5M4 20h16" />
-              </svg>
-              <span>Upload Photo</span>
-              <small>Preview only. Nothing is uploaded.</small>
-            </label>
-            {previews.length > 0 && (
-              <ul className="ir-previews">
-                {previews.map((p) => (
-                  <li className="ir-preview" key={p.id}>
-                    <img src={p.url} alt={`Preview of ${p.name}`} />
-                    <button
-                      type="button"
-                      className="ir-preview-remove"
-                      aria-label={`Remove ${p.name}`}
-                      onClick={() => removeImage(p.id)}
-                    >
-                      <Icon name="close" size={18} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
-
-          <div className="ir-field">
-            <label className="ir-label" htmlFor="incident-name">
-              Your name <span className="ir-hint">optional</span>
-            </label>
-            <input
-              id="incident-name"
-              className="ir-input"
-              type="text"
-              autoComplete="name"
-              placeholder="Reporter's name"
-              value={form.name}
-              onChange={(e) => change("name", e.target.value)}
-            />
-          </div>
-
-          <div className="ir-field">
-            <label className="ir-label" htmlFor="incident-contact">
-              Contact number <span className="ir-hint">optional</span>
-            </label>
-            <input
-              id="incident-contact"
-              className="ir-input"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              placeholder="e.g. 0917 123 4567"
-              value={form.contact}
-              onChange={(e) => change("contact", e.target.value)}
-            />
-          </div>
-
-          <p className="ir-note">Your report is saved on this phone for now.</p>
         </div>
 
         {/* Stays at the bottom, outside the scrolling part */}
@@ -412,11 +545,36 @@ export function IncidentPanel({ open, onClose }: Props) {
               {status.text}
             </p>
           )}
-          <button type="submit" className="ir-submit">
-            Submit report
+          <button type="submit" className={`ir-submit${isHelp ? " ir-submit-help" : ""}`}>
+            {isHelp ? "Send for help" : "Send report"}
           </button>
+          <p className="ir-footnote">
+            {isHelp
+              ? "This report goes to responders only. It does not replace calling 911."
+              : "Saved on this phone for now. This does not replace calling 911."}
+          </p>
         </div>
       </form>
     </section>
+  );
+}
+
+function CheckMark({ small = false }: { small?: boolean }) {
+  const size = small ? 16 : 22;
+  return (
+    <svg
+      className="ir-check"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
   );
 }

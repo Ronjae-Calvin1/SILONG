@@ -1,3 +1,4 @@
+import { Icon } from "./icons";
 import { FILTERS, type FilterId } from "./facilityFilter";
 
 interface Props {
@@ -17,7 +18,7 @@ export function FilterChips({ value, onChange }: Props) {
           aria-pressed={value === f.id}
           onClick={() => onChange(f.id)}
         >
-          {f.id !== "all" && <span className="filter-dot" aria-hidden="true" />}
+          <Icon name={f.icon} size={20} />
           {f.label}
         </button>
       ))}

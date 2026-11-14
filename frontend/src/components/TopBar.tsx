@@ -3,24 +3,27 @@ import { Icon } from "./icons";
 
 interface Props {
   menuOpen?: boolean;
-  onMenuClick?: () => void; // the menu button opens the "Removed centers" list for now
-  onBellClick?: () => void; // optional on purpose: notifications are not built yet
+  onMenuClick?: () => void; // opens or closes the menu (the HamburgerMenu window)
 }
 
-export function TopBar({ menuOpen = false, onMenuClick, onBellClick }: Props) {
+// The top bar only has the menu button and the logo. Every link lives in the menu.
+export function TopBar({ menuOpen = false, onMenuClick }: Props) {
   return (
     <header className="topbar">
       <div className="topbar-left">
-        <button className="topbar-btn" aria-label="Menu" aria-expanded={menuOpen} onClick={onMenuClick}>
+        <button
+          type="button"
+          className="topbar-btn"
+          aria-label="Menu"
+          aria-haspopup="dialog"
+          aria-expanded={menuOpen}
+          onClick={onMenuClick}
+        >
           <Icon name="menu" size={24} />
         </button>
 
         <img className="topbar-logo" src={logoWhite} alt="SILONG" width={800} height={228} />
       </div>
-
-      <button className="topbar-btn" aria-label="Notifications" onClick={onBellClick}>
-        <Icon name="bell" size={24} />
-      </button>
     </header>
   );
 }

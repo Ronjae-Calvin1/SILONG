@@ -1,0 +1,52 @@
+/* Links in the top bar (Map, About SILONG, My Suggested Places and Reports, FAQs).
+   Desktop only (1024px and wider), like the revised layout. Phones use the menu button. */
+
+.topbar-nav {
+  display: none;
+}
+
+/* "Admin sign in" on the right of the bar: desktop only, same look as the other links */
+.topbar-admin {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .topbar-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-left: var(--space-7); /* space between the logo and the links */
+  }
+
+  .topbar-admin {
+    display: block;
+  }
+
+  .topbar-link {
+    min-height: 40px;
+    padding: 0 var(--space-4);
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-on-primary);
+    font-family: var(--font-heading);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .topbar-link:hover {
+    background: var(--color-surface-soft);
+  }
+
+  /* The page you are on: a lighter blue pill, as in the revised layout */
+  .topbar-link[aria-current="page"] {
+    background: rgb(255 255 255 / 0.22);
+    font-weight: 700;
+  }
+
+  .topbar-link:focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: -3px;
+  }
+}

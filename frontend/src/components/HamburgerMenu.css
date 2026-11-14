@@ -1,0 +1,629 @@
+/* Public hamburger menu + the pages it opens (About, FAQs and help, My reports and places).
+   Phone: a left drawer over the map (pages fill the screen). Desktop: the same drawer under the top bar. */
+
+.hm-root {
+  --hm-bg: #1a4c6e;
+  --hm-bar: var(--color-primary);
+  --hm-card: rgb(255 255 255 / 0.1);
+  --hm-line: rgb(255 255 255 / 0.22);
+  --hm-width: min(86vw, 380px);
+  position: absolute;
+  inset: 0;
+  z-index: 1450; /* above the panels; the toast (1500) stays on top */
+  overflow: clip; /* a sliding panel can never push the screen sideways */
+  font-family: var(--font-body);
+  color: var(--color-on-primary);
+}
+
+/* Dimmed map. It is a button only so a tap on it can close the menu. */
+.hm-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: none;
+  background: rgb(5 20 35 / 0.55);
+  cursor: default;
+}
+
+.hm-drawer,
+.hm-page {
+  position: absolute;
+  z-index: 1; /* above the backdrop */
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--hm-bg);
+  box-shadow: 4px 0 18px rgb(0 0 0 / 0.4);
+}
+/* The drawer slides in once, when the menu opens. It stays mounted while a page is open,
+   so it does not slide again when you come back. */
+.hm-drawer {
+  width: var(--hm-width);
+  animation: hm-slide-in 0.22s ease-out;
+}
+/* A page slides in from the left over the drawer (only the page moves, not the logo panel). */
+.hm-page {
+  width: 100%; /* phones: a page fills the screen, like the PDF */
+  animation: hm-page-in 0.22s ease-out;
+}
+
+@keyframes hm-slide-in {
+  from { transform: translateX(-100%); }
+  to { transform: none; }
+}
+@keyframes hm-page-in {
+  from { transform: translateX(-100%); }
+  to { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hm-drawer,
+  .hm-page { animation: none; }
+}
+
+/* ---------- Header ---------- */
+.hm-page-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  box-sizing: border-box;
+  min-height: var(--topbar-h);
+  padding: 0 var(--space-2);
+  background: var(--hm-bar);
+}
+/* Menu header: logo + close button, the SILONG meaning underneath, then a thin line */
+.hm-header {
+  flex: none;
+  box-sizing: border-box;
+  padding: var(--space-3) var(--space-2) var(--space-4) var(--space-4);
+  background: var(--hm-bar);
+}
+.hm-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--tap-min);
+}
+.hm-tagline {
+  margin: var(--space-1) 56px 0 0; /* the right margin keeps the text out from under the X */
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid rgb(255 255 255 / 0.35);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--color-on-primary-muted);
+}
+.hm-logo {
+  display: block;
+  height: clamp(24px, 6.8vw, 28px);
+  width: auto;
+}
+.hm-close,
+.hm-back {
+  flex: none;
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.hm-close:hover,
+.hm-back:hover {
+  background: var(--color-surface-soft);
+}
+.hm-page-title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* ---------- Rows ---------- */
+.hm-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: var(--space-4);
+}
+.hm-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2) 0;
+}
+.hm-list-secondary {
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--hm-line); /* divider between the main and secondary menu */
+  padding-top: var(--space-3);
+}
+.hm-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  min-height: 52px;
+  box-sizing: border-box;
+  padding: 0 var(--space-4);
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-heading);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.hm-row:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+.hm-row:active {
+  background: rgb(255 255 255 / 0.14);
+}
+.hm-row-label {
+  flex: 1;
+}
+.hm-count {
+  min-width: 26px;
+  height: 26px;
+  box-sizing: border-box;
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  background: #fff;
+  color: var(--hm-bg);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 26px;
+  text-align: center;
+}
+
+/* ---------- Hidden on this phone ---------- */
+.hm-hidden-body {
+  padding: 0 var(--space-3) var(--space-3);
+}
+.hm-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.hm-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--hm-card);
+}
+.hm-card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hm-card-name {
+  font-family: var(--font-heading);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.hm-card-kind {
+  font-size: 0.8125rem;
+  color: var(--color-on-primary-muted);
+}
+.hm-unhide {
+  flex: none;
+  min-width: 88px;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  border: 2px solid #fff;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: #fff;
+  font-family: var(--font-heading);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.hm-unhide:hover {
+  background: rgb(255 255 255 / 0.14);
+}
+.hm-unhide:active {
+  transform: scale(0.97);
+}
+.hm-empty {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--hm-card);
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  color: var(--color-on-primary-muted);
+}
+.hm-note {
+  margin: var(--space-3) var(--space-1) 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--color-on-primary-muted);
+}
+
+/* ---------- Footer: Admin sign in ---------- */
+.hm-footer {
+  flex: none;
+  border-top: 1px solid var(--hm-line);
+}
+.hm-footer .hm-list {
+  padding: var(--space-2) 0;
+}
+
+/* ---------- Pages (About, FAQs, My reports and places) ---------- */
+.hm-page-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-4);
+}
+.hm-prose p {
+  margin: 0 0 var(--space-4);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+.hm-prose .hm-prose-small {
+  font-size: 0.875rem;
+  color: var(--color-on-primary-muted);
+}
+
+.hm-faq {
+  list-style: none;
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  border-top: 1px solid var(--hm-line);
+}
+.hm-faq-item {
+  border-bottom: 1px solid var(--hm-line);
+}
+.hm-faq-heading {
+  margin: 0;
+}
+.hm-faq-q {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 56px;
+  padding: var(--space-2) 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.hm-faq-q svg {
+  flex: none;
+}
+.hm-faq-a {
+  margin: 0 0 var(--space-4);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--color-on-primary-muted);
+}
+
+.hm-support {
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.hm-support-title {
+  margin: 0 0 var(--space-1);
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.hm-support-text {
+  margin: 0 0 var(--space-3);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+.hm-support-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--tap-min);
+}
+.hm-support-row svg {
+  flex: none;
+}
+.hm-support-link {
+  color: #fff;
+  font-family: var(--font-heading);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+.hm-support-link:hover {
+  text-decoration: underline;
+}
+.hm-support-unset {
+  font-size: 1rem;
+  color: var(--color-on-primary-muted);
+}
+.hm-support-foot {
+  margin: var(--space-3) 0 0;
+  font-size: 0.875rem;
+  color: var(--color-on-primary-muted);
+}
+
+/* Small title at the top of the desktop pages (My Reports, My Suggested Places) */
+.hm-section-title {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-heading);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-on-primary-muted);
+}
+
+/* My reports and places */
+.hm-tabs {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.hm-tab {
+  flex: 1;
+  min-height: var(--tap-min);
+  border: 2px solid var(--hm-line);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: #fff;
+  font-family: var(--font-heading);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.hm-tab[aria-selected="true"] {
+  border-color: #fff;
+  background: #fff;
+  color: var(--hm-bg);
+}
+.hm-tab-count {
+  margin-left: 4px;
+}
+.hm-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.hm-item {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--hm-card);
+}
+.hm-item-top {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+.hm-item-status {
+  color: var(--color-on-primary-muted);
+  font-weight: 600;
+}
+.hm-item-title {
+  margin: var(--space-1) 0 2px;
+  font-family: var(--font-heading);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.hm-item-meta {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-on-primary-muted);
+}
+.hm-empty-page {
+  margin: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--hm-card);
+  line-height: 1.45;
+}
+.hm-note-page {
+  margin-top: var(--space-4);
+}
+
+/* Keyboard focus: a white ring that shows on the blue */
+.hm-root button:focus-visible,
+.hm-root a:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -3px;
+}
+
+/* ---------- The window that holds the menu (left) and the open page (right) ---------- */
+/* Phones: the wrappers do nothing, the drawer / page fill the screen as before. */
+.hm-modal,
+.hm-content {
+  display: contents;
+}
+.hm-modal-close {
+  display: none;
+}
+
+/* ---------- Desktop: one floating window in the middle of the screen ---------- */
+@media (min-width: 1024px) {
+  .hm-root {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .hm-backdrop {
+    background: rgb(5 20 35 / 0.6);
+  }
+
+  .hm-modal {
+    position: relative;
+    z-index: 1; /* above the backdrop */
+    display: flex;
+    box-sizing: border-box;
+    width: min(1040px, calc(100% - 64px));
+    height: min(680px, calc(100% - 64px));
+    overflow: hidden;
+    border: 1px solid var(--hm-line);
+    border-radius: var(--radius-lg);
+    background: var(--hm-bg);
+    box-shadow: 0 24px 64px rgb(0 0 0 / 0.55);
+    animation: hm-pop 0.18s ease-out;
+  }
+
+  /* Left side: the menu */
+  .hm-drawer {
+    position: static;
+    flex: none;
+    width: 340px;
+    animation: none;
+    box-shadow: none;
+    border-right: 1px solid var(--hm-line);
+  }
+  .hm-close,
+  .hm-back {
+    display: none; /* the window has its own X, and there is no "back" */
+  }
+  .hm-row[aria-current="page"] {
+    background: rgb(255 255 255 / 0.14);
+  }
+
+  /* Right side: the page */
+  .hm-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: #1e5478;
+  }
+  .hm-page {
+    position: static;
+    flex: 1;
+    width: auto;
+    min-height: 0;
+    animation: none;
+    box-shadow: none;
+    background: transparent;
+  }
+  .hm-page-header {
+    min-height: 64px;
+    padding: 0 var(--space-6) 0 var(--space-6);
+    background: transparent;
+    border-bottom: 1px solid var(--hm-line);
+  }
+  .hm-page-body {
+    padding: var(--space-5) var(--space-6);
+  }
+
+  .hm-modal-close {
+    position: absolute;
+    z-index: 2;
+    top: var(--space-3);
+    right: var(--space-3);
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+  }
+  .hm-modal-close:hover {
+    background: var(--color-surface-soft);
+  }
+}
+
+@keyframes hm-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hm-modal { animation: none; }
+}
+
+/* ---------- Phones: slightly smaller text, a bigger logo ---------- */
+@media (max-width: 1023px) {
+  .hm-header {
+    padding-top: var(--space-7); /* room above the logo */
+  }
+  .hm-logo {
+    height: clamp(40px, 12vw, 48px); /* bigger logo */
+  }
+  .hm-close {
+    position: absolute; /* sits in the top right corner of the panel */
+    top: var(--space-2);
+    right: var(--space-2);
+  }
+  .hm-tagline {
+    font-size: 0.8125rem;
+  }
+  .hm-row {
+    font-size: 1rem;
+  }
+  .hm-count {
+    font-size: 0.8125rem;
+  }
+  .hm-card-name {
+    font-size: 0.875rem;
+  }
+  .hm-card-kind,
+  .hm-item-top,
+  .hm-note,
+  .hm-prose .hm-prose-small,
+  .hm-support-foot {
+    font-size: 0.8125rem;
+  }
+  .hm-unhide,
+  .hm-tab,
+  .hm-empty,
+  .hm-item-meta,
+  .hm-support-text {
+    font-size: 0.875rem;
+  }
+  .hm-page-title {
+    font-size: 1.125rem;
+  }
+  .hm-prose p,
+  .hm-faq-q,
+  .hm-faq-a,
+  .hm-empty-page,
+  .hm-support-unset {
+    font-size: 0.9375rem;
+  }
+  .hm-item-title,
+  .hm-support-link {
+    font-size: 1rem;
+  }
+  .hm-support-title {
+    font-size: 1.125rem;
+  }
+}

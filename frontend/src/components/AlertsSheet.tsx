@@ -3,6 +3,7 @@ import { Icon, type IconName } from "./icons";
 import { WeatherTab, type WeatherStatus } from "./WeatherTab";
 import { WarningsTab, type WarningsStatus } from "./WarningsTab";
 import { UpdatesTab, type UpdatesStatus } from "./UpdatesTab";
+import "./PanelUpdates.css";
 
 type Props = {
   onHeightChange: (px: number) => void;
@@ -85,6 +86,17 @@ export function AlertsSheet({ onHeightChange, openRequest, closeRequest }: Props
   const [dragHeight, setDragHeight] = useState<number | null>(null);
   const [viewportH, setViewportH] = useState(window.innerHeight);
   const drag = useRef({ startY: 0, startHeight: 0, moved: false, latest: 0 });
+  // Desktop (1024px and wider): the Alerts open as a panel on the RIGHT. Phones keep the bottom sheet.
+  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px)");
+    function onChange(e: MediaQueryListEvent) {
+      setIsDesktop(e.matches);
+    }
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
 
   useEffect(() => {
     function onResize() {
@@ -122,7 +134,18 @@ export function AlertsSheet({ onHeightChange, openRequest, closeRequest }: Props
     onHeightChange(height);
   }, [height, onHeightChange]);
 
+  // Desktop: the Escape key closes the panel (only while it is open).
+  useEffect(() => {
+    if (!isDesktop || snap === "collapsed") return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setSnap("collapsed");
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isDesktop, snap]);
+
   function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    if (isDesktop) return; // dragging is a phone thing
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = { startY: e.clientY, startHeight: height, moved: false, latest: height };
     setDragHeight(height);
@@ -160,15 +183,22 @@ export function AlertsSheet({ onHeightChange, openRequest, closeRequest }: Props
   const classes = ["sheet"];
   if (dragging) classes.push("sheet-dragging");
   if (snap === "collapsed" && !dragging) classes.push("sheet-closed");
+  if (isDesktop) classes.push("sheet-drawer");
+  if (isDesktop && snap !== "collapsed") classes.push("sheet-drawer-open");
 
   return (
     <section
       className={classes.join(" ")}
       aria-label="Early Warning Alerts"
-      style={{
-        height: `${fullH}px`,
-        transform: `translateY(${fullH - height}px)`,
-      }}
+      // Phones: height + slide-up come from here. Desktop: the CSS file places the panel on the right.
+      style={
+        isDesktop
+          ? undefined
+          : {
+              height: `${fullH}px`,
+              transform: `translateY(${fullH - height}px)`,
+            }
+      }
     >
       {/* Drag area: handle + title */}
       <div
@@ -182,8 +212,6 @@ export function AlertsSheet({ onHeightChange, openRequest, closeRequest }: Props
         <h2 className="sheet-title">Early Warning Alerts</h2>
       </div>
 
-      {/* X sits outside the drag area so taps on it still work.
-          It shrinks the sheet to the small bar; it never removes it. */}
       <button
         className="sheet-close"
         aria-label="Close alerts"

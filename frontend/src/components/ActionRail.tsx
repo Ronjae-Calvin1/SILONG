@@ -1,19 +1,16 @@
-import { useState } from "react";
 import { Icon, type IconName } from "./icons";
-import siloBot from "../assets/silo-bot.png";
+import siloBot from "../assets/silo-bot-icon.png"; // the original umbrella + bot art, with a transparent background
 
 interface Props {
-  onOpenEmergency?: () => void; // optional on purpose: the Emergency Hotlines panel is not built yet
+  onOpenEmergency?: () => void;
   onOpenIncident: () => void;
-  onOpenAlerts: () => void;
-  onOpenBot?: () => void; // optional on purpose: the chatbot panel is not built yet
+  onOpenBot?: () => void; // opens the Ask Silo chat panel
   onAddCenter: () => void;
 }
 
-type Tone = "emergency" | "report" | "alerts" | "add";
+type Tone = "emergency" | "report" | "add";
 
-// One square button: icon on top, small label underneath.
-function RailButton({
+function ActionButton({
   tone,
   icon,
   label,
@@ -27,61 +24,29 @@ function RailButton({
   onClick?: () => void;
 }) {
   return (
-    <button type="button" className={`rail-btn rail-btn-${tone}`} aria-label={ariaLabel} onClick={onClick}>
-      <Icon name={icon} size={25} />
-      <span className="rail-btn-label">{label}</span>
+    <button type="button" className={`action-btn action-btn-${tone}`} aria-label={ariaLabel} onClick={onClick}>
+      <Icon name={icon} size={24} />
+      <span className="action-btn-label">{label}</span>
     </button>
   );
 }
 
-export function ActionRail({ onOpenEmergency, onOpenIncident, onOpenAlerts, onOpenBot, onAddCenter }: Props) {
-  // The chevron at the top folds the rail away so it never blocks the map on small screens.
-  const [collapsed, setCollapsed] = useState(false);
-
+export function ActionRail({ onOpenEmergency, onOpenIncident, onOpenBot, onAddCenter }: Props) {
   return (
-    <nav className="rail" data-collapsed={collapsed} aria-label="Quick actions">
+    <nav className="action-row" aria-label="Quick actions">
+      <ActionButton tone="emergency" icon="phone" label="Emergency" ariaLabel="Emergency calls" onClick={onOpenEmergency} />
+      <ActionButton tone="report" icon="megaphone" label="Report" ariaLabel="Submit incident report" onClick={onOpenIncident} />
+      <ActionButton tone="add" icon="plus" label="Add evac" ariaLabel="Add an evacuation center" onClick={onAddCenter} />
+
       <button
         type="button"
-        className="rail-toggle"
-        aria-expanded={!collapsed}
-        aria-label={collapsed ? "Show quick actions" : "Hide quick actions"}
-        onClick={() => setCollapsed((c) => !c)}
+        className="action-btn action-btn-ask"
+        aria-label="Ask Silo, the SILONG chatbot"
+        onClick={onOpenBot}
       >
-        <Icon name="chevronUp" size={28} />
+        <img className="action-bot-img" src={siloBot} alt="" />
+        <span className="action-btn-label">Ask Silo</span>
       </button>
-
-      {!collapsed && (
-        <>
-          <RailButton
-            tone="emergency"
-            icon="phone"
-            label="Emergency"
-            ariaLabel="Emergency calls"
-            onClick={onOpenEmergency}
-          />
-          <RailButton
-            tone="report"
-            icon="megaphone"
-            label="Report"
-            ariaLabel="Submit incident report"
-            onClick={onOpenIncident}
-          />
-          <RailButton tone="alerts" icon="warning" label="Alerts" ariaLabel="Alerts" onClick={onOpenAlerts} />
-          
-          <RailButton
-            tone="add"
-            icon="plus"
-            label="Add evac"
-            ariaLabel="Add center: add an evacuation center"
-            onClick={onAddCenter}
-          />
-
-          {/* Round bot button, last in the rail like the design */}
-          <button type="button" className="rail-bot" aria-label="SILONG Bot assistant" onClick={onOpenBot}>
-            <img className="rail-bot-img" src={siloBot} alt="" />
-          </button>
-        </>
-      )}
     </nav>
   );
 }

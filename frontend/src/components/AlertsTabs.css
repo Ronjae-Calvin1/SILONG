@@ -14,7 +14,7 @@
   min-height: clamp(68px, 18vw, 72px);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
-  overflow: hidden; /* keeps the image inside the rounded corners */
+  overflow: hidden; 
   color: var(--color-on-primary);
  
   background:
@@ -63,7 +63,6 @@
   color: var(--color-on-primary-muted);
 }
 
-/* Loading / error / not-connected message boxes */
 .state-box {
   padding: var(--space-4);
   border-radius: var(--radius-md);
@@ -92,7 +91,6 @@
   outline-offset: 2px;
 }
 
-/* "Official advisories come first" notice */
 .alerts-disclaimer {
   margin: var(--space-2) 0 0;
   font-size: var(--ui-text-small);
@@ -115,7 +113,6 @@
   gap: var(--space-3);
 }
 
-/* Button inside a message box (e.g. "Try again") */
 .state-button {
   min-height: var(--tap-min);
   margin: var(--space-1) var(--space-3) var(--space-1) 0;
@@ -154,7 +151,6 @@
   color: var(--color-alert);
 }
 
-/* A real warning: red edge so it stands out */
 .warning-list {
   display: flex;
   flex-direction: column;

@@ -151,7 +151,7 @@ export function StatusForm({ facility: f, onClose, onSaved, focusCapacity = fals
               <div className="sf-row">
                 <label className="sf-field">
                   <span className="sf-label">
-                    People inside <span className="sf-optional">(optional)</span>
+                    Maximum capacity <span className="sf-optional">(optional)</span>
                   </span>
                   <input
                     ref={peopleRef}
@@ -175,7 +175,7 @@ export function StatusForm({ facility: f, onClose, onSaved, focusCapacity = fals
                 </label>
                 <label className="sf-field">
                   <span className="sf-label">
-                    Max capacity <span className="sf-optional">(optional)</span>
+                    Maximum capacity <span className="sf-optional">(optional)</span>
                   </span>
                   <input
                     ref={capacityRef}
@@ -202,7 +202,7 @@ export function StatusForm({ facility: f, onClose, onSaved, focusCapacity = fals
 
               <fieldset className="sf-group">
                 <legend className="sf-legend">
-                  Still available <span className="sf-optional">(optional)</span>
+                  What is available? <span className="sf-optional">(optional)</span>
                 </legend>
                 <div className="sf-chips">
                   {RESOURCE_OPTIONS.map((r) => (
