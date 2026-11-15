@@ -95,6 +95,8 @@ HAZARD_APPROX_METERS = int(_number("HAZARD_APPROX_METERS", 250))
 # Longest text accepted in a report.
 REPORT_NOTE_MAX = 140
 REPORT_CONTACT_MAX = 60
+REPORT_CATEGORY_MAX = 40  # what the hazard or need is, e.g. "Flooded road", "Trapped"
+REPORT_PEOPLE_MAX = 999  # help requests: how many people need help
 
 # ---- Limits on the public report endpoints (no accounts: phone ID + IP) ----
 # One report of each kind per phone every this many seconds...

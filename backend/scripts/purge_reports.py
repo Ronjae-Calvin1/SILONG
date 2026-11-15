@@ -20,6 +20,7 @@ from app import models  # noqa: E402,F401  (makes sure every table is known)
 
 def main() -> int:
     Base.metadata.create_all(bind=engine)  # makes the report tables if this is a new database
+    report_service.upgrade_report_columns(engine)  # and adds newer columns to an older reports table
     db = SessionLocal()
     try:
         deleted = report_service.purge_old_reports(db)

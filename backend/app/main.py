@@ -46,6 +46,8 @@ _drop_legacy_facilities_table()
 # manager tables on an existing database) and leaves existing tables untouched,
 # so nobody has to delete the database file.
 Base.metadata.create_all(bind=engine)
+# create_all does not add columns to a table that already exists: add the newer report columns.
+report_service.upgrade_report_columns(engine)
 
 
 # Real hospitals in Batangas City, from the city government's official

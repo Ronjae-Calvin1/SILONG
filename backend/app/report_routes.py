@@ -63,7 +63,11 @@ def send_report(
     payload: ReportIn, request: Request, response: Response,
     phone: str = Depends(required_phone), db: Session = Depends(get_db),
 ):
-    """Send a help request ("kind": "help") or a hazard report ("kind": "hazard"). Field rules are in ReportIn."""
+    """
+    Send a help request ("kind": "help") or a hazard report ("kind": "hazard"). Both need a
+    `category`; a help request also needs a `contact` and may have `people` and `can_move`
+    (not allowed on a hazard). Field rules are in ReportIn.
+    """
     if report_service.is_blocked(db, phone):
         raise HTTPException(
             status_code=403,
@@ -84,6 +88,7 @@ def send_report(
 
     row, created = report_service.create_report(
         db, payload.kind, payload.latitude, payload.longitude, payload.contact, payload.note, phone, _ip(request),
+        category=payload.category, people=payload.people, can_move=payload.can_move,
     )
     db.commit()
     db.refresh(row)

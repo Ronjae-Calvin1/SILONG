@@ -2,6 +2,30 @@
 
 Short log of what changed in each update, newest first.
 
+## Update 9b — Report fields: category, people, can move (backend only)
+- Small change to the reports from update 9, to match the incident form.
+- `POST /api/reports` now needs a **`category`** (1 to 40 characters: what the
+  hazard or need is, for example "Flooded road" or "Trapped"). Help requests
+  may also send **`people`** (whole number, 1 to 999) and **`can_move`**
+  (`"yes"`, `"no"` or `"unsure"`). Both are refused with a clear 422 on a hazard.
+  Any other field is still refused.
+- **`contact` is now required for help requests** and stays optional for hazards.
+- Responders see `category`, `people` and `can_move` in the list and in the
+  take / resolve / mark-false / verify responses (a hazard also lists every
+  different `categories`). The public hazard output (`/api/hazards/nearby`)
+  gets `category` and nothing else. "My reports" shows the sender's own
+  `category`. People and can move are never shown to the public.
+- Hazards within 100 m still group together whatever the category; the first
+  report's category is the one shown.
+- New columns `category`, `people`, `can_move` on `reports`, added
+  automatically to an existing database on the next start. Old reports keep
+  their data and show an empty category.
+- Tests: `py tests/test_reports.py` has new checks for all of the above,
+  including upgrading a database made by update 9.
+- Changed: `report_schemas.py`, `report_service.py`, `report_routes.py`,
+  `models.py`, `config.py`, `main.py`, `scripts/purge_reports.py`,
+  `tests/test_reports.py`. No frontend change.
+
 ## Update 9 — Help requests and hazard reports (redesign part 2 of 4, backend only)
 - Two kinds of report, sent without an account: **"I need help"** and **hazard**.
   No photos and no name field. A report has a location, an optional short note and

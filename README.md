@@ -370,9 +370,25 @@ creating it again.
 ## Help requests and hazard reports
 
 Two kinds of report, sent without an account. There are **no photos and no name
-field**: a report has a location, an optional short note and an optional contact
-(a phone number or similar). The exact location and the contact are visible only
-to responders and Super admins (`backend/app/report_service.py`).
+field**. A report has a `category`, a location and a short optional `note`; a
+help request also has a required `contact` (a phone number the responders can
+call) and optional `people` and `can_move`. The exact location and the contact are
+visible only to responders and Super admins (`backend/app/report_service.py`).
+
+| Field | Help request | Hazard |
+| --- | --- | --- |
+| `kind` | `"help"` | `"hazard"` |
+| `category` | Required, 1 to 40 characters: what the need is (for example "Trapped") | Required, 1 to 40 characters: what the hazard is (for example "Flooded road") |
+| `latitude`, `longitude` | Required, inside Batangas City | Required, inside Batangas City |
+| `contact` | **Required** | Optional |
+| `note` | Optional, up to 140 characters | Optional, up to 140 characters |
+| `people` | Optional whole number, 1 to 999 | Refused (422) |
+| `can_move` | Optional: `"yes"`, `"no"` or `"unsure"` | Refused (422) |
+
+Any other field (a name, a photo) is refused with 422. The incident form in the
+frontend sends its type as `kind`, its text as `details`, `people` and `canMove`;
+the API names them `category`, `note`, `people` and `can_move`, and its own `kind`
+is the form's help / hazard mode.
 
 - **"I need help"** (`"kind": "help"`) goes to responders only and is never
   public. The sender sees only their own reports and a status: **New**, **Being
@@ -390,9 +406,9 @@ data gives the phone a new one. Only its SHA-256 hash is stored.
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
-| POST | `/api/reports` | Public (`X-Phone-Id`) | Send a report. Body: `kind`, `latitude`, `longitude`, optional `contact`, `note`. 201 (200 if this phone already reported this hazard) |
-| GET | `/api/reports/mine` | Public (`X-Phone-Id`) | This phone's own reports, newest first: its own location and a status. No contact, no handler, no reason |
-| GET | `/api/hazards/nearby` | Public | `latitude`, `longitude` in the query. Unconfirmed or Verified hazards within the near-me range, as an approximate spot and a status |
+| POST | `/api/reports` | Public (`X-Phone-Id`) | Send a report (fields above). 201 (200 if this phone already reported this hazard) |
+| GET | `/api/reports/mine` | Public (`X-Phone-Id`) | This phone's own reports, newest first: its own location, its `category` and a status. No contact, no people, no handler, no reason |
+| GET | `/api/hazards/nearby` | Public | `latitude`, `longitude` in the query. Unconfirmed or Verified hazards within the near-me range: an approximate spot, a status and the `category`, nothing else |
 | GET | `/api/responder/reports` | Responder, Super admin | The list for the responder screens (poll about every 10 seconds). `include_closed`, `kind` filters |
 | POST | `/api/responder/reports/{id}/take` | Responder, Super admin | New to Being handled. 409 if another person already has it |
 | POST | `/api/responder/reports/{id}/resolve` | Responder, Super admin | Needs `what_was_done` |
@@ -408,12 +424,15 @@ and verify are each written to the audit log with the person's name
 and `has_new_help` (true while any help request is still New: show the red
 "Needs help" alert), `latest_report_id`, and `items`. Help requests nobody has
 taken come first, longest waiting first. An item has the exact `latitude` and
-`longitude`, `contacts` and `notes`, who took or closed it, and for a hazard its
+`longitude`, `category` (and `categories`, every different category sent for a
+hazard), `people` and `can_move` (help requests only, empty on hazards),
+`contacts` and `notes`, who took or closed it, and for a hazard its
 `hazard_state` (`pending`, `unconfirmed`, `verified`) and how many different
 `phones` sent it. Use an item's `id` in the action endpoints.
 
 **How hazards are grouped.** A hazard report within **100 m** of the first report
-of an open hazard counts as the same hazard. One phone counts once per hazard
+of an open hazard counts as the same hazard, whatever its category. The public and
+the responder item show the category of the first report. One phone counts once per hazard
 (sending it again returns the earlier report). Take, resolve, mark false and
 verify on a hazard apply to all its reports. A resolved or false hazard is closed:
 a new report at that place starts a new hazard.
@@ -472,6 +491,11 @@ It uses its own temporary database. It checks that a help request is never
 public, that a hazard is hidden beyond 1 km, that 3 different phones (not 3 reports
 from one phone) make it Unconfirmed, Verified, the false report block, the purge,
 the limits and the role checks.
+
+**Older databases.** The `category`, `people` and `can_move` columns are added to
+an existing `reports` table automatically when the server starts (and when
+`scripts/purge_reports.py` runs). Reports sent before that keep working and show
+an empty category.
 
 **Not built yet:** the report screens and the responder screens (the frontend
 still has the old incident form), and a way for a Super admin to lift a phone

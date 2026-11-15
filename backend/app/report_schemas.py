@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
 from . import config
 from .schemas import _clean_text
@@ -24,10 +24,21 @@ class ReportIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["help", "hazard"]
+    category: str  # required: what the hazard or need is (1 to 40 characters), e.g. "Flooded road", "Trapped"
     latitude: float = Field(allow_inf_nan=False)
     longitude: float = Field(allow_inf_nan=False)
-    contact: Optional[str] = None  # optional; only responders and Super admins ever see it
+    contact: Optional[str] = None  # required for a help request, optional for a hazard; responders and Super admins only
     note: Optional[str] = None  # optional, short
+    people: Optional[StrictInt] = Field(default=None, ge=1, le=config.REPORT_PEOPLE_MAX)  # help requests only
+    can_move: Optional[Literal["yes", "no", "unsure"]] = None  # help requests only
+
+    @field_validator("category")
+    @classmethod
+    def _category_clean(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if not (1 <= len(v) <= config.REPORT_CATEGORY_MAX):
+            raise ValueError(f"Category must be 1 to {config.REPORT_CATEGORY_MAX} characters.")
+        return v
 
     @field_validator("contact")
     @classmethod
@@ -38,6 +49,17 @@ class ReportIn(BaseModel):
     @classmethod
     def _note_clean(cls, v):
         return _clean_text(v, config.REPORT_NOTE_MAX, "Note")
+
+    @model_validator(mode="after")
+    def _kind_rules(self):
+        if self.kind == "help" and not self.contact:
+            raise ValueError("A help request needs a contact (a phone number the responders can call).")
+        if self.kind == "hazard":
+            if self.people is not None:
+                raise ValueError("people can only be sent with a help request, not with a hazard report.")
+            if self.can_move is not None:
+                raise ValueError("can_move can only be sent with a help request, not with a hazard report.")
+        return self
 
     @model_validator(mode="after")
     def _inside_city(self):
@@ -65,6 +87,7 @@ class MyReportOut(BaseModel):
     kind: Literal["help", "hazard"]
     status: Literal["new", "being_handled", "resolved"]
     label: str  # New | Being handled | Resolved
+    category: Optional[str] = None  # empty only on reports sent before this field existed
     latitude: float
     longitude: float
     note: Optional[str] = None
@@ -79,6 +102,7 @@ class NearbyHazardOut(BaseModel):
     longitude: float  # approximate
     status: Literal["unconfirmed", "verified"]
     label: str  # Unconfirmed | Verified
+    category: Optional[str] = None  # what it is (from the first report); the only detail the public gets
 
 
 class ResolveIn(BaseModel):
@@ -113,6 +137,10 @@ class ResponderReportOut(BaseModel):
     kind: Literal["help", "hazard"]
     status: Literal["new", "being_handled", "resolved", "false"]
     is_new_help: bool  # a help request nobody has taken yet (the red alert)
+    category: Optional[str] = None  # what it is; for a hazard, from its first report
+    categories: List[str] = []  # every different category sent for this hazard (one entry for a help request)
+    people: Optional[int] = None  # help requests: how many people need help
+    can_move: Optional[Literal["yes", "no", "unsure"]] = None  # help requests: can the person move?
     latitude: float  # exact
     longitude: float  # exact
     contacts: List[str]

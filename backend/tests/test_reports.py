@@ -74,7 +74,12 @@ def new_phone():
 
 
 def send(phone, kind, where=HOME, **extra):
-    body = {"kind": kind, "latitude": where[0], "longitude": where[1], **extra}
+    """Sends a report. A help request gets a contact and every report a category unless the test gives its own."""
+    body = {"kind": kind, "category": "Trapped" if kind == "help" else "Flooded road",
+            "latitude": where[0], "longitude": where[1], **extra}
+    if kind == "help" and "contact" not in extra:
+        body["contact"] = "0917 000 0000"
+    body = {k: v for k, v in body.items() if v is not None}  # contact=None means "leave it out"
     return client.post("/api/reports", headers={"X-Phone-Id": phone}, json=body)
 
 
@@ -137,7 +142,7 @@ def test_no_name_no_photo_nothing_extra_is_accepted():
 
 
 def test_phone_id_is_required_and_checked():
-    body = {"kind": "help", "latitude": HOME[0], "longitude": HOME[1]}
+    body = {"kind": "help", "category": "Trapped", "contact": "0917 000 0000", "latitude": HOME[0], "longitude": HOME[1]}
     assert client.post("/api/reports", json=body).status_code == 400
     assert client.post("/api/reports", json=body, headers={"X-Phone-Id": "short"}).status_code == 400
     assert client.post("/api/reports", json=body, headers={"X-Phone-Id": "has spaces in it, not allowed!!"}).status_code == 400
@@ -150,7 +155,7 @@ def test_location_must_be_in_the_city_and_text_is_limited():
     assert send(phone, "help", note="x" * (config.REPORT_NOTE_MAX + 1)).status_code == 422
     assert send(phone, "help", contact="9" * (config.REPORT_CONTACT_MAX + 1)).status_code == 422
     assert send(phone, "teapot").status_code == 422
-    assert client.post("/api/reports", headers={"X-Phone-Id": phone}, content='{"kind":"help","latitude":NaN,"longitude":121}').status_code == 422
+    assert client.post("/api/reports", headers={"X-Phone-Id": phone}, content='{"kind":"help","category":"x","contact":"1","latitude":NaN,"longitude":121}').status_code == 422
     assert mine(phone) == []
 
 
@@ -217,7 +222,8 @@ def test_hazard_is_hidden_beyond_one_km_and_shows_only_an_approximate_spot():
     close = nearby(NEAR)  # about 500 m away
     assert len(close) == 1
     spot = close[0]
-    assert set(spot) == {"id", "latitude", "longitude", "status", "label"}  # no details at all
+    assert set(spot) == {"id", "latitude", "longitude", "status", "label", "category"}  # category is the only detail
+    assert spot["category"] == "Flooded road"
     assert spot["status"] == "unconfirmed"
     # Approximate: not the exact point, but still close to it.
     assert (spot["latitude"], spot["longitude"]) != HOME
@@ -660,6 +666,141 @@ def test_purge_script_runs():
     out = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, env=env, cwd=script.parent.parent)
     assert out.returncode == 0, out.stderr
     assert "Deleted" in out.stdout and "report(s)" in out.stdout
+
+
+# --------------------------------------------------------------------------- part 2b: category, people, can_move
+
+def test_category_is_required_and_limited():
+    phone = new_phone()
+    body = {"kind": "hazard", "latitude": HOME[0], "longitude": HOME[1]}
+    post = lambda b: client.post("/api/reports", headers={"X-Phone-Id": phone}, json=b)  # noqa: E731
+    assert post(body).status_code == 422  # missing
+    for bad in ("", "   ", "x" * (config.REPORT_CATEGORY_MAX + 1)):
+        assert post({**body, "category": bad}).status_code == 422, repr(bad)
+    ok = post({**body, "category": "  Fallen   tree or pole "})
+    assert ok.status_code == 201, ok.text
+    assert mine(phone)[0]["category"] == "Fallen tree or pole"  # trimmed, single spaces
+    assert post({**body, "category": "x" * config.REPORT_CATEGORY_MAX}).status_code in (200, 201)  # 40 is allowed
+
+
+def test_contact_is_required_for_help_and_optional_for_hazards():
+    phone = new_phone()
+    base = {"kind": "help", "category": "Trapped", "latitude": HOME[0], "longitude": HOME[1]}
+    for extra in ({}, {"contact": ""}, {"contact": "   "}, {"contact": None}):
+        r = client.post("/api/reports", headers={"X-Phone-Id": phone}, json={**base, **extra})
+        assert r.status_code == 422 and "contact" in json.dumps(r.json()).lower(), (extra, r.text)
+    assert mine(phone) == []
+    assert send(phone, "help", contact="0917 123 4567").status_code == 201
+    haz = {"kind": "hazard", "category": "Landslide", "latitude": FAR[0], "longitude": FAR[1]}
+    assert client.post("/api/reports", headers={"X-Phone-Id": new_phone()}, json=haz).status_code == 201  # no contact: fine
+    assert send(new_phone(), "hazard", where=FAR, contact="0917 555 6666").status_code in (200, 201)
+
+
+def test_people_and_can_move_are_for_help_requests_only():
+    phone = new_phone()
+    # Allowed on a help request, and both are optional.
+    assert send(phone, "help", people=1, can_move="yes").status_code == 201
+    assert send(phone, "help", people=999, can_move="no").status_code == 201
+    assert send(phone, "help", can_move="unsure").status_code == 201
+    assert send(phone, "help").status_code == 201
+    # Wrong values.
+    for extra in ({"people": 0}, {"people": 1000}, {"people": -3}, {"people": 2.5}, {"people": "3"},
+                  {"people": True}, {"can_move": "maybe"}, {"can_move": ""}, {"can_move": "Yes"}):
+        r = send(phone, "help", **extra)
+        assert r.status_code == 422, f"{extra} gave {r.status_code}"
+    # Refused on a hazard, with a message that says why.
+    for extra, word in (({"people": 2}, "people"), ({"can_move": "yes"}, "can_move")):
+        r = send(phone, "hazard", **extra)
+        assert r.status_code == 422, extra
+        assert word in json.dumps(r.json()) and "help request" in json.dumps(r.json())
+    # Anything else is still refused.
+    assert send(phone, "help", injured=2).status_code == 422
+    assert send(phone, "help", name="Juan").status_code == 422
+
+
+def test_responders_see_category_people_and_can_move_the_public_does_not():
+    _clean_slate_hazards()
+    phone, other = new_phone(), new_phone()
+    r = send(phone, "help", category="Need rescue", people=4, can_move="unsure", contact="0917 PRIVATE 1")
+    assert r.status_code == 201
+    rid = r.json()["id"]
+    item = next(i for i in staff_list()["items"] if i["id"] == rid)
+    assert (item["category"], item["people"], item["can_move"]) == ("Need rescue", 4, "unsure")
+    assert item["categories"] == ["Need rescue"]
+    # The action responses carry the same fields.
+    taken = client.post(f"/api/responder/reports/{rid}/take", headers=H_RESP).json()
+    assert (taken["category"], taken["people"], taken["can_move"]) == ("Need rescue", 4, "unsure")
+    # The sender sees their own category, but not the head count or can_move or the contact.
+    mine_now = next(m for m in mine(phone) if m["id"] == rid)
+    assert mine_now["category"] == "Need rescue"
+    assert not ({"people", "can_move", "contact"} & set(mine_now))
+    # The public sees none of it.
+    assert mine(other) == [] and nearby(HOME) == []
+    for text in (client.get("/api/facilities").text, json.dumps(nearby(HOME, other))):
+        assert "Need rescue" not in text and "PRIVATE" not in text
+    # A hazard item has no people / can_move.
+    hz = send(new_phone(), "hazard", where=FAR, category="Landslide").json()["id"]
+    hz_item = next(i for i in staff_list(kind="hazard")["items"] if i["id"] == hz)
+    assert hz_item["category"] == "Landslide" and hz_item["people"] is None and hz_item["can_move"] is None
+    # Close what this check opened.
+    client.post(f"/api/responder/reports/{rid}/resolve", headers=H_RESP, json={"what_was_done": "test clean-up"})
+    client.post(f"/api/responder/reports/{hz}/resolve", headers=H_RESP, json={"what_was_done": "test clean-up"})
+
+
+def test_hazards_group_whatever_the_category():
+    _clean_slate_hazards()
+    cats = ["Flooded road", "Blocked road", "Other"]
+    phones = [new_phone() for _ in cats]
+    for i, (p, c) in enumerate(zip(phones, cats)):
+        assert send(p, "hazard", where=(HOME[0] + 0.0002 * i, HOME[1]), category=c).status_code == 201  # all within ~45 m
+    items = staff_list(kind="hazard")["items"]
+    assert len(items) == 1 and items[0]["report_count"] == 3 and items[0]["phones"] == 3
+    assert items[0]["category"] == "Flooded road"  # the first report's
+    assert items[0]["categories"] == cats
+    spots = nearby(HOME)
+    assert len(spots) == 1 and spots[0]["status"] == "unconfirmed" and spots[0]["category"] == "Flooded road"
+    assert set(spots[0]) == {"id", "latitude", "longitude", "status", "label", "category"}
+    # The same phone sending a different category for the same place still counts once.
+    again = send(phones[0], "hazard", category="Landslide")
+    assert again.status_code == 200
+    assert staff_list(kind="hazard")["items"][0]["report_count"] == 3
+
+
+def test_an_older_database_gets_the_new_columns_and_keeps_its_reports():
+    """A reports table made by part 2 (no category / people / can_move) is upgraded on start."""
+    import sqlite3
+    import subprocess
+    old_db = Path(_tmp) / "old-part2.db"
+    con = sqlite3.connect(old_db)
+    con.executescript("""
+        CREATE TABLE reports (
+            id INTEGER PRIMARY KEY, kind VARCHAR NOT NULL, status VARCHAR NOT NULL, phone_hash VARCHAR NOT NULL,
+            ip_hash VARCHAR NOT NULL, latitude FLOAT NOT NULL, longitude FLOAT NOT NULL, contact VARCHAR,
+            note VARCHAR(140), group_id INTEGER, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL,
+            taken_by VARCHAR, taken_at DATETIME, closed_by VARCHAR, closed_at DATETIME,
+            resolution_note TEXT, false_reason TEXT, verified_by VARCHAR, verified_at DATETIME);
+        INSERT INTO reports (kind, status, phone_hash, ip_hash, latitude, longitude, contact, note, created_at, updated_at)
+            VALUES ('help', 'new', 'oldphone', 'x', 13.75, 121.05, '0917 OLD', 'from part 2', datetime('now'), datetime('now'));
+    """)
+    con.commit()
+    con.close()
+    code = (
+        "import sys; sys.path.insert(0, %r)\n"
+        "from app.main import app\n"
+        "from app.database import SessionLocal\n"
+        "from app.models import Report\n"
+        "db = SessionLocal(); r = db.query(Report).one()\n"
+        "print(r.note, r.category, r.people, r.can_move)\n"
+        "from app import report_service, database\n"
+        "print('again', report_service.upgrade_report_columns(database.engine))\n"
+    ) % str(Path(__file__).resolve().parent.parent)
+    env = dict(os.environ, DATABASE_URL=f"sqlite:///{old_db}")
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env)
+    assert out.returncode == 0, out.stderr
+    assert "from part 2 None None None" in out.stdout  # old row kept, new columns empty
+    assert "again []" in out.stdout  # a second start adds nothing
+    cols = {row[1] for row in sqlite3.connect(old_db).execute("PRAGMA table_info(reports)")}
+    assert {"category", "people", "can_move"} <= cols
 
 
 def test_existing_endpoints_still_work():

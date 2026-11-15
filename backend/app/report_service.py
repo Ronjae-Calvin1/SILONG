@@ -133,7 +133,8 @@ def _hazard_group_of(db: Session, row: Report) -> List[Report]:
 
 def create_report(
     db: Session, kind: str, lat: float, lng: float, contact: Optional[str], note: Optional[str],
-    phone_hash: str, ip: str,
+    phone_hash: str, ip: str, category: Optional[str] = None,
+    people: Optional[int] = None, can_move: Optional[str] = None,
 ) -> Tuple[Report, bool]:
     """
     Add a report. Returns (report, created). created is False when this phone
@@ -144,6 +145,7 @@ def create_report(
     base = dict(
         kind=kind, phone_hash=phone_hash, ip_hash=hash_ip(ip), latitude=lat, longitude=lng,
         contact=contact, note=note, status=NEW, created_at=now, updated_at=now,
+        category=category, people=people, can_move=can_move,
     )
     if kind == HELP:
         row = Report(**base)
@@ -190,7 +192,7 @@ def reports_of_phone(db: Session, phone_hash: str, limit: int = 100) -> List[dic
     for r in rows:
         status = PUBLIC_STATUS[r.status]
         out.append(dict(
-            id=r.id, kind=r.kind, status=status, label=PUBLIC_LABEL[status],
+            id=r.id, kind=r.kind, status=status, label=PUBLIC_LABEL[status], category=r.category,
             latitude=r.latitude, longitude=r.longitude, note=r.note,
             created_at=r.created_at, updated_at=r.updated_at,
         ))
@@ -214,7 +216,7 @@ def nearby_hazards(db: Session, lat: float, lng: float) -> List[dict]:
         if distance_m(lat, lng, a_lat, a_lng) > radius_m:
             continue
         out.append(dict(
-            id=rows[0].id, latitude=a_lat, longitude=a_lng,
+            id=rows[0].id, latitude=a_lat, longitude=a_lng, category=rows[0].category,
             status=state, label="Verified" if state == "verified" else "Unconfirmed",
         ))
     out.sort(key=lambda h: h["id"])
@@ -230,8 +232,10 @@ def _item(rows: List[Report]) -> dict:
     state = hazard_state(rows) if is_hazard else None
     latest = max(rows, key=lambda r: r.updated_at)
     verified = next((r for r in rows if r.verified_at is not None), None)
-    contacts, notes = [], []
+    contacts, notes, categories = [], [], []
     for r in rows:
+        if r.category and r.category not in categories:
+            categories.append(r.category)
         if r.contact and r.contact not in contacts:
             contacts.append(r.contact)
         if r.note and r.note not in notes:
@@ -239,6 +243,9 @@ def _item(rows: List[Report]) -> dict:
     return dict(
         id=first.id, kind=first.kind, status=first.status,
         is_new_help=first.kind == HELP and first.status == NEW,
+        category=first.category, categories=categories,
+        people=first.people if first.kind == HELP else None,
+        can_move=first.can_move if first.kind == HELP else None,
         latitude=first.latitude, longitude=first.longitude,
         contacts=contacts, notes=notes,
         created_at=first.created_at, updated_at=latest.updated_at,
@@ -372,6 +379,31 @@ def verify(db: Session, user: User, report_id: int, request: Optional[Request]) 
     audit.record(db, user, "report.verify", target=_target(rows), detail={"reports": len(rows)}, request=request)
     db.commit()
     return _item(rows)
+
+
+# ------------------------------------------------------------ upgrading an existing database
+
+# Columns added after the reports table first shipped: name -> SQL type.
+_ADDED_REPORT_COLUMNS = {"category": "VARCHAR(40)", "people": "INTEGER", "can_move": "VARCHAR"}
+
+
+def upgrade_report_columns(engine) -> List[str]:
+    """
+    Base.metadata.create_all makes missing tables but never adds a column to one
+    that exists. This adds the part 2b columns to a reports table made by part 2,
+    keeping every row (old reports simply have no category). Does nothing on a
+    new or already upgraded database. Returns the columns it added.
+    """
+    from sqlalchemy import inspect, text
+    insp = inspect(engine)
+    if not insp.has_table("reports"):
+        return []
+    have = {c["name"] for c in insp.get_columns("reports")}
+    added = [name for name in _ADDED_REPORT_COLUMNS if name not in have]
+    with engine.begin() as conn:
+        for name in added:
+            conn.execute(text(f"ALTER TABLE reports ADD COLUMN {name} {_ADDED_REPORT_COLUMNS[name]}"))
+    return added
 
 
 # ------------------------------------------------------------ deleting old reports

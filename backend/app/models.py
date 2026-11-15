@@ -158,6 +158,10 @@ class Report(Base):
     longitude = Column(Float, nullable=False)
     contact = Column(String, nullable=True)
     note = Column(String(140), nullable=True)
+    # Added in part 2b. Empty on reports sent before that (see report_service.upgrade_report_columns).
+    category = Column(String(40), nullable=True)  # what the hazard or need is, e.g. "Flooded road"
+    people = Column(Integer, nullable=True)  # help requests only: how many people need help
+    can_move = Column(String, nullable=True)  # help requests only: "yes" | "no" | "unsure"
     group_id = Column(Integer, nullable=True, index=True)  # hazards only
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
