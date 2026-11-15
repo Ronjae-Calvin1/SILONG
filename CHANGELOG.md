@@ -2,6 +2,37 @@
 
 Short log of what changed in each update, newest first.
 
+## Update 8 — Staff accounts and roles (redesign part 1 of 4, backend only)
+- Staff accounts with two roles: **responder** and **super_admin**. The public
+  still has no account and there is no public sign-up. A Super admin creates,
+  locks, unlocks and removes accounts.
+- Sign in with a name and password (`POST /api/auth/sign-in`) and sign out
+  (`POST /api/auth/sign-out`). After 5 wrong tries in a row the account is locked
+  for 15 minutes (a Super admin can unlock it sooner). A staff session ends after
+  30 minutes without use. Passwords are stored hashed (scrypt); sign-in tokens
+  are stored as hashes only.
+- A reusable server-side role check for admin routes (`backend/app/auth.py`:
+  `require_responder`, `require_super_admin`) and `GET /api/me`.
+- Audit log: every admin action is written with the person's name
+  (`backend/app/audit.py`, helper `audit.record(...)` for the next parts).
+  Super admins read it at `GET /api/admin/audit-log`. Entries are never edited
+  or deleted, and the IP is stored hashed only.
+- New tables: `users`, `auth_sessions`, `audit_log`. They are created on the
+  next start; existing data is untouched.
+- New settings in `backend/app/config.py` (each can be set with an environment
+  variable): `STAFF_IDLE_MINUTES` (30), `SIGNIN_MAX_WRONG_TRIES` (5),
+  `SIGNIN_LOCK_MINUTES` (15), plus `SIGNIN_IP_MAX_ATTEMPTS` /
+  `SIGNIN_IP_WINDOW_SECONDS` (20 per IP per 10 minutes) and `MIN_PASSWORD_LENGTH` (8).
+- First Super admin: `py scripts/create_super_admin.py` (asks for a name and a password).
+- Tests: `py tests/test_accounts.py` (uses its own temporary database).
+- `/api/facilities`, the status routes and the evacuation center routes are
+  unchanged and still need no sign-in (they get their role checks in later parts).
+- New files: `backend/app/account_routes.py`, `account_schemas.py`, `accounts.py`,
+  `auth.py`, `audit.py`, `security.py`, `backend/scripts/create_super_admin.py`,
+  `backend/tests/test_accounts.py`, `backend/requirements-dev.txt`.
+- Not in this part: reports, places approval, weather, advisories, chatbot, and
+  any change to the frontend.
+
 ## Update 7 — Evacuation center manager
 - Evacuation centers can be added, removed and restored in the app. **Add
   evacuation center** (bottom left): tap the map, drag the pin, fill in the form

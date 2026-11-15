@@ -8,9 +8,10 @@ gives short, clear answers.
 
 - No accounts for the public. Anyone can use the map, report, and ask the
   chatbot right away, with no sign-up and no login.
-- Staff accounts (planned): **Responders** and **Super admins** sign in. There
-  is no public sign-up. Responders use a phone or a computer; Super admins use
-  a computer.
+- Staff accounts: **Responders** and **Super admins** sign in. There is no
+  public sign-up. Responders use a phone or a computer; Super admins use a
+  computer. The accounts, sign in, roles and audit log work on the server
+  (backend only so far; the sign-in screens are not built yet).
 - Mobile first, but online only. There is no offline mode and the site is not
   meant to be installed on the home screen.
 - Official advisories (PAGASA, NDRRMC, the city) always come first.
@@ -38,7 +39,9 @@ is designed but not built.
 | AI chatbot | One question in, one short answer out, from a checked guide only. No follow-ups and no live place status. Every answer ends with "AI-generated. Follow official advisories first." | Button only. Backend answers are stubbed |
 | Help requests and hazard reports (replaces the incident report form) | "I need help" goes to responders only and is never shown on the map. A hazard report shows to nearby people as an approximate spot, "Unconfirmed" after 3 reports from 3 phones, "Verified" once an admin checks it. | Planned (designed, not built) |
 | Responder side | Reports list, map, places and a resolve step. Phone and computer layouts. | Planned (designed, not built) |
-| Super admin side | Everything a responder does, plus advisories, emergency numbers, the chatbot guide, accounts, the audit log and permanent delete. Computer only. | Planned (designed, not built) |
+| Staff accounts and sign in | Responder and Super admin accounts, sign in and out, lock after 5 wrong tries, sign out after 30 minutes idle, role checks on the server. | Working (backend only, no screens yet) |
+| Audit log | Every admin action is recorded with the person's name. A Super admin reads it. | Working (backend only, no screens yet) |
+| Super admin side | Everything a responder does, plus advisories, emergency numbers, the chatbot guide, accounts, the audit log and permanent delete. Computer only. | Accounts and audit log work on the server. Planned: screens, advisories, emergency numbers, chatbot guide, permanent delete |
 | FAQs, support and "My reports and places" | Menu pages. | Planned (designed, not built) |
 
 Status is based on the code in this repository. Anything marked "Not built
@@ -279,6 +282,91 @@ minutes (`MANAGE_MAX_ACTIONS`, `MANAGE_WINDOW_SECONDS`).
 5. Remove it, restart the backend, refresh: it stays hidden.
 6. Menu, **Removed centers**, **Restore**: the pin is back.
 
+## Staff accounts and roles
+
+Two roles. A **Super admin** can do everything a **responder** can, plus manage
+accounts and read the audit log. The public has no account, and there is no
+public sign-up. Permissions are checked on the server (`backend/app/auth.py`),
+not only hidden in the screens.
+
+**Create the first Super admin** (once, from the backend folder):
+
+```
+cd backend
+py scripts/create_super_admin.py
+```
+
+It asks for a name and a password (not shown while you type, at least 8
+characters). It refuses to run when a Super admin already exists. The Super
+admin then signs in and creates the other accounts. The script uses the same
+database as the backend (`typhoon.db` in the folder you run it from).
+
+**How sign in works.** `POST /api/auth/sign-in` with a name and password returns
+a `token`. Send it on every later request as `Authorization: Bearer <token>`.
+The name is not case sensitive. Wrong name and wrong password give the same
+message. After **5 wrong tries in a row** the account is locked for **15
+minutes** (even the right password is refused until then, unless a Super admin
+unlocks it). A session ends after **30 minutes without use**; each request
+moves the timer forward.
+
+| Method | Path | Who | What it does |
+| --- | --- | --- | --- |
+| POST | `/api/auth/sign-in` | Anyone with an account | Sign in, returns the token |
+| POST | `/api/auth/sign-out` | Signed in | End this sign-in (safe to call twice) |
+| GET | `/api/me` | Responder, Super admin | Who is signed in and their role |
+| GET | `/api/admin/users` | Super admin | List accounts and whether they are locked |
+| POST | `/api/admin/users` | Super admin | Create an account (`name`, `password`, `role`) |
+| POST | `/api/admin/users/{id}/lock` | Super admin | Lock until unlocked; signs the person out |
+| POST | `/api/admin/users/{id}/unlock` | Super admin | Unlock (also clears a wrong-tries lock) |
+| DELETE | `/api/admin/users/{id}` | Super admin | Remove the account (its audit entries stay) |
+| GET | `/api/admin/audit-log` | Super admin | Newest first. `limit`, `before_id`, `action`, `actor` |
+
+No token or an expired one gives 401. A signed-in responder on a Super admin
+route gets 403. You cannot lock or remove your own account. The existing map,
+status and evacuation center endpoints still need no sign-in; they get their
+role checks in the later parts.
+
+**Audit log.** Every admin action is saved with the person's name, their role,
+what it was done to and the time (UTC). Sign in, sign out and automatic locks
+are logged too. Passwords and tokens are never logged, the IP is stored hashed
+only, and entries are never edited or deleted. Later parts add an entry from
+their admin routes with one call:
+
+```python
+from . import audit
+audit.record(db, user, "report.resolve", target="report:12", detail={"note": "Team sent"}, request=request)
+db.commit()   # commit together with the change itself
+```
+
+**Security details.** Passwords are stored hashed with scrypt. A sign-in token
+is random and only its hash is stored. Sign-in is also limited per IP (20
+attempts per 10 minutes).
+
+**Settings to confirm** (`backend/app/config.py`, each can also be set with an
+environment variable):
+
+- `STAFF_IDLE_MINUTES`: 30 (`STAFF_IDLE_MINUTES`)
+- `SIGNIN_MAX_WRONG_TRIES`: 5 (`SIGNIN_MAX_WRONG_TRIES`)
+- `SIGNIN_LOCK_MINUTES`: 15 (`SIGNIN_LOCK_MINUTES`)
+- `SIGNIN_IP_MAX_ATTEMPTS` / `SIGNIN_IP_WINDOW_SECONDS`: 20 per IP per 10 minutes
+- `MIN_PASSWORD_LENGTH`: 8
+
+**Run the checks** (needs `pip install -r requirements-dev.txt` once):
+
+```
+cd backend
+py tests/test_accounts.py
+```
+
+It uses its own temporary database. It checks lockout and unlock, the idle
+timeout, a responder blocked from Super admin routes, no token blocked, and the
+audit entries.
+
+**Not built yet:** the sign-in screens, changing your own password, and a
+password reset by a Super admin. Until then a Super admin sets each person's
+first password, and a forgotten password means removing the account and
+creating it again.
+
 ## Using a custom map
 
 A custom map lets you hide icons you do not want while keeping place names.
@@ -332,15 +420,23 @@ Press `Ctrl+C` in each terminal. On Windows, it may ask
 ```
 SILONG/
 ├── backend/
+│   ├── scripts/                # create_super_admin.py (first Super admin), fetch/backdate helpers
+│   ├── tests/                  # test_accounts.py
 │   └── app/
 │       ├── main.py             # FastAPI app, loads facilities, /api/facilities and the status routes
 │       ├── routes.py           # API routes (weather and AI routes are stubs)
 │       ├── evac_routes.py      # Add / remove / restore evacuation centers
 │       ├── evac_service.py     # Center keys, duplicate check, soft delete, action log
-│       ├── models.py           # SQL tables (facilities, status updates, user centers, removals, action log)
+│       ├── models.py           # SQL tables (facilities, status updates, user centers, removals, action log, users, sessions, audit log)
 │       ├── schemas.py          # Request/response shapes and status rules
-│       ├── config.py           # 6-hour outdated rule, rate limits, city area, duplicate distance
-│       ├── rate_limit.py       # Per-IP limits (status updates, add/remove/restore)
+│       ├── config.py           # 6-hour outdated rule, rate limits, city area, duplicate distance, sign-in rules
+│       ├── rate_limit.py       # Per-IP limits (status updates, add/remove/restore, sign in)
+│       ├── account_routes.py   # Sign in/out, /api/me, accounts, audit log endpoints
+│       ├── account_schemas.py  # Request/response shapes for the above
+│       ├── accounts.py         # Create, sign in, sessions, lock/unlock/remove
+│       ├── auth.py             # Role check for admin routes (require_responder, require_super_admin)
+│       ├── audit.py            # audit.record(...) helper for admin actions
+│       ├── security.py         # Password hashing, token hashing
 │       ├── status_service.py   # Latest status / history, capacity rule (automatic "Full")
 │       ├── database.py         # SQLite connection
 │       ├── weather_service.py  # Sample weather data (stub)

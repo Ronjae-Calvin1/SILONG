@@ -1,0 +1,2 @@
+-r requirements.txt
+httpx  # lets the tests call the API without starting the server

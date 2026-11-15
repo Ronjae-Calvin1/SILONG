@@ -1,6 +1,7 @@
 """
 Backbone: map slice + capacity/availability status (Batangas City facilities)
-+ evacuation center manager (add / soft remove / restore, see evac_routes.py).
++ evacuation center manager (add / soft remove / restore, see evac_routes.py)
++ staff accounts, roles and the audit log (see account_routes.py).
 Facilities in SQLite -> FastAPI endpoints -> frontend fetches them.
 Weather/AI modules still exist in the folder but aren't wired in yet.
 """
@@ -18,6 +19,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from . import evac_service, status_service
+from .account_routes import router as account_router
 from .database import Base, engine, SessionLocal, get_db
 from .evac_routes import router as evac_router
 from .models import Facility, StatusUpdate, UserEvacuationCenter
@@ -182,6 +184,7 @@ sync_facilities()
 
 app = FastAPI(title="SILONG API — map and status")
 app.include_router(evac_router)
+app.include_router(account_router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):

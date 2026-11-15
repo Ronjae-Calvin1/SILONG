@@ -98,3 +98,38 @@ class ActionRateLimiter:
 
 
 manage_limiter = ActionRateLimiter()
+
+
+class SignInRateLimiter:
+    """
+    Sliding window per IP for sign-in attempts (any account, right or wrong):
+    at most SIGNIN_IP_MAX_ATTEMPTS in SIGNIN_IP_WINDOW_SECONDS (config.py).
+    Same limits as the others (memory only, per process, an IP behind a proxy
+    looks shared). The per-account lock lives in accounts.py.
+    """
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic):
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._hits: dict[str, deque] = defaultdict(deque)
+
+    def check(self, ip: str) -> Optional[int]:
+        """None if allowed (and recorded), otherwise the seconds to wait."""
+        now = self._clock()
+        with self._lock:
+            hits = self._hits[ip]
+            while hits and now - hits[0] > config.SIGNIN_IP_WINDOW_SECONDS:
+                hits.popleft()
+            if len(hits) >= config.SIGNIN_IP_MAX_ATTEMPTS:
+                return max(1, int(config.SIGNIN_IP_WINDOW_SECONDS - (now - hits[0]) + 0.999))
+            hits.append(now)
+            for other in [k for k, q in self._hits.items() if k != ip and now - q[-1] > config.SIGNIN_IP_WINDOW_SECONDS]:
+                del self._hits[other]
+            return None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._hits.clear()
+
+
+signin_limiter = SignInRateLimiter()

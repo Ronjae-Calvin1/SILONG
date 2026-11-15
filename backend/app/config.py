@@ -52,3 +52,19 @@ MANAGE_WINDOW_SECONDS = int(_number("MANAGE_WINDOW_SECONDS", 600))
 # to keep hashes comparable across restarts. If it is not set, a random salt is
 # made on each start (hashes still hide the IP; they just stop matching old ones).
 IP_HASH_SALT = os.getenv("IP_HASH_SALT") or os.urandom(16).hex()
+
+# ---- Staff accounts (Responder, Super admin) ----
+# Staff sessions end after this many minutes without any request.
+STAFF_IDLE_MINUTES = int(_number("STAFF_IDLE_MINUTES", 30))
+# This many wrong passwords in a row lock the account...
+SIGNIN_MAX_WRONG_TRIES = int(_number("SIGNIN_MAX_WRONG_TRIES", 5))
+# ...for this many minutes. A Super admin can unlock it sooner.
+SIGNIN_LOCK_MINUTES = int(_number("SIGNIN_LOCK_MINUTES", 15))
+
+# Per-IP limit on sign-in attempts of any account (slows guessing across many
+# names; the per-account lock above handles guessing one name).
+SIGNIN_IP_MAX_ATTEMPTS = int(_number("SIGNIN_IP_MAX_ATTEMPTS", 20))
+SIGNIN_IP_WINDOW_SECONDS = int(_number("SIGNIN_IP_WINDOW_SECONDS", 600))
+
+# Shortest password a Super admin can give a new account (a typo guard, not a policy).
+MIN_PASSWORD_LENGTH = int(_number("MIN_PASSWORD_LENGTH", 8))

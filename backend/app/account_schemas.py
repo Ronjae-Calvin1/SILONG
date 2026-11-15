@@ -1,0 +1,94 @@
+"""Request/response shapes for sign in, /api/me, accounts and the audit log."""
+import json
+from datetime import datetime, timezone
+from typing import Any, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from . import accounts, config
+from .models import AuditLog, User
+
+
+def _utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """Times are stored as naive UTC; send them out marked as UTC."""
+    return dt.replace(tzinfo=timezone.utc) if dt is not None else None
+
+
+class SignInIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(max_length=100)
+    password: str = Field(max_length=accounts.PASSWORD_MAX)
+
+
+class MeOut(BaseModel):
+    id: int
+    name: str
+    role: Literal["responder", "super_admin"]
+    idle_timeout_minutes: int
+
+
+class SignInOut(BaseModel):
+    token: str  # send it back as `Authorization: Bearer <token>`
+    token_type: str = "bearer"
+    user: MeOut
+
+
+class MessageOut(BaseModel):
+    message: str
+
+
+class UserCreateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(max_length=100)
+    password: str = Field(max_length=accounts.PASSWORD_MAX)
+    role: Literal["responder", "super_admin"]
+
+
+class UserOut(BaseModel):
+    id: int
+    name: str
+    role: Literal["responder", "super_admin"]
+    status: Literal["active", "locked_by_admin", "locked_for_wrong_tries"]
+    locked_until: Optional[datetime] = None  # only while locked for wrong tries
+    created_at: datetime
+    created_by: Optional[str] = None
+    last_sign_in_at: Optional[datetime] = None
+    message: Optional[str] = None
+
+
+class AuditEntryOut(BaseModel):
+    id: int
+    created_at: datetime
+    actor_id: Optional[int] = None
+    actor_name: str
+    actor_role: Optional[str] = None
+    action: str
+    target: Optional[str] = None
+    detail: Any = None
+
+
+def me_out(user: User) -> MeOut:
+    return MeOut(id=user.id, name=user.name, role=user.role, idle_timeout_minutes=config.STAFF_IDLE_MINUTES)
+
+
+def user_out(user: User, message: Optional[str] = None) -> UserOut:
+    now = accounts._now()
+    wrong_tries_lock = user.locked_until is not None and user.locked_until > now
+    status = "locked_by_admin" if user.is_locked else "locked_for_wrong_tries" if wrong_tries_lock else "active"
+    return UserOut(
+        id=user.id, name=user.name, role=user.role, status=status,
+        locked_until=_utc(user.locked_until) if wrong_tries_lock else None,
+        created_at=_utc(user.created_at), created_by=user.created_by,
+        last_sign_in_at=_utc(user.last_sign_in_at), message=message,
+    )
+
+
+def audit_out(row: AuditLog) -> AuditEntryOut:
+    try:
+        detail = json.loads(row.detail) if row.detail else None
+    except ValueError:
+        detail = row.detail
+    return AuditEntryOut(
+        id=row.id, created_at=_utc(row.created_at), actor_id=row.actor_id, actor_name=row.actor_name,
+        actor_role=row.actor_role, action=row.action, target=row.target, detail=detail,
+    )

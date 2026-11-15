@@ -4,12 +4,14 @@ SQL models.
 Facility: clinics, hospitals, evacuation centers — the map data.
 StatusUpdate: one capacity/availability report for a facility. Rows are never
     edited or deleted, so they form the history; the newest row is the status.
+User / AuthSession / AuditLog: staff accounts (Responder, Super admin), their
+    sign-in sessions, and the trail of admin actions (see accounts.py, audit.py).
 CachedResponse: generic key/value cache for AI outputs (prep plans, weather
     explainers, etc.) so the frontend can fetch-once and reuse offline.
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey, Index
+from sqlalchemy import Boolean, Column, Integer, String, Float, Text, DateTime, ForeignKey, Index
 from sqlalchemy.sql import func
 
 from .database import Base
@@ -77,6 +79,60 @@ class ActionLog(Base):
     facility_key = Column(String, nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     ip_hash = Column(String, nullable=False)
+
+
+class User(Base):
+    """
+    A staff account. The public has no account. Passwords are stored hashed
+    only (see security.py). Times are naive UTC, like the other tables.
+    """
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)  # as typed, shown in screens and the audit log
+    name_key = Column(String, unique=True, index=True, nullable=False)  # lower case, one space between words: sign-in key
+    password_hash = Column(String, nullable=False)
+    role = Column(String, nullable=False)  # "responder" | "super_admin"
+    failed_attempts = Column(Integer, nullable=False, default=0)  # wrong passwords in a row
+    locked_until = Column(DateTime, nullable=True)  # automatic lock after too many wrong tries
+    is_locked = Column(Boolean, nullable=False, default=False)  # lock set by a Super admin, stays until unlocked
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    created_by = Column(String, nullable=True)  # name of the creator, kept as text
+    last_sign_in_at = Column(DateTime, nullable=True)
+
+
+class AuthSession(Base):
+    """
+    One signed-in browser. The token itself is never stored, only its hash.
+    last_used_at moves forward on every request; a session idle for longer than
+    STAFF_IDLE_MINUTES is dead.
+    """
+    __tablename__ = "auth_sessions"
+
+    id = Column(Integer, primary_key=True)
+    token_hash = Column(String, unique=True, index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    last_used_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
+class AuditLog(Base):
+    """
+    Every admin action, with the person's name. Rows are never edited or
+    deleted. The name and role are copied in as text, so the entry still reads
+    correctly after an account is removed. The IP is stored hashed only.
+    """
+    __tablename__ = "audit_log"
+
+    id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
+    actor_id = Column(Integer, nullable=True)  # no foreign key on purpose: accounts can be removed
+    actor_name = Column(String, nullable=False)
+    actor_role = Column(String, nullable=True)
+    action = Column(String, nullable=False, index=True)  # e.g. "user.create", "auth.sign_in"
+    target = Column(String, nullable=True)  # what it was done to, e.g. "user:3 (Ana)"
+    detail = Column(Text, nullable=True)  # JSON text with the specifics
+    ip_hash = Column(String, nullable=True)
 
 
 class StatusUpdate(Base):
