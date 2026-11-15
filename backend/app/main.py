@@ -1,7 +1,8 @@
 """
 Backbone: map slice + capacity/availability status (Batangas City facilities)
 + evacuation center manager (add / soft remove / restore, see evac_routes.py)
-+ staff accounts, roles and the audit log (see account_routes.py).
++ staff accounts, roles and the audit log (see account_routes.py)
++ help requests and hazard reports (see report_routes.py).
 Facilities in SQLite -> FastAPI endpoints -> frontend fetches them.
 Weather/AI modules still exist in the folder but aren't wired in yet.
 """
@@ -18,12 +19,13 @@ from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 from typing import List
 
-from . import evac_service, status_service
+from . import evac_service, report_service, status_service
 from .account_routes import router as account_router
 from .database import Base, engine, SessionLocal, get_db
 from .evac_routes import router as evac_router
 from .models import Facility, StatusUpdate, UserEvacuationCenter
 from .rate_limit import limiter
+from .report_routes import router as report_router
 from .schemas import FacilityOut, StatusIn, StatusOut, validate_for_facility_type
 
 
@@ -181,10 +183,13 @@ def sync_facilities():
 
 
 sync_facilities()
+# Delete reports older than the retention time (see config.REPORTS_KEEP_DAYS).
+report_service.purge_on_startup()
 
 app = FastAPI(title="SILONG API — map and status")
 app.include_router(evac_router)
 app.include_router(account_router)
+app.include_router(report_router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):

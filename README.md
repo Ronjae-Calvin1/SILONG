@@ -37,8 +37,8 @@ is designed but not built.
 | Early warning alerts | Bottom panel with weather, official warnings and summarized internet updates. | Screen only, sample data |
 | Incident report | Report an incident with a location from GPS or a point on the map. | Form works, saved on the phone only, not sent to a server |
 | AI chatbot | One question in, one short answer out, from a checked guide only. No follow-ups and no live place status. Every answer ends with "AI-generated. Follow official advisories first." | Button only. Backend answers are stubbed |
-| Help requests and hazard reports (replaces the incident report form) | "I need help" goes to responders only and is never shown on the map. A hazard report shows to nearby people as an approximate spot, "Unconfirmed" after 3 reports from 3 phones, "Verified" once an admin checks it. | Planned (designed, not built) |
-| Responder side | Reports list, map, places and a resolve step. Phone and computer layouts. | Planned (designed, not built) |
+| Help requests and hazard reports (replaces the incident report form) | "I need help" goes to responders only and is never shown on the map. A hazard report shows to nearby people as an approximate spot, "Unconfirmed" after 3 reports from 3 phones, "Verified" once an admin checks it. | Working (backend only, no screens yet). The old incident form above still saves on the phone only |
+| Responder side | Reports list, map, places and a resolve step. Phone and computer layouts. | The report endpoints work on the server (list, take, resolve, mark false, verify). Planned: the screens, the map, places |
 | Staff accounts and sign in | Responder and Super admin accounts, sign in and out, lock after 5 wrong tries, sign out after 30 minutes idle, role checks on the server. | Working (backend only, no screens yet) |
 | Audit log | Every admin action is recorded with the person's name. A Super admin reads it. | Working (backend only, no screens yet) |
 | Super admin side | Everything a responder does, plus advisories, emergency numbers, the chatbot guide, accounts, the audit log and permanent delete. Computer only. | Accounts and audit log work on the server. Planned: screens, advisories, emergency numbers, chatbot guide, permanent delete |
@@ -367,6 +367,116 @@ password reset by a Super admin. Until then a Super admin sets each person's
 first password, and a forgotten password means removing the account and
 creating it again.
 
+## Help requests and hazard reports
+
+Two kinds of report, sent without an account. There are **no photos and no name
+field**: a report has a location, an optional short note and an optional contact
+(a phone number or similar). The exact location and the contact are visible only
+to responders and Super admins (`backend/app/report_service.py`).
+
+- **"I need help"** (`"kind": "help"`) goes to responders only and is never
+  public. The sender sees only their own reports and a status: **New**, **Being
+  handled** or **Resolved**.
+- **Hazard** (`"kind": "hazard"`): people within **1 km** see an approximate spot
+  with no details. It shows as **Unconfirmed** once **3 different phones**
+  reported it, and as **Verified** once a responder or Super admin verifies it.
+  Before either, a hazard is visible only to responders and to the phones that
+  sent it.
+
+**Phone ID.** The browser makes a random value (16 to 64 letters, digits, `-` or
+`_`; a UUID works) and sends it on every request as the header `X-Phone-Id`. It
+is used for "my reports". It is **not proof of identity**, and clearing browser
+data gives the phone a new one. Only its SHA-256 hash is stored.
+
+| Method | Path | Who | What it does |
+| --- | --- | --- | --- |
+| POST | `/api/reports` | Public (`X-Phone-Id`) | Send a report. Body: `kind`, `latitude`, `longitude`, optional `contact`, `note`. 201 (200 if this phone already reported this hazard) |
+| GET | `/api/reports/mine` | Public (`X-Phone-Id`) | This phone's own reports, newest first: its own location and a status. No contact, no handler, no reason |
+| GET | `/api/hazards/nearby` | Public | `latitude`, `longitude` in the query. Unconfirmed or Verified hazards within the near-me range, as an approximate spot and a status |
+| GET | `/api/responder/reports` | Responder, Super admin | The list for the responder screens (poll about every 10 seconds). `include_closed`, `kind` filters |
+| POST | `/api/responder/reports/{id}/take` | Responder, Super admin | New to Being handled. 409 if another person already has it |
+| POST | `/api/responder/reports/{id}/resolve` | Responder, Super admin | Needs `what_was_done` |
+| POST | `/api/responder/reports/{id}/mark-false` | Responder, Super admin | Needs a `reason` |
+| POST | `/api/responder/reports/{id}/verify` | Responder, Super admin | Hazards only. The public then sees it as Verified |
+
+Responder endpoints use the sign-in token from the accounts section
+(`Authorization: Bearer <token>`). No token gives 401. Take, resolve, mark false
+and verify are each written to the audit log with the person's name
+(`report.take`, `report.resolve`, `report.mark_false`, `report.verify`).
+
+**Responder list.** Each call returns `refresh_seconds` (10), `new_help_count`
+and `has_new_help` (true while any help request is still New: show the red
+"Needs help" alert), `latest_report_id`, and `items`. Help requests nobody has
+taken come first, longest waiting first. An item has the exact `latitude` and
+`longitude`, `contacts` and `notes`, who took or closed it, and for a hazard its
+`hazard_state` (`pending`, `unconfirmed`, `verified`) and how many different
+`phones` sent it. Use an item's `id` in the action endpoints.
+
+**How hazards are grouped.** A hazard report within **100 m** of the first report
+of an open hazard counts as the same hazard. One phone counts once per hazard
+(sending it again returns the earlier report). Take, resolve, mark false and
+verify on a hazard apply to all its reports. A resolved or false hazard is closed:
+a new report at that place starts a new hazard.
+
+**The approximate spot.** The public sees the middle of a 250 m square around the
+real spot. The same hazard always gives the same spot, and the near-me distance is
+measured to that spot, not to the real one. Your position in `/api/hazards/nearby`
+is used for the answer only and is not stored.
+
+**False reports.** After 3 reports from one phone are marked false, that phone is
+blocked from sending reports (403, the message says to call 911 in an emergency).
+It can still read its own reports. This slows casual pranks only. Marking a hazard
+false counts as one false report for each phone in it. The count is taken over the
+reports still kept, and a block is kept after the reports are deleted. A report
+marked false shows to its sender as "Resolved", without the reason.
+
+**Limits.** Sending a report is limited per phone (a 30 second cooldown per kind,
+6 an hour) and per IP (30 an hour), with the same sliding-window style as the other
+limits (`backend/app/rate_limit.py`). Reading "my reports" and nearby hazards is
+limited to 60 a minute per IP and per phone. IP addresses are stored hashed only.
+
+**Deleting old reports.** Reports are deleted 30 days after they were sent. This
+runs each time the server starts, and by script:
+
+```
+cd backend
+py scripts/purge_reports.py
+```
+
+A server that stays running does not purge by itself until the next start, so run
+the script now and then (for example once a day) if it runs for weeks.
+
+**Settings to confirm** (`backend/app/config.py`, each can also be set with an
+environment variable of the same name):
+
+| Setting | Value |
+| --- | --- |
+| `REPORTS_KEEP_DAYS` | 30 |
+| `HAZARD_UNCONFIRMED_PHONES` | 3 |
+| `FALSE_REPORTS_BEFORE_BLOCK` | 3 |
+| `NEAR_ME_KM` | 1 |
+| `RESPONDER_REFRESH_SECONDS` | 10 |
+| `HAZARD_MERGE_METERS` | 100 |
+| `HAZARD_APPROX_METERS` | 250 |
+| `REPORT_PHONE_COOLDOWN_SECONDS` / `REPORT_PHONE_MAX` / `REPORT_IP_MAX` / `REPORT_WINDOW_SECONDS` | 30 / 6 / 30 / 3600 |
+| `REPORT_READ_MAX` / `REPORT_READ_WINDOW_SECONDS` | 60 / 60 |
+
+**Run the checks** (needs `pip install -r requirements-dev.txt` once):
+
+```
+cd backend
+py tests/test_reports.py
+```
+
+It uses its own temporary database. It checks that a help request is never
+public, that a hazard is hidden beyond 1 km, that 3 different phones (not 3 reports
+from one phone) make it Unconfirmed, Verified, the false report block, the purge,
+the limits and the role checks.
+
+**Not built yet:** the report screens and the responder screens (the frontend
+still has the old incident form), and a way for a Super admin to lift a phone
+block.
+
 ## Using a custom map
 
 A custom map lets you hide icons you do not want while keeping place names.
@@ -420,23 +530,26 @@ Press `Ctrl+C` in each terminal. On Windows, it may ask
 ```
 SILONG/
 ├── backend/
-│   ├── scripts/                # create_super_admin.py (first Super admin), fetch/backdate helpers
-│   ├── tests/                  # test_accounts.py
+│   ├── scripts/                # create_super_admin.py (first Super admin), purge_reports.py, fetch/backdate helpers
+│   ├── tests/                  # test_accounts.py, test_reports.py
 │   └── app/
 │       ├── main.py             # FastAPI app, loads facilities, /api/facilities and the status routes
 │       ├── routes.py           # API routes (weather and AI routes are stubs)
 │       ├── evac_routes.py      # Add / remove / restore evacuation centers
 │       ├── evac_service.py     # Center keys, duplicate check, soft delete, action log
-│       ├── models.py           # SQL tables (facilities, status updates, user centers, removals, action log, users, sessions, audit log)
+│       ├── models.py           # SQL tables (facilities, status updates, user centers, removals, action log, users, sessions, audit log, reports, blocked phones)
 │       ├── schemas.py          # Request/response shapes and status rules
 │       ├── config.py           # 6-hour outdated rule, rate limits, city area, duplicate distance, sign-in rules
-│       ├── rate_limit.py       # Per-IP limits (status updates, add/remove/restore, sign in)
+│       ├── rate_limit.py       # Per-IP and per-phone limits (status updates, add/remove/restore, sign in, reports)
 │       ├── account_routes.py   # Sign in/out, /api/me, accounts, audit log endpoints
 │       ├── account_schemas.py  # Request/response shapes for the above
 │       ├── accounts.py         # Create, sign in, sessions, lock/unlock/remove
 │       ├── auth.py             # Role check for admin routes (require_responder, require_super_admin)
 │       ├── audit.py            # audit.record(...) helper for admin actions
 │       ├── security.py         # Password hashing, token hashing
+│       ├── report_routes.py    # Send a report, my reports, nearby hazards, responder list and actions
+│       ├── report_schemas.py   # Request/response shapes for reports
+│       ├── report_service.py   # Report rules: hazard groups, approximate spot, false reports, purge
 │       ├── status_service.py   # Latest status / history, capacity rule (automatic "Full")
 │       ├── database.py         # SQLite connection
 │       ├── weather_service.py  # Sample weather data (stub)
@@ -466,7 +579,7 @@ Based on the project documentation:
 - Emergency contacts screen behind the red phone button (numbers must be
   checked with the Batangas City CDRRMO).
 - Real weather (Open-Meteo) and official warnings in the Early Warning panel.
-- Send incident reports to a server instead of saving them on the phone only.
+- Connect the report screens to the report endpoints (the backend is ready, the old incident form still saves on the phone only).
 - Chatbot that answers from a checked guide only, with the fixed "AI-generated.
   Follow official advisories first." line.
 - Clean-up to match "online only": the offline code in `_later/` and the PWA

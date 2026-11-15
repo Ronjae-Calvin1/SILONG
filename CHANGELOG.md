@@ -2,6 +2,44 @@
 
 Short log of what changed in each update, newest first.
 
+## Update 9 — Help requests and hazard reports (redesign part 2 of 4, backend only)
+- Two kinds of report, sent without an account: **"I need help"** and **hazard**.
+  No photos and no name field. A report has a location, an optional short note and
+  an optional contact. The exact location and the contact are visible only to
+  responders and Super admins.
+- **Phone ID**: a random value the browser sends as the header `X-Phone-Id`, used
+  for "my reports". Not proof of identity. Only its hash is stored.
+- Help requests go to responders only and are never public. The sender sees their
+  own reports and a status: New, Being handled, Resolved (`GET /api/reports/mine`).
+- Hazards: people within 1 km see an approximate spot with no details
+  (`GET /api/hazards/nearby`). Unconfirmed after 3 reports from 3 different phones,
+  Verified once a responder or Super admin verifies it. Reports about the same
+  place (within 100 m) count as one hazard; one phone counts once.
+- Responder actions, all in the audit log: take it, resolve (needs what was done),
+  mark false (needs a reason), verify a hazard. After 3 false reports from one
+  phone, that phone is blocked from sending reports.
+- Responder list `GET /api/responder/reports` for polling about every 10 seconds,
+  with `has_new_help` / `new_help_count` for the red "Needs help" alert.
+- Reports are deleted after 30 days: when the server starts, and with
+  `py scripts/purge_reports.py`.
+- Per-phone and per-IP limits and cooldowns on the public report endpoints. IP
+  addresses are stored hashed only.
+- New tables: `reports`, `blocked_phones` (created on the next start; existing
+  data is untouched).
+- New settings in `backend/app/config.py` (each can be set with an environment
+  variable): `REPORTS_KEEP_DAYS` (30), `HAZARD_UNCONFIRMED_PHONES` (3),
+  `FALSE_REPORTS_BEFORE_BLOCK` (3), `NEAR_ME_KM` (1), `RESPONDER_REFRESH_SECONDS`
+  (10), plus `HAZARD_MERGE_METERS`, `HAZARD_APPROX_METERS` and the `REPORT_*`
+  limits.
+- Tests: `py tests/test_reports.py` (uses its own temporary database).
+- New files: `backend/app/report_routes.py`, `report_schemas.py`,
+  `report_service.py`, `backend/scripts/purge_reports.py`,
+  `backend/tests/test_reports.py`. Changed: `models.py`, `config.py`,
+  `rate_limit.py`, `main.py`.
+- Not in this part: the report and responder screens (the frontend is unchanged
+  and the old incident form still saves on the phone only), places approval,
+  weather, advisories, chatbot.
+
 ## Update 8 — Staff accounts and roles (redesign part 1 of 4, backend only)
 - Staff accounts with two roles: **responder** and **super_admin**. The public
   still has no account and there is no public sign-up. A Super admin creates,

@@ -6,6 +6,8 @@ StatusUpdate: one capacity/availability report for a facility. Rows are never
     edited or deleted, so they form the history; the newest row is the status.
 User / AuthSession / AuditLog: staff accounts (Responder, Super admin), their
     sign-in sessions, and the trail of admin actions (see accounts.py, audit.py).
+Report / BlockedPhone: help requests and hazard reports from the public, and
+    the phones blocked after too many false reports (see report_service.py).
 CachedResponse: generic key/value cache for AI outputs (prep plans, weather
     explainers, etc.) so the frontend can fetch-once and reuse offline.
 """
@@ -133,6 +135,52 @@ class AuditLog(Base):
     target = Column(String, nullable=True)  # what it was done to, e.g. "user:3 (Ana)"
     detail = Column(Text, nullable=True)  # JSON text with the specifics
     ip_hash = Column(String, nullable=True)
+
+
+class Report(Base):
+    """
+    One report from a phone: kind "help" (I need help) or "hazard". No photo and
+    no name. Exact location and contact are for responders only. The phone ID
+    and the IP are stored hashed only. Times are naive UTC.
+
+    Hazard reports about the same place share a group_id (the id of the first
+    one); a help request has no group. group_id is a plain number, not a
+    foreign key, so purging old rows never breaks a group.
+    """
+    __tablename__ = "reports"
+
+    id = Column(Integer, primary_key=True)
+    kind = Column(String, nullable=False)  # "help" | "hazard"
+    status = Column(String, nullable=False, default="new")  # new | being_handled | resolved | false
+    phone_hash = Column(String, nullable=False, index=True)
+    ip_hash = Column(String, nullable=False)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    contact = Column(String, nullable=True)
+    note = Column(String(140), nullable=True)
+    group_id = Column(Integer, nullable=True, index=True)  # hazards only
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    taken_by = Column(String, nullable=True)  # staff name as text (accounts can be removed)
+    taken_at = Column(DateTime, nullable=True)
+    closed_by = Column(String, nullable=True)
+    closed_at = Column(DateTime, nullable=True)
+    resolution_note = Column(Text, nullable=True)  # what was done (required to resolve)
+    false_reason = Column(Text, nullable=True)  # why it is false (required to mark false)
+    verified_by = Column(String, nullable=True)
+    verified_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (Index("ix_reports_kind_status", "kind", "status"),)
+
+
+class BlockedPhone(Base):
+    """A phone (hashed ID) that may no longer send reports. Kept when old reports are purged."""
+    __tablename__ = "blocked_phones"
+
+    id = Column(Integer, primary_key=True)
+    phone_hash = Column(String, unique=True, index=True, nullable=False)
+    blocked_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    false_reports = Column(Integer, nullable=False, default=0)  # how many it had when blocked
 
 
 class StatusUpdate(Base):

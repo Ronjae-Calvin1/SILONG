@@ -68,3 +68,42 @@ SIGNIN_IP_WINDOW_SECONDS = int(_number("SIGNIN_IP_WINDOW_SECONDS", 600))
 
 # Shortest password a Super admin can give a new account (a typo guard, not a policy).
 MIN_PASSWORD_LENGTH = int(_number("MIN_PASSWORD_LENGTH", 8))
+
+# ---- Help requests and hazard reports (redesign part 2) ----
+# Reports (both kinds) are deleted this many days after they were sent.
+REPORTS_KEEP_DAYS = int(_number("REPORTS_KEEP_DAYS", 30))
+
+# A hazard shows to the public as "Unconfirmed" once this many DIFFERENT phones
+# reported it. A responder or Super admin can verify it sooner.
+HAZARD_UNCONFIRMED_PHONES = int(_number("HAZARD_UNCONFIRMED_PHONES", 3))
+
+# After this many reports marked false from one phone, that phone cannot send reports.
+FALSE_REPORTS_BEFORE_BLOCK = int(_number("FALSE_REPORTS_BEFORE_BLOCK", 3))
+
+# "Near me" range for hazard reports, in kilometres.
+NEAR_ME_KM = _number("NEAR_ME_KM", 1)
+
+# The responder screens poll about this often (seconds). Sent to the screen with every list.
+RESPONDER_REFRESH_SECONDS = int(_number("RESPONDER_REFRESH_SECONDS", 10))
+
+# Hazard reports closer than this (metres) to an open hazard are the same hazard.
+HAZARD_MERGE_METERS = int(_number("HAZARD_MERGE_METERS", 100))
+
+# The public sees a hazard only as the middle of a square of this size (metres).
+HAZARD_APPROX_METERS = int(_number("HAZARD_APPROX_METERS", 250))
+
+# Longest text accepted in a report.
+REPORT_NOTE_MAX = 140
+REPORT_CONTACT_MAX = 60
+
+# ---- Limits on the public report endpoints (no accounts: phone ID + IP) ----
+# One report of each kind per phone every this many seconds...
+REPORT_PHONE_COOLDOWN_SECONDS = int(_number("REPORT_PHONE_COOLDOWN_SECONDS", 30))
+# ...at most this many reports per phone in the window below...
+REPORT_PHONE_MAX = int(_number("REPORT_PHONE_MAX", 6))
+# ...and at most this many per IP (higher: many phones can share one IP).
+REPORT_IP_MAX = int(_number("REPORT_IP_MAX", 30))
+REPORT_WINDOW_SECONDS = int(_number("REPORT_WINDOW_SECONDS", 3600))
+# Reading "my reports" and nearby hazards: at most this many requests per IP and per phone per window.
+REPORT_READ_MAX = int(_number("REPORT_READ_MAX", 60))
+REPORT_READ_WINDOW_SECONDS = int(_number("REPORT_READ_WINDOW_SECONDS", 60))
