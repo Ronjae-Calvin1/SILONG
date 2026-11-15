@@ -1,0 +1,577 @@
+From b953a346a9835c79c466d3344f5ad31452b524cc Mon Sep 17 00:00:00 2001
+From: Claude <claude@example.invalid>
+Date: Sun, 15 Nov 2026 08:43:41 +0000
+Subject: [PATCH] Backend part 2b: report fields category, people, can_move
+
+category (required, 1-40), people (1-999) and can_move (yes/no/unsure) for
+help requests only, contact required for help requests. Responders see all
+three; the public hazard output gets category only; my reports shows the
+sender's category. Existing databases get the new columns on start.
+---
+ CHANGELOG.md                     |  24 +++++
+ README.md                        |  40 +++++++--
+ backend/app/config.py            |   2 +
+ backend/app/main.py              |   2 +
+ backend/app/models.py            |   4 +
+ backend/app/report_routes.py     |   7 +-
+ backend/app/report_schemas.py    |  32 ++++++-
+ backend/app/report_service.py    |  40 ++++++++-
+ backend/scripts/purge_reports.py |   1 +
+ backend/tests/test_reports.py    | 149 ++++++++++++++++++++++++++++++-
+ 10 files changed, 282 insertions(+), 19 deletions(-)
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 039cdc9..8496279 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -2,6 +2,30 @@
+ 
+ Short log of what changed in each update, newest first.
+ 
++## Update 9b — Report fields: category, people, can move (backend only)
++- Small change to the reports from update 9, to match the incident form.
++- `POST /api/reports` now needs a **`category`** (1 to 40 characters: what the
++  hazard or need is, for example "Flooded road" or "Trapped"). Help requests
++  may also send **`people`** (whole number, 1 to 999) and **`can_move`**
++  (`"yes"`, `"no"` or `"unsure"`). Both are refused with a clear 422 on a hazard.
++  Any other field is still refused.
++- **`contact` is now required for help requests** and stays optional for hazards.
++- Responders see `category`, `people` and `can_move` in the list and in the
++  take / resolve / mark-false / verify responses (a hazard also lists every
++  different `categories`). The public hazard output (`/api/hazards/nearby`)
++  gets `category` and nothing else. "My reports" shows the sender's own
++  `category`. People and can move are never shown to the public.
++- Hazards within 100 m still group together whatever the category; the first
++  report's category is the one shown.
++- New columns `category`, `people`, `can_move` on `reports`, added
++  automatically to an existing database on the next start. Old reports keep
++  their data and show an empty category.
++- Tests: `py tests/test_reports.py` has new checks for all of the above,
++  including upgrading a database made by update 9.
++- Changed: `report_schemas.py`, `report_service.py`, `report_routes.py`,
++  `models.py`, `config.py`, `main.py`, `scripts/purge_reports.py`,
++  `tests/test_reports.py`. No frontend change.
++
+ ## Update 9 — Help requests and hazard reports (redesign part 2 of 4, backend only)
+ - Two kinds of report, sent without an account: **"I need help"** and **hazard**.
+   No photos and no name field. A report has a location, an optional short note and
+diff --git a/README.md b/README.md
+index 84c35db..d16e5d8 100644
+--- a/README.md
++++ b/README.md
+@@ -370,9 +370,25 @@ creating it again.
+ ## Help requests and hazard reports
+ 
+ Two kinds of report, sent without an account. There are **no photos and no name
+-field**: a report has a location, an optional short note and an optional contact
+-(a phone number or similar). The exact location and the contact are visible only
+-to responders and Super admins (`backend/app/report_service.py`).
++field**. A report has a `category`, a location and a short optional `note`; a
++help request also has a required `contact` (a phone number the responders can
++call) and optional `people` and `can_move`. The exact location and the contact are
++visible only to responders and Super admins (`backend/app/report_service.py`).
++
++| Field | Help request | Hazard |
++| --- | --- | --- |
++| `kind` | `"help"` | `"hazard"` |
++| `category` | Required, 1 to 40 characters: what the need is (for example "Trapped") | Required, 1 to 40 characters: what the hazard is (for example "Flooded road") |
++| `latitude`, `longitude` | Required, inside Batangas City | Required, inside Batangas City |
++| `contact` | **Required** | Optional |
++| `note` | Optional, up to 140 characters | Optional, up to 140 characters |
++| `people` | Optional whole number, 1 to 999 | Refused (422) |
++| `can_move` | Optional: `"yes"`, `"no"` or `"unsure"` | Refused (422) |
++
++Any other field (a name, a photo) is refused with 422. The incident form in the
++frontend sends its type as `kind`, its text as `details`, `people` and `canMove`;
++the API names them `category`, `note`, `people` and `can_move`, and its own `kind`
++is the form's help / hazard mode.
+ 
+ - **"I need help"** (`"kind": "help"`) goes to responders only and is never
+   public. The sender sees only their own reports and a status: **New**, **Being
+@@ -390,9 +406,9 @@ data gives the phone a new one. Only its SHA-256 hash is stored.
+ 
+ | Method | Path | Who | What it does |
+ | --- | --- | --- | --- |
+-| POST | `/api/reports` | Public (`X-Phone-Id`) | Send a report. Body: `kind`, `latitude`, `longitude`, optional `contact`, `note`. 201 (200 if this phone already reported this hazard) |
+-| GET | `/api/reports/mine` | Public (`X-Phone-Id`) | This phone's own reports, newest first: its own location and a status. No contact, no handler, no reason |
+-| GET | `/api/hazards/nearby` | Public | `latitude`, `longitude` in the query. Unconfirmed or Verified hazards within the near-me range, as an approximate spot and a status |
++| POST | `/api/reports` | Public (`X-Phone-Id`) | Send a report (fields above). 201 (200 if this phone already reported this hazard) |
++| GET | `/api/reports/mine` | Public (`X-Phone-Id`) | This phone's own reports, newest first: its own location, its `category` and a status. No contact, no people, no handler, no reason |
++| GET | `/api/hazards/nearby` | Public | `latitude`, `longitude` in the query. Unconfirmed or Verified hazards within the near-me range: an approximate spot, a status and the `category`, nothing else |
+ | GET | `/api/responder/reports` | Responder, Super admin | The list for the responder screens (poll about every 10 seconds). `include_closed`, `kind` filters |
+ | POST | `/api/responder/reports/{id}/take` | Responder, Super admin | New to Being handled. 409 if another person already has it |
+ | POST | `/api/responder/reports/{id}/resolve` | Responder, Super admin | Needs `what_was_done` |
+@@ -408,12 +424,15 @@ and verify are each written to the audit log with the person's name
+ and `has_new_help` (true while any help request is still New: show the red
+ "Needs help" alert), `latest_report_id`, and `items`. Help requests nobody has
+ taken come first, longest waiting first. An item has the exact `latitude` and
+-`longitude`, `contacts` and `notes`, who took or closed it, and for a hazard its
++`longitude`, `category` (and `categories`, every different category sent for a
++hazard), `people` and `can_move` (help requests only, empty on hazards),
++`contacts` and `notes`, who took or closed it, and for a hazard its
+ `hazard_state` (`pending`, `unconfirmed`, `verified`) and how many different
+ `phones` sent it. Use an item's `id` in the action endpoints.
+ 
+ **How hazards are grouped.** A hazard report within **100 m** of the first report
+-of an open hazard counts as the same hazard. One phone counts once per hazard
++of an open hazard counts as the same hazard, whatever its category. The public and
++the responder item show the category of the first report. One phone counts once per hazard
+ (sending it again returns the earlier report). Take, resolve, mark false and
+ verify on a hazard apply to all its reports. A resolved or false hazard is closed:
+ a new report at that place starts a new hazard.
+@@ -473,6 +492,11 @@ public, that a hazard is hidden beyond 1 km, that 3 different phones (not 3 repo
+ from one phone) make it Unconfirmed, Verified, the false report block, the purge,
+ the limits and the role checks.
+ 
++**Older databases.** The `category`, `people` and `can_move` columns are added to
++an existing `reports` table automatically when the server starts (and when
++`scripts/purge_reports.py` runs). Reports sent before that keep working and show
++an empty category.
++
+ **Not built yet:** the report screens and the responder screens (the frontend
+ still has the old incident form), and a way for a Super admin to lift a phone
+ block.
+diff --git a/backend/app/config.py b/backend/app/config.py
+index 1587e8c..2be1b76 100644
+--- a/backend/app/config.py
++++ b/backend/app/config.py
+@@ -95,6 +95,8 @@ HAZARD_APPROX_METERS = int(_number("HAZARD_APPROX_METERS", 250))
+ # Longest text accepted in a report.
+ REPORT_NOTE_MAX = 140
+ REPORT_CONTACT_MAX = 60
++REPORT_CATEGORY_MAX = 40  # what the hazard or need is, e.g. "Flooded road", "Trapped"
++REPORT_PEOPLE_MAX = 999  # help requests: how many people need help
+ 
+ # ---- Limits on the public report endpoints (no accounts: phone ID + IP) ----
+ # One report of each kind per phone every this many seconds...
+diff --git a/backend/app/main.py b/backend/app/main.py
+index 1415114..95cea06 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -46,6 +46,8 @@ _drop_legacy_facilities_table()
+ # manager tables on an existing database) and leaves existing tables untouched,
+ # so nobody has to delete the database file.
+ Base.metadata.create_all(bind=engine)
++# create_all does not add columns to a table that already exists: add the newer report columns.
++report_service.upgrade_report_columns(engine)
+ 
+ 
+ # Real hospitals in Batangas City, from the city government's official
+diff --git a/backend/app/models.py b/backend/app/models.py
+index c074858..3bb26d4 100644
+--- a/backend/app/models.py
++++ b/backend/app/models.py
+@@ -158,6 +158,10 @@ class Report(Base):
+     longitude = Column(Float, nullable=False)
+     contact = Column(String, nullable=True)
+     note = Column(String(140), nullable=True)
++    # Added in part 2b. Empty on reports sent before that (see report_service.upgrade_report_columns).
++    category = Column(String(40), nullable=True)  # what the hazard or need is, e.g. "Flooded road"
++    people = Column(Integer, nullable=True)  # help requests only: how many people need help
++    can_move = Column(String, nullable=True)  # help requests only: "yes" | "no" | "unsure"
+     group_id = Column(Integer, nullable=True, index=True)  # hazards only
+     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
+     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+diff --git a/backend/app/report_routes.py b/backend/app/report_routes.py
+index c91574d..887652e 100644
+--- a/backend/app/report_routes.py
++++ b/backend/app/report_routes.py
+@@ -63,7 +63,11 @@ def send_report(
+     payload: ReportIn, request: Request, response: Response,
+     phone: str = Depends(required_phone), db: Session = Depends(get_db),
+ ):
+-    """Send a help request ("kind": "help") or a hazard report ("kind": "hazard"). Field rules are in ReportIn."""
++    """
++    Send a help request ("kind": "help") or a hazard report ("kind": "hazard"). Both need a
++    `category`; a help request also needs a `contact` and may have `people` and `can_move`
++    (not allowed on a hazard). Field rules are in ReportIn.
++    """
+     if report_service.is_blocked(db, phone):
+         raise HTTPException(
+             status_code=403,
+@@ -84,6 +88,7 @@ def send_report(
+ 
+     row, created = report_service.create_report(
+         db, payload.kind, payload.latitude, payload.longitude, payload.contact, payload.note, phone, _ip(request),
++        category=payload.category, people=payload.people, can_move=payload.can_move,
+     )
+     db.commit()
+     db.refresh(row)
+diff --git a/backend/app/report_schemas.py b/backend/app/report_schemas.py
+index c6ebbb7..c09a870 100644
+--- a/backend/app/report_schemas.py
++++ b/backend/app/report_schemas.py
+@@ -2,7 +2,7 @@
+ from datetime import datetime, timezone
+ from typing import List, Literal, Optional
+ 
+-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
++from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
+ 
+ from . import config
+ from .schemas import _clean_text
+@@ -24,10 +24,21 @@ class ReportIn(BaseModel):
+     model_config = ConfigDict(extra="forbid")
+ 
+     kind: Literal["help", "hazard"]
++    category: str  # required: what the hazard or need is (1 to 40 characters), e.g. "Flooded road", "Trapped"
+     latitude: float = Field(allow_inf_nan=False)
+     longitude: float = Field(allow_inf_nan=False)
+-    contact: Optional[str] = None  # optional; only responders and Super admins ever see it
++    contact: Optional[str] = None  # required for a help request, optional for a hazard; responders and Super admins only
+     note: Optional[str] = None  # optional, short
++    people: Optional[StrictInt] = Field(default=None, ge=1, le=config.REPORT_PEOPLE_MAX)  # help requests only
++    can_move: Optional[Literal["yes", "no", "unsure"]] = None  # help requests only
++
++    @field_validator("category")
++    @classmethod
++    def _category_clean(cls, v: str) -> str:
++        v = " ".join(v.split())
++        if not (1 <= len(v) <= config.REPORT_CATEGORY_MAX):
++            raise ValueError(f"Category must be 1 to {config.REPORT_CATEGORY_MAX} characters.")
++        return v
+ 
+     @field_validator("contact")
+     @classmethod
+@@ -39,6 +50,17 @@ class ReportIn(BaseModel):
+     def _note_clean(cls, v):
+         return _clean_text(v, config.REPORT_NOTE_MAX, "Note")
+ 
++    @model_validator(mode="after")
++    def _kind_rules(self):
++        if self.kind == "help" and not self.contact:
++            raise ValueError("A help request needs a contact (a phone number the responders can call).")
++        if self.kind == "hazard":
++            if self.people is not None:
++                raise ValueError("people can only be sent with a help request, not with a hazard report.")
++            if self.can_move is not None:
++                raise ValueError("can_move can only be sent with a help request, not with a hazard report.")
++        return self
++
+     @model_validator(mode="after")
+     def _inside_city(self):
+         south, west, north, east = config.BATANGAS_CITY_BBOX
+@@ -65,6 +87,7 @@ class MyReportOut(BaseModel):
+     kind: Literal["help", "hazard"]
+     status: Literal["new", "being_handled", "resolved"]
+     label: str  # New | Being handled | Resolved
++    category: Optional[str] = None  # empty only on reports sent before this field existed
+     latitude: float
+     longitude: float
+     note: Optional[str] = None
+@@ -79,6 +102,7 @@ class NearbyHazardOut(BaseModel):
+     longitude: float  # approximate
+     status: Literal["unconfirmed", "verified"]
+     label: str  # Unconfirmed | Verified
++    category: Optional[str] = None  # what it is (from the first report); the only detail the public gets
+ 
+ 
+ class ResolveIn(BaseModel):
+@@ -113,6 +137,10 @@ class ResponderReportOut(BaseModel):
+     kind: Literal["help", "hazard"]
+     status: Literal["new", "being_handled", "resolved", "false"]
+     is_new_help: bool  # a help request nobody has taken yet (the red alert)
++    category: Optional[str] = None  # what it is; for a hazard, from its first report
++    categories: List[str] = []  # every different category sent for this hazard (one entry for a help request)
++    people: Optional[int] = None  # help requests: how many people need help
++    can_move: Optional[Literal["yes", "no", "unsure"]] = None  # help requests: can the person move?
+     latitude: float  # exact
+     longitude: float  # exact
+     contacts: List[str]
+diff --git a/backend/app/report_service.py b/backend/app/report_service.py
+index e1ee58f..fc9630b 100644
+--- a/backend/app/report_service.py
++++ b/backend/app/report_service.py
+@@ -133,7 +133,8 @@ def _hazard_group_of(db: Session, row: Report) -> List[Report]:
+ 
+ def create_report(
+     db: Session, kind: str, lat: float, lng: float, contact: Optional[str], note: Optional[str],
+-    phone_hash: str, ip: str,
++    phone_hash: str, ip: str, category: Optional[str] = None,
++    people: Optional[int] = None, can_move: Optional[str] = None,
+ ) -> Tuple[Report, bool]:
+     """
+     Add a report. Returns (report, created). created is False when this phone
+@@ -144,6 +145,7 @@ def create_report(
+     base = dict(
+         kind=kind, phone_hash=phone_hash, ip_hash=hash_ip(ip), latitude=lat, longitude=lng,
+         contact=contact, note=note, status=NEW, created_at=now, updated_at=now,
++        category=category, people=people, can_move=can_move,
+     )
+     if kind == HELP:
+         row = Report(**base)
+@@ -190,7 +192,7 @@ def reports_of_phone(db: Session, phone_hash: str, limit: int = 100) -> List[dic
+     for r in rows:
+         status = PUBLIC_STATUS[r.status]
+         out.append(dict(
+-            id=r.id, kind=r.kind, status=status, label=PUBLIC_LABEL[status],
++            id=r.id, kind=r.kind, status=status, label=PUBLIC_LABEL[status], category=r.category,
+             latitude=r.latitude, longitude=r.longitude, note=r.note,
+             created_at=r.created_at, updated_at=r.updated_at,
+         ))
+@@ -214,7 +216,7 @@ def nearby_hazards(db: Session, lat: float, lng: float) -> List[dict]:
+         if distance_m(lat, lng, a_lat, a_lng) > radius_m:
+             continue
+         out.append(dict(
+-            id=rows[0].id, latitude=a_lat, longitude=a_lng,
++            id=rows[0].id, latitude=a_lat, longitude=a_lng, category=rows[0].category,
+             status=state, label="Verified" if state == "verified" else "Unconfirmed",
+         ))
+     out.sort(key=lambda h: h["id"])
+@@ -230,8 +232,10 @@ def _item(rows: List[Report]) -> dict:
+     state = hazard_state(rows) if is_hazard else None
+     latest = max(rows, key=lambda r: r.updated_at)
+     verified = next((r for r in rows if r.verified_at is not None), None)
+-    contacts, notes = [], []
++    contacts, notes, categories = [], [], []
+     for r in rows:
++        if r.category and r.category not in categories:
++            categories.append(r.category)
+         if r.contact and r.contact not in contacts:
+             contacts.append(r.contact)
+         if r.note and r.note not in notes:
+@@ -239,6 +243,9 @@ def _item(rows: List[Report]) -> dict:
+     return dict(
+         id=first.id, kind=first.kind, status=first.status,
+         is_new_help=first.kind == HELP and first.status == NEW,
++        category=first.category, categories=categories,
++        people=first.people if first.kind == HELP else None,
++        can_move=first.can_move if first.kind == HELP else None,
+         latitude=first.latitude, longitude=first.longitude,
+         contacts=contacts, notes=notes,
+         created_at=first.created_at, updated_at=latest.updated_at,
+@@ -374,6 +381,31 @@ def verify(db: Session, user: User, report_id: int, request: Optional[Request])
+     return _item(rows)
+ 
+ 
++# ------------------------------------------------------------ upgrading an existing database
++
++# Columns added after the reports table first shipped: name -> SQL type.
++_ADDED_REPORT_COLUMNS = {"category": "VARCHAR(40)", "people": "INTEGER", "can_move": "VARCHAR"}
++
++
++def upgrade_report_columns(engine) -> List[str]:
++    """
++    Base.metadata.create_all makes missing tables but never adds a column to one
++    that exists. This adds the part 2b columns to a reports table made by part 2,
++    keeping every row (old reports simply have no category). Does nothing on a
++    new or already upgraded database. Returns the columns it added.
++    """
++    from sqlalchemy import inspect, text
++    insp = inspect(engine)
++    if not insp.has_table("reports"):
++        return []
++    have = {c["name"] for c in insp.get_columns("reports")}
++    added = [name for name in _ADDED_REPORT_COLUMNS if name not in have]
++    with engine.begin() as conn:
++        for name in added:
++            conn.execute(text(f"ALTER TABLE reports ADD COLUMN {name} {_ADDED_REPORT_COLUMNS[name]}"))
++    return added
++
++
+ # ------------------------------------------------------------ deleting old reports
+ 
+ def purge_old_reports(db: Session, now: Optional[datetime] = None) -> int:
+diff --git a/backend/scripts/purge_reports.py b/backend/scripts/purge_reports.py
+index 6c30b21..fe7e5c0 100644
+--- a/backend/scripts/purge_reports.py
++++ b/backend/scripts/purge_reports.py
+@@ -20,6 +20,7 @@ from app import models  # noqa: E402,F401  (makes sure every table is known)
+ 
+ def main() -> int:
+     Base.metadata.create_all(bind=engine)  # makes the report tables if this is a new database
++    report_service.upgrade_report_columns(engine)  # and adds newer columns to an older reports table
+     db = SessionLocal()
+     try:
+         deleted = report_service.purge_old_reports(db)
+diff --git a/backend/tests/test_reports.py b/backend/tests/test_reports.py
+index f5c1db7..ad0baf4 100644
+--- a/backend/tests/test_reports.py
++++ b/backend/tests/test_reports.py
+@@ -74,7 +74,12 @@ def new_phone():
+ 
+ 
+ def send(phone, kind, where=HOME, **extra):
+-    body = {"kind": kind, "latitude": where[0], "longitude": where[1], **extra}
++    """Sends a report. A help request gets a contact and every report a category unless the test gives its own."""
++    body = {"kind": kind, "category": "Trapped" if kind == "help" else "Flooded road",
++            "latitude": where[0], "longitude": where[1], **extra}
++    if kind == "help" and "contact" not in extra:
++        body["contact"] = "0917 000 0000"
++    body = {k: v for k, v in body.items() if v is not None}  # contact=None means "leave it out"
+     return client.post("/api/reports", headers={"X-Phone-Id": phone}, json=body)
+ 
+ 
+@@ -137,7 +142,7 @@ def test_no_name_no_photo_nothing_extra_is_accepted():
+ 
+ 
+ def test_phone_id_is_required_and_checked():
+-    body = {"kind": "help", "latitude": HOME[0], "longitude": HOME[1]}
++    body = {"kind": "help", "category": "Trapped", "contact": "0917 000 0000", "latitude": HOME[0], "longitude": HOME[1]}
+     assert client.post("/api/reports", json=body).status_code == 400
+     assert client.post("/api/reports", json=body, headers={"X-Phone-Id": "short"}).status_code == 400
+     assert client.post("/api/reports", json=body, headers={"X-Phone-Id": "has spaces in it, not allowed!!"}).status_code == 400
+@@ -150,7 +155,7 @@ def test_location_must_be_in_the_city_and_text_is_limited():
+     assert send(phone, "help", note="x" * (config.REPORT_NOTE_MAX + 1)).status_code == 422
+     assert send(phone, "help", contact="9" * (config.REPORT_CONTACT_MAX + 1)).status_code == 422
+     assert send(phone, "teapot").status_code == 422
+-    assert client.post("/api/reports", headers={"X-Phone-Id": phone}, content='{"kind":"help","latitude":NaN,"longitude":121}').status_code == 422
++    assert client.post("/api/reports", headers={"X-Phone-Id": phone}, content='{"kind":"help","category":"x","contact":"1","latitude":NaN,"longitude":121}').status_code == 422
+     assert mine(phone) == []
+ 
+ 
+@@ -217,7 +222,8 @@ def test_hazard_is_hidden_beyond_one_km_and_shows_only_an_approximate_spot():
+     close = nearby(NEAR)  # about 500 m away
+     assert len(close) == 1
+     spot = close[0]
+-    assert set(spot) == {"id", "latitude", "longitude", "status", "label"}  # no details at all
++    assert set(spot) == {"id", "latitude", "longitude", "status", "label", "category"}  # category is the only detail
++    assert spot["category"] == "Flooded road"
+     assert spot["status"] == "unconfirmed"
+     # Approximate: not the exact point, but still close to it.
+     assert (spot["latitude"], spot["longitude"]) != HOME
+@@ -662,6 +668,141 @@ def test_purge_script_runs():
+     assert "Deleted" in out.stdout and "report(s)" in out.stdout
+ 
+ 
++# --------------------------------------------------------------------------- part 2b: category, people, can_move
++
++def test_category_is_required_and_limited():
++    phone = new_phone()
++    body = {"kind": "hazard", "latitude": HOME[0], "longitude": HOME[1]}
++    post = lambda b: client.post("/api/reports", headers={"X-Phone-Id": phone}, json=b)  # noqa: E731
++    assert post(body).status_code == 422  # missing
++    for bad in ("", "   ", "x" * (config.REPORT_CATEGORY_MAX + 1)):
++        assert post({**body, "category": bad}).status_code == 422, repr(bad)
++    ok = post({**body, "category": "  Fallen   tree or pole "})
++    assert ok.status_code == 201, ok.text
++    assert mine(phone)[0]["category"] == "Fallen tree or pole"  # trimmed, single spaces
++    assert post({**body, "category": "x" * config.REPORT_CATEGORY_MAX}).status_code in (200, 201)  # 40 is allowed
++
++
++def test_contact_is_required_for_help_and_optional_for_hazards():
++    phone = new_phone()
++    base = {"kind": "help", "category": "Trapped", "latitude": HOME[0], "longitude": HOME[1]}
++    for extra in ({}, {"contact": ""}, {"contact": "   "}, {"contact": None}):
++        r = client.post("/api/reports", headers={"X-Phone-Id": phone}, json={**base, **extra})
++        assert r.status_code == 422 and "contact" in json.dumps(r.json()).lower(), (extra, r.text)
++    assert mine(phone) == []
++    assert send(phone, "help", contact="0917 123 4567").status_code == 201
++    haz = {"kind": "hazard", "category": "Landslide", "latitude": FAR[0], "longitude": FAR[1]}
++    assert client.post("/api/reports", headers={"X-Phone-Id": new_phone()}, json=haz).status_code == 201  # no contact: fine
++    assert send(new_phone(), "hazard", where=FAR, contact="0917 555 6666").status_code in (200, 201)
++
++
++def test_people_and_can_move_are_for_help_requests_only():
++    phone = new_phone()
++    # Allowed on a help request, and both are optional.
++    assert send(phone, "help", people=1, can_move="yes").status_code == 201
++    assert send(phone, "help", people=999, can_move="no").status_code == 201
++    assert send(phone, "help", can_move="unsure").status_code == 201
++    assert send(phone, "help").status_code == 201
++    # Wrong values.
++    for extra in ({"people": 0}, {"people": 1000}, {"people": -3}, {"people": 2.5}, {"people": "3"},
++                  {"people": True}, {"can_move": "maybe"}, {"can_move": ""}, {"can_move": "Yes"}):
++        r = send(phone, "help", **extra)
++        assert r.status_code == 422, f"{extra} gave {r.status_code}"
++    # Refused on a hazard, with a message that says why.
++    for extra, word in (({"people": 2}, "people"), ({"can_move": "yes"}, "can_move")):
++        r = send(phone, "hazard", **extra)
++        assert r.status_code == 422, extra
++        assert word in json.dumps(r.json()) and "help request" in json.dumps(r.json())
++    # Anything else is still refused.
++    assert send(phone, "help", injured=2).status_code == 422
++    assert send(phone, "help", name="Juan").status_code == 422
++
++
++def test_responders_see_category_people_and_can_move_the_public_does_not():
++    _clean_slate_hazards()
++    phone, other = new_phone(), new_phone()
++    r = send(phone, "help", category="Need rescue", people=4, can_move="unsure", contact="0917 PRIVATE 1")
++    assert r.status_code == 201
++    rid = r.json()["id"]
++    item = next(i for i in staff_list()["items"] if i["id"] == rid)
++    assert (item["category"], item["people"], item["can_move"]) == ("Need rescue", 4, "unsure")
++    assert item["categories"] == ["Need rescue"]
++    # The action responses carry the same fields.
++    taken = client.post(f"/api/responder/reports/{rid}/take", headers=H_RESP).json()
++    assert (taken["category"], taken["people"], taken["can_move"]) == ("Need rescue", 4, "unsure")
++    # The sender sees their own category, but not the head count or can_move or the contact.
++    mine_now = next(m for m in mine(phone) if m["id"] == rid)
++    assert mine_now["category"] == "Need rescue"
++    assert not ({"people", "can_move", "contact"} & set(mine_now))
++    # The public sees none of it.
++    assert mine(other) == [] and nearby(HOME) == []
++    for text in (client.get("/api/facilities").text, json.dumps(nearby(HOME, other))):
++        assert "Need rescue" not in text and "PRIVATE" not in text
++    # A hazard item has no people / can_move.
++    hz = send(new_phone(), "hazard", where=FAR, category="Landslide").json()["id"]
++    hz_item = next(i for i in staff_list(kind="hazard")["items"] if i["id"] == hz)
++    assert hz_item["category"] == "Landslide" and hz_item["people"] is None and hz_item["can_move"] is None
++    # Close what this check opened.
++    client.post(f"/api/responder/reports/{rid}/resolve", headers=H_RESP, json={"what_was_done": "test clean-up"})
++    client.post(f"/api/responder/reports/{hz}/resolve", headers=H_RESP, json={"what_was_done": "test clean-up"})
++
++
++def test_hazards_group_whatever_the_category():
++    _clean_slate_hazards()
++    cats = ["Flooded road", "Blocked road", "Other"]
++    phones = [new_phone() for _ in cats]
++    for i, (p, c) in enumerate(zip(phones, cats)):
++        assert send(p, "hazard", where=(HOME[0] + 0.0002 * i, HOME[1]), category=c).status_code == 201  # all within ~45 m
++    items = staff_list(kind="hazard")["items"]
++    assert len(items) == 1 and items[0]["report_count"] == 3 and items[0]["phones"] == 3
++    assert items[0]["category"] == "Flooded road"  # the first report's
++    assert items[0]["categories"] == cats
++    spots = nearby(HOME)
++    assert len(spots) == 1 and spots[0]["status"] == "unconfirmed" and spots[0]["category"] == "Flooded road"
++    assert set(spots[0]) == {"id", "latitude", "longitude", "status", "label", "category"}
++    # The same phone sending a different category for the same place still counts once.
++    again = send(phones[0], "hazard", category="Landslide")
++    assert again.status_code == 200
++    assert staff_list(kind="hazard")["items"][0]["report_count"] == 3
++
++
++def test_an_older_database_gets_the_new_columns_and_keeps_its_reports():
++    """A reports table made by part 2 (no category / people / can_move) is upgraded on start."""
++    import sqlite3
++    import subprocess
++    old_db = Path(_tmp) / "old-part2.db"
++    con = sqlite3.connect(old_db)
++    con.executescript("""
++        CREATE TABLE reports (
++            id INTEGER PRIMARY KEY, kind VARCHAR NOT NULL, status VARCHAR NOT NULL, phone_hash VARCHAR NOT NULL,
++            ip_hash VARCHAR NOT NULL, latitude FLOAT NOT NULL, longitude FLOAT NOT NULL, contact VARCHAR,
++            note VARCHAR(140), group_id INTEGER, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL,
++            taken_by VARCHAR, taken_at DATETIME, closed_by VARCHAR, closed_at DATETIME,
++            resolution_note TEXT, false_reason TEXT, verified_by VARCHAR, verified_at DATETIME);
++        INSERT INTO reports (kind, status, phone_hash, ip_hash, latitude, longitude, contact, note, created_at, updated_at)
++            VALUES ('help', 'new', 'oldphone', 'x', 13.75, 121.05, '0917 OLD', 'from part 2', datetime('now'), datetime('now'));
++    """)
++    con.commit()
++    con.close()
++    code = (
++        "import sys; sys.path.insert(0, %r)\n"
++        "from app.main import app\n"
++        "from app.database import SessionLocal\n"
++        "from app.models import Report\n"
++        "db = SessionLocal(); r = db.query(Report).one()\n"
++        "print(r.note, r.category, r.people, r.can_move)\n"
++        "from app import report_service, database\n"
++        "print('again', report_service.upgrade_report_columns(database.engine))\n"
++    ) % str(Path(__file__).resolve().parent.parent)
++    env = dict(os.environ, DATABASE_URL=f"sqlite:///{old_db}")
++    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env)
++    assert out.returncode == 0, out.stderr
++    assert "from part 2 None None None" in out.stdout  # old row kept, new columns empty
++    assert "again []" in out.stdout  # a second start adds nothing
++    cols = {row[1] for row in sqlite3.connect(old_db).execute("PRAGMA table_info(reports)")}
++    assert {"category", "people", "can_move"} <= cols
++
++
+ def test_existing_endpoints_still_work():
+     assert client.get("/api/health").status_code == 200
+     assert len(client.get("/api/facilities").json()) > 0
+-- 
+2.43.0
+
