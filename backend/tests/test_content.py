@@ -393,12 +393,22 @@ class NoNetwork:
     def __enter__(self):
         self.hits = []
 
+        real_connect = socket.socket.connect
+
         def boom(*a, **k):
             self.hits.append(a)
             raise AssertionError("The chat code must not use the network.")
 
+        def guarded_connect(sock, address, *a, **k):
+            # On Windows, asyncio (used by the test client) joins its own two sockets over
+            # 127.0.0.1 to start. That is not the network, so let it through.
+            host = address[0] if isinstance(address, tuple) else address
+            if host in ("127.0.0.1", "::1", "localhost"):
+                return real_connect(sock, address, *a, **k)
+            return boom(address)
+
         self.patches = [
-            mock.patch.object(socket.socket, "connect", boom),
+            mock.patch.object(socket.socket, "connect", guarded_connect),
             mock.patch.object(socket, "create_connection", boom),
             mock.patch.object(socket, "getaddrinfo", boom),
             mock.patch.object(urllib.request, "urlopen", boom),

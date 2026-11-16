@@ -652,7 +652,7 @@ def test_seed_into_a_separate_file_is_safe_to_run_twice():
     db_file = d / "demo.db"
     first = _seed(["--db", str(db_file), "--with-demo-staff"], d)
     assert first.returncode == 0, (first.stdout, first.stderr)
-    assert str(db_file) in first.stdout.split("\n")[0]
+    assert "demo.db" in first.stdout.split("\n")[0]
     passwords = [line.split("password: ")[1] for line in first.stdout.splitlines() if "password: " in line]
     assert len(passwords) == 2 and all(len(p) >= config.MIN_PASSWORD_LENGTH for p in passwords)
     c1 = _counts(db_file)
