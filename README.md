@@ -25,6 +25,8 @@ documentation). `CHANGELOG.md` lists what changed in each update.
 describes what the code does today, and the "Planned" rows below describe what
 is designed but not built.
 
+Frontend developer: start with [`docs/FRONTEND_TODO.md`](docs/FRONTEND_TODO.md), one checklist for connecting the screens to the server and building the staff screens.
+
 ## What the site does
 
 | Function | What it does | Status |

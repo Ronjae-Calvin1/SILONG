@@ -17,6 +17,8 @@ into the README and mark it "Working" here.
 | Frontend | Responder and Super admin screens, the phone ID on every public call, labels and pin looks for pending places and "Confirmed by official" | Not built |
 | After Nov 20 | Two-step sign in | Planned |
 
+Frontend checklist: [`FRONTEND_TODO.md`](FRONTEND_TODO.md).
+
 The sections below say "(working)" where the server already follows them. The
 "Settings to confirm" table says which settings exist in `config.py`.
 
