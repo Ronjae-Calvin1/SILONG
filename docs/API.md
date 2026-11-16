@@ -53,7 +53,7 @@ body is a list of `{type, loc, msg}`). Show `detail` to the person when it is a 
 
 1. Send the header `X-Phone-Id: <your 16 to 64 character ID>`.
 2. `POST /api/reports` with `{"kind": "hazard", "category": "Flooded road", "latitude": 13.7565, "longitude": 121.0583, "note": "Knee deep"}`. Answer `201`: `{"id", "kind", "status": "new", "label", "created_at", "message"}`.
-3. `GET /api/reports/mine` lists this phone's reports and their status. `GET /api/hazards/nearby?lat=..&lng=..` shows hazards others can see.
+3. `GET /api/reports/mine` lists this phone's reports and their status. `GET /api/hazards/nearby?latitude=..&longitude=..` shows hazards others can see.
 4. A `403` means this phone was blocked after false reports; a `429` means wait `Retry-After` seconds.
 
 **3. A responder takes and resolves a help request**
@@ -1144,6 +1144,135 @@ Ask
 
 ---
 
+## Other
+
+| Method | Path | Who can call it | What it does |
+| --- | --- | --- | --- |
+| `GET` | `/api/health` | Public | Health |
+| `GET` | `/api/facilities` | Public (X-Phone-Id optional) | All facilities from every source (osm / manual / user), minus removed evacuation centers and places that are not approved. Each has its latest status (or null, with `source` and `source_label` saying who reported it) and, for evacuation centers, the capacity fields. The one extra: with an X-Phone-Id header, the places that phone added and that still wait for approval are in the list too, with "approval_status": "pending". |
+| `POST` | `/api/facilities/{facility_id}/status` | Public (signed-in staff count as officials) (X-Phone-Id optional) | Add a status update (kept as history). Returns the new latest status. |
+| `GET` | `/api/facilities/{facility_id}/status/history` | Public (X-Phone-Id optional) | Newest first. Simple view for debugging and later use. (Staff see overrides and capacity corrections too, with names, in /api/responder/facilities/{id}/status-history.) |
+
+### `GET /api/health`
+
+**Who:** Public
+
+Health
+
+**Request fields**
+
+None.
+
+**Response** `200`
+
+`any`.
+
+
+### `GET /api/facilities`
+
+**Who:** Public (X-Phone-Id optional)
+
+All facilities from every source (osm / manual / user), minus removed evacuation centers and places that are not approved. Each has its latest status (or null, with `source` and `source_label` saying who reported it) and, for evacuation centers, the capacity fields. The one extra: with an X-Phone-Id header, the places that phone added and that still wait for approval are in the list too, with "approval_status": "pending".
+
+**Request fields**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `X-Phone-Id` | string (16 to 64 letters, digits, - or _) | optional | in header |
+
+**Response** `200`
+
+A list of `FacilityOut`.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | integer | required |  |
+| `key` | string or null | optional |  |
+| `name` | string | required |  |
+| `type` | string | required |  |
+| `latitude` | number | required |  |
+| `longitude` | number | required |  |
+| `address` | string or null | optional |  |
+| `contact` | string or null | optional |  |
+| `notes` | string or null | optional |  |
+| `source` | string | optional | default `` |
+| `center_type` | string or null | optional |  |
+| `approval_status` | string | optional | default `approved` |
+| `status` | StatusOut or null | optional |  |
+| `people_inside` | integer or null | optional |  |
+| `max_capacity` | integer or null | optional |  |
+| `spaces_left` | integer or null | optional |  |
+| `percent_full` | number or null | optional |  |
+| `is_outdated` | boolean or null | optional |  |
+
+### `POST /api/facilities/{facility_id}/status`
+
+**Who:** Public (signed-in staff count as officials) (X-Phone-Id optional)
+
+Add a status update (kept as history). Returns the new latest status. Anyone can send it and it is saved as "Reported by a user". When a signed-in responder or Super admin sends it (Authorization: Bearer ...), it is saved as "Confirmed by official" with their name, and it can set the maximum capacity. A user's report cannot change a maximum capacity an official has set. A place that is still waiting for approval accepts updates only from the phone that added it (X-Phone-Id).
+
+**Request fields**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `X-Phone-Id` | string (16 to 64 letters, digits, - or _) | optional | in header |
+| `facility_id` | integer | required | in path |
+| `status` | string | required | in body |
+| `people_inside` | integer or null | optional | in body |
+| `max_capacity` | integer or null | optional | in body |
+| `resources` | array of string or null | optional | in body |
+| `note` | string or null | optional | in body |
+
+**Response** `201`
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | integer | required |  |
+| `status` | string | required |  |
+| `people_inside` | integer or null | optional |  |
+| `max_capacity` | integer or null | optional |  |
+| `resources` | array of string | optional | default `[]` |
+| `note` | string or null | optional |  |
+| `updated_at` | string (date and time, UTC) | required |  |
+| `is_outdated` | boolean | required |  |
+| `source` | string | optional | default `user` |
+| `source_label` | string | optional | default `Reported by a user` |
+| `message` | string or null | optional |  |
+
+### `GET /api/facilities/{facility_id}/status/history`
+
+**Who:** Public (X-Phone-Id optional)
+
+Newest first. Simple view for debugging and later use. (Staff see overrides and capacity corrections too, with names, in /api/responder/facilities/{id}/status-history.)
+
+**Request fields**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `X-Phone-Id` | string (16 to 64 letters, digits, - or _) | optional | in header |
+| `facility_id` | integer | required | in path |
+| `limit` | integer | optional | in query |
+
+**Response** `200`
+
+A list of `StatusOut`.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | integer | required |  |
+| `status` | string | required |  |
+| `people_inside` | integer or null | optional |  |
+| `max_capacity` | integer or null | optional |  |
+| `resources` | array of string | optional | default `[]` |
+| `note` | string or null | optional |  |
+| `updated_at` | string (date and time, UTC) | required |  |
+| `is_outdated` | boolean | required |  |
+| `source` | string | optional | default `user` |
+| `source_label` | string | optional | default `Reported by a user` |
+| `message` | string or null | optional |  |
+
+---
+
 ## Weather, advisories, emergency numbers
 
 | Method | Path | Who can call it | What it does |
@@ -1536,135 +1665,6 @@ Remove Number
 **Response** `204`
 
 No body.
-
----
-
-## Other
-
-| Method | Path | Who can call it | What it does |
-| --- | --- | --- | --- |
-| `GET` | `/api/health` | Public | Health |
-| `GET` | `/api/facilities` | Public (X-Phone-Id optional) | All facilities from every source (osm / manual / user), minus removed evacuation centers and places that are not approved. Each has its latest status (or null, with `source` and `source_label` saying who reported it) and, for evacuation centers, the capacity fields. The one extra: with an X-Phone-Id header, the places that phone added and that still wait for approval are in the list too, with "approval_status": "pending". |
-| `POST` | `/api/facilities/{facility_id}/status` | Public (signed-in staff count as officials) (X-Phone-Id optional) | Add a status update (kept as history). Returns the new latest status. |
-| `GET` | `/api/facilities/{facility_id}/status/history` | Public (X-Phone-Id optional) | Newest first. Simple view for debugging and later use. (Staff see overrides and capacity corrections too, with names, in /api/responder/facilities/{id}/status-history.) |
-
-### `GET /api/health`
-
-**Who:** Public
-
-Health
-
-**Request fields**
-
-None.
-
-**Response** `200`
-
-`any`.
-
-
-### `GET /api/facilities`
-
-**Who:** Public (X-Phone-Id optional)
-
-All facilities from every source (osm / manual / user), minus removed evacuation centers and places that are not approved. Each has its latest status (or null, with `source` and `source_label` saying who reported it) and, for evacuation centers, the capacity fields. The one extra: with an X-Phone-Id header, the places that phone added and that still wait for approval are in the list too, with "approval_status": "pending".
-
-**Request fields**
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `X-Phone-Id` | string (16 to 64 letters, digits, - or _) | optional | in header |
-
-**Response** `200`
-
-A list of `FacilityOut`.
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `id` | integer | required |  |
-| `key` | string or null | optional |  |
-| `name` | string | required |  |
-| `type` | string | required |  |
-| `latitude` | number | required |  |
-| `longitude` | number | required |  |
-| `address` | string or null | optional |  |
-| `contact` | string or null | optional |  |
-| `notes` | string or null | optional |  |
-| `source` | string | optional | default `` |
-| `center_type` | string or null | optional |  |
-| `approval_status` | string | optional | default `approved` |
-| `status` | StatusOut or null | optional |  |
-| `people_inside` | integer or null | optional |  |
-| `max_capacity` | integer or null | optional |  |
-| `spaces_left` | integer or null | optional |  |
-| `percent_full` | number or null | optional |  |
-| `is_outdated` | boolean or null | optional |  |
-
-### `POST /api/facilities/{facility_id}/status`
-
-**Who:** Public (signed-in staff count as officials) (X-Phone-Id optional)
-
-Add a status update (kept as history). Returns the new latest status. Anyone can send it and it is saved as "Reported by a user". When a signed-in responder or Super admin sends it (Authorization: Bearer ...), it is saved as "Confirmed by official" with their name, and it can set the maximum capacity. A user's report cannot change a maximum capacity an official has set. A place that is still waiting for approval accepts updates only from the phone that added it (X-Phone-Id).
-
-**Request fields**
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `X-Phone-Id` | string (16 to 64 letters, digits, - or _) | optional | in header |
-| `facility_id` | integer | required | in path |
-| `status` | string | required | in body |
-| `people_inside` | integer or null | optional | in body |
-| `max_capacity` | integer or null | optional | in body |
-| `resources` | array of string or null | optional | in body |
-| `note` | string or null | optional | in body |
-
-**Response** `201`
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `id` | integer | required |  |
-| `status` | string | required |  |
-| `people_inside` | integer or null | optional |  |
-| `max_capacity` | integer or null | optional |  |
-| `resources` | array of string | optional | default `[]` |
-| `note` | string or null | optional |  |
-| `updated_at` | string (date and time, UTC) | required |  |
-| `is_outdated` | boolean | required |  |
-| `source` | string | optional | default `user` |
-| `source_label` | string | optional | default `Reported by a user` |
-| `message` | string or null | optional |  |
-
-### `GET /api/facilities/{facility_id}/status/history`
-
-**Who:** Public (X-Phone-Id optional)
-
-Newest first. Simple view for debugging and later use. (Staff see overrides and capacity corrections too, with names, in /api/responder/facilities/{id}/status-history.)
-
-**Request fields**
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `X-Phone-Id` | string (16 to 64 letters, digits, - or _) | optional | in header |
-| `facility_id` | integer | required | in path |
-| `limit` | integer | optional | in query |
-
-**Response** `200`
-
-A list of `StatusOut`.
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `id` | integer | required |  |
-| `status` | string | required |  |
-| `people_inside` | integer or null | optional |  |
-| `max_capacity` | integer or null | optional |  |
-| `resources` | array of string | optional | default `[]` |
-| `note` | string or null | optional |  |
-| `updated_at` | string (date and time, UTC) | required |  |
-| `is_outdated` | boolean | required |  |
-| `source` | string | optional | default `user` |
-| `source_label` | string | optional | default `Reported by a user` |
-| `message` | string or null | optional |  |
 
 ---
 

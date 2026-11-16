@@ -73,7 +73,7 @@ body is a list of `{type, loc, msg}`). Show `detail` to the person when it is a 
 
 1. Send the header `X-Phone-Id: <your 16 to 64 character ID>`.
 2. `POST /api/reports` with `{"kind": "hazard", "category": "Flooded road", "latitude": 13.7565, "longitude": 121.0583, "note": "Knee deep"}`. Answer `201`: `{"id", "kind", "status": "new", "label", "created_at", "message"}`.
-3. `GET /api/reports/mine` lists this phone's reports and their status. `GET /api/hazards/nearby?lat=..&lng=..` shows hazards others can see.
+3. `GET /api/reports/mine` lists this phone's reports and their status. `GET /api/hazards/nearby?latitude=..&longitude=..` shows hazards others can see.
 4. A `403` means this phone was blocked after false reports; a `429` means wait `Retry-After` seconds.
 
 **3. A responder takes and resolves a help request**
