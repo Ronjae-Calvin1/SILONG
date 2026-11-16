@@ -5,11 +5,13 @@ Backbone: map slice + capacity/availability status (Batangas City facilities)
 + staff accounts, roles and the audit log (see account_routes.py)
 + help requests and hazard reports (see report_routes.py)
 + weather, advisories and emergency numbers (see content_routes.py)
-+ the chatbot placeholder (see chat_routes.py and chat_service.py).
++ the chatbot placeholder (see chat_routes.py and chat_service.py)
++ phone blocks (ops_routes.py) and the scheduled cleanup (maintenance.py).
 Facilities in SQLite -> FastAPI endpoints -> frontend fetches them.
 """
 import json
 import re
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Depends, HTTPException, Query, Request
@@ -28,7 +30,9 @@ from .chat_routes import router as chat_router
 from .content_routes import router as content_router
 from .database import Base, engine, SessionLocal, get_db
 from .evac_routes import router as evac_router
+from .maintenance import scheduler
 from .models import DeletedFacility, Facility, StatusUpdate, User, UserEvacuationCenter
+from .ops_routes import router as ops_router
 from .place_routes import router as place_router
 from .rate_limit import limiter
 from .report_routes import optional_phone, router as report_router
@@ -208,13 +212,24 @@ report_service.purge_on_startup()
 # Delete removed centers (and rejected places) kept longer than config.REMOVED_CENTERS_KEEP_DAYS.
 place_service.purge_on_startup()
 
-app = FastAPI(title="SILONG API — map and status")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Starts the scheduled cleanup with the server and stops it cleanly on shutdown (maintenance.py)."""
+    await scheduler.start()
+    try:
+        yield
+    finally:
+        await scheduler.stop()
+
+
+app = FastAPI(title="SILONG API — map and status", lifespan=lifespan)
 app.include_router(evac_router)
 app.include_router(account_router)
 app.include_router(report_router)
 app.include_router(place_router)
 app.include_router(content_router)
 app.include_router(chat_router)
+app.include_router(ops_router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):
@@ -232,6 +247,7 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Total-Count"],  # lets the browser read the audit-log total from another origin
 )
 
 

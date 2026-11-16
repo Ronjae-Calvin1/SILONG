@@ -192,6 +192,64 @@ def reject(db: Session, user: User, facility_id: int, reason: Optional[str], req
     return place_admin_out(db, f, row, "Place rejected.")
 
 
+# ------------------------------------------------------------ edit details (staff)
+
+# What a responder may correct, and where each field lives on the added place.
+EDITABLE_FIELDS = ("name", "address", "barangay", "contact", "note")
+
+
+def edit_center(db: Session, user: User, facility_id: int, changes: dict, request: Optional[Request]) -> PlaceAdminOut:
+    """
+    Correct the name, address, barangay, contact or note of an evacuation center that was added
+    through the app. `changes` holds only the fields the responder sent (already cleaned).
+
+    Why only added centers: their details live in their own row (user_evacuation_centers) and the
+    startup sync rebuilds the facilities row FROM that row, so an edit survives every restart.
+    Centers (and hospitals and clinics) that come from the data files are rewritten from those
+    files at every start, so an edit would be lost; they are refused with a plain message instead.
+
+    A name change re-checks the duplicate rule (same normalized name within config.DUPLICATE_METERS
+    of another center, removed ones included). Unlike a new place, which is only flagged for review,
+    an edit is refused (409): the person editing is the reviewer. The audit entry holds the old and
+    the new value of every field that changed.
+    """
+    f = get_center(db, facility_id)
+    row = evac_service.user_row_for(db, f.key)
+    if row is None:
+        raise PlaceError(
+            409,
+            "This center comes from the map data files, so its details cannot be changed here. "
+            "Only centers that were added through the app can be edited.",
+        )
+
+    old = {k: getattr(row, k) for k in changes}
+    new = {k: v for k, v in changes.items() if v != old[k]}
+    if not new:
+        return place_admin_out(db, f, row, "Nothing changed: those are already the details.")
+
+    if "name" in new and evac_service.normalize_name(new["name"]) != evac_service.normalize_name(row.name):
+        found = evac_service.find_duplicate(db, new["name"], row.latitude, row.longitude, exclude_key=f.key)
+        if found is not None:
+            other, removed = found
+            extra = " (it was removed, but can be restored)" if removed else ""
+            raise PlaceError(
+                409,
+                f"Another evacuation center called \"{other.name}\" is already within "
+                f"{config.DUPLICATE_METERS} metres of this one{extra}. Use a different name.",
+            )
+
+    for key, value in new.items():
+        setattr(row, key, value)
+    for key, value in evac_service.user_center_facility_fields(row).items():  # keeps the map row in step
+        setattr(f, key, value)
+    audit.record(
+        db, user, "place.edit", target=_target(f),
+        detail={"key": f.key, "old": {k: old[k] for k in new}, "new": new}, request=request,
+    )
+    db.commit()
+    return place_admin_out(db, f, row, "Details saved.")
+
+
 # ------------------------------------------------------------ remove / restore (staff)
 
 def removal_out(f: Facility, removal: FacilityRemoval, message: Optional[str] = None) -> RemovalOut:

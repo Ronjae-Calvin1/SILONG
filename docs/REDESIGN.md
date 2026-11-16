@@ -12,6 +12,7 @@ into the README and mark it "Working" here.
 | 2, 2b | Help requests and hazard reports, the two visibility kinds, responder actions, purge of old reports | **Working** on the server (no screens yet) |
 | 3 | Places rules (pending, approve, reject, admin removal, 30-day purge, permanent delete), status source, overrides and capacity corrections | **Working** on the server (no screens yet) |
 | 4 | Weather, advisories, emergency numbers | **Working** on the server (no screens yet) |
+| 5 | Operations: `.env` loading, change and reset password, unblock phones, edit place details, audit-log filters, scheduled cleanup, demo data script, `docs/API.md` | **Working** on the server (no screens yet) |
 | 4 | Chatbot | **Placeholder, AI not connected** (`POST /api/chat` gives a fixed answer). The checked guide, the guide editor and "Report a wrong answer" are not built |
 | Frontend | Responder and Super admin screens, the phone ID on every public call, labels and pin looks for pending places and "Confirmed by official" | Not built |
 | After Nov 20 | Two-step sign in | Planned |
@@ -152,7 +153,12 @@ and signed out after being idle.
   addresses are stored hashed only.
 - After 3 false reports from one phone, that phone is blocked from sending
   reports. This slows casual pranks only. Admin verification is the real
-  safeguard.
+  safeguard. A Super admin can unblock a phone (the count starts again), and
+  `BLOCK_EXPIRES_DAYS` can end blocks by themselves (0 = never) (working).
+- Changing your own password needs the current one; wrong tries are limited per
+  person and per IP. A Super admin resets a forgotten password (working).
+- Old reports, removed centers, rejected places, idle sign-ins and expired blocks
+  are deleted on a schedule while the server runs (working).
 - Keys live in `.env`, never in the repository.
 - Two-step sign in is planned after Nov 20.
 
@@ -164,6 +170,9 @@ environment variable.
 | --- | --- |
 | Removed centers kept before permanent delete | 30 days (`REMOVED_CENTERS_KEEP_DAYS`, working) |
 | Reports kept before deletion | 30 days (`REPORTS_KEEP_DAYS`, working) |
+| Phone blocks end by themselves after | never (`BLOCK_EXPIRES_DAYS`, 0, working) |
+| Scheduled cleanup | every 60 minutes (`PURGE_INTERVAL_MINUTES`, 0 = off, working) |
+| Wrong current passwords when changing a password | 5 per person, 20 per IP, per 10 minutes (`PASSWORD_CHANGE_MAX_WRONG`, `PASSWORD_CHANGE_IP_MAX_WRONG`, `PASSWORD_CHANGE_WINDOW_SECONDS`, working) |
 | Phones needed for a hazard to show as Unconfirmed | 3 |
 | False reports before a phone is blocked | 3 |
 | "Near me" range for hazard reports | 1 km |

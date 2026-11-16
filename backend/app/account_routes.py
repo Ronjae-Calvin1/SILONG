@@ -3,27 +3,31 @@ Staff accounts and sign in.
 
     POST   /api/auth/sign-in               public (needs a staff account)
     POST   /api/auth/sign-out              signed in
+    POST   /api/auth/change-password       signed in (responder, super_admin)
     GET    /api/me                         responder, super_admin
     GET    /api/admin/users                super_admin
     POST   /api/admin/users                super_admin
     POST   /api/admin/users/{id}/lock      super_admin
     POST   /api/admin/users/{id}/unlock    super_admin
+    POST   /api/admin/users/{id}/reset-password  super_admin
     DELETE /api/admin/users/{id}           super_admin
     GET    /api/admin/audit-log            super_admin
 
 There is no public sign-up. Every change below is written to the audit log.
 """
+from datetime import datetime, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import accounts, config
 from .account_schemas import (
-    AuditEntryOut, MeOut, MessageOut, SignInIn, SignInOut, UserCreateIn, UserOut,
+    AuditEntryOut, ChangePasswordIn, MeOut, MessageOut, ResetPasswordIn, SignInIn, SignInOut, UserCreateIn, UserOut,
     audit_out, me_out, user_out,
 )
-from .auth import bearer_token, require_responder, require_super_admin
+from .auth import bearer_token, current_user, require_responder, require_super_admin
 from .database import get_db
 from .models import AuditLog, User
 from .rate_limit import signin_limiter
@@ -55,6 +59,20 @@ def sign_out(request: Request, token: Optional[str] = Depends(bearer_token), db:
     """Ends this sign-in. Safe to call twice."""
     accounts.sign_out(db, token, request)
     return MessageOut(message="You are signed out.")
+
+
+@router.post("/api/auth/change-password", response_model=MessageOut)
+def change_password(
+    payload: ChangePasswordIn, request: Request,
+    token: Optional[str] = Depends(bearer_token), user: User = Depends(current_user), db: Session = Depends(get_db),
+):
+    """
+    Change your own password. A wrong current password is refused (403) and counted toward a limit
+    per person and per IP (429 when it is used up). Your other sign-ins end; this one stays.
+    """
+    ended = accounts.change_password(db, user, token, payload.current_password, payload.new_password, _ip(request), request)
+    extra = f" You were signed out on {ended} other device(s)." if ended else ""
+    return MessageOut(message="Your password was changed." + extra)
 
 
 @router.get("/api/me", response_model=MeOut)
@@ -93,6 +111,21 @@ def unlock_user(user_id: int, request: Request, user: User = Depends(require_sup
     return user_out(target)
 
 
+@router.post("/api/admin/users/{user_id}/reset-password", response_model=UserOut)
+def reset_password(
+    user_id: int, payload: ResetPasswordIn, request: Request,
+    user: User = Depends(require_super_admin), db: Session = Depends(get_db),
+):
+    """
+    Set a new password for someone else (a forgotten password). The person is signed out everywhere and
+    their wrong-try count and automatic lock are cleared. Tell them the new password yourself: it is
+    never shown again. Not for your own account (use change-password).
+    """
+    target = accounts.get_user_or_404(db, user_id)
+    ended = accounts.reset_password(db, user, target, payload.new_password, request)
+    return user_out(target, f"The password for {target.name} was reset and they were signed out ({ended} sign-in(s) ended).")
+
+
 @router.delete("/api/admin/users/{user_id}", response_model=MessageOut)
 def remove_user(user_id: int, request: Request, user: User = Depends(require_super_admin), db: Session = Depends(get_db)):
     """Remove an account. Its audit entries are kept."""
@@ -104,16 +137,42 @@ def remove_user(user_id: int, request: Request, user: User = Depends(require_sup
 
 # ---- Super admin: audit log ----
 
-@router.get("/api/admin/audit-log", response_model=List[AuditEntryOut])
+def _day(value: Optional[str], label: str) -> Optional[datetime]:
+    """A YYYY-MM-DD date (UTC, like every time here) as the start of that day, or a plain 422."""
+    if value is None or value.strip() == "":
+        return None
+    try:
+        return datetime.strptime(value.strip(), "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f'The "{label}" date must look like 2026-11-30 (year-month-day).')
+
+
+@router.get(
+    "/api/admin/audit-log", response_model=List[AuditEntryOut],
+    responses={200: {"description": "The matching entries, newest first.", "headers": {
+        "X-Total-Count": {"description": "How many entries match the filters, before limit and offset.", "schema": {"type": "integer"}},
+    }}},
+)
 def read_audit_log(
+    response: Response,
     limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0, description="Paging: skip this many entries (newest first)"),
     before_id: Optional[int] = Query(None, ge=1, description="Paging: only entries older than this id"),
     action: Optional[str] = Query(None, max_length=60, description="Only this action, e.g. user.create"),
-    actor: Optional[str] = Query(None, max_length=100, description="Only this person's name"),
+    actor: Optional[str] = Query(None, max_length=100, description="Only this exact person's name"),
+    person: Optional[str] = Query(None, max_length=100, description="Name search: part of a name, any capitals"),
+    date_from: Optional[str] = Query(None, alias="from", description="First day to include, YYYY-MM-DD (UTC)"),
+    date_to: Optional[str] = Query(None, alias="to", description="Last day to include, YYYY-MM-DD (UTC)"),
     user: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
-    """Newest first. Use before_id (the last id you got) to load the next page."""
+    """
+    Newest first. The body is the same list as before; the number of entries that match the filters
+    (before limit and offset) is in the X-Total-Count response header.
+    """
+    start, end = _day(date_from, "from"), _day(date_to, "to")
+    if start is not None and end is not None and start > end:
+        raise HTTPException(status_code=422, detail='The "from" date must not be later than the "to" date.')
     q = db.query(AuditLog)
     if before_id is not None:
         q = q.filter(AuditLog.id < before_id)
@@ -121,4 +180,11 @@ def read_audit_log(
         q = q.filter(AuditLog.action == action)
     if actor:
         q = q.filter(AuditLog.actor_name == actor.strip())
-    return [audit_out(r) for r in q.order_by(AuditLog.id.desc()).limit(limit).all()]
+    if person and person.strip():
+        q = q.filter(func.lower(AuditLog.actor_name).contains(person.strip().lower(), autoescape=True))
+    if start is not None:
+        q = q.filter(AuditLog.created_at >= start)
+    if end is not None:
+        q = q.filter(AuditLog.created_at < end + timedelta(days=1))
+    response.headers["X-Total-Count"] = str(q.count())
+    return [audit_out(r) for r in q.order_by(AuditLog.id.desc()).offset(offset).limit(limit).all()]

@@ -8,6 +8,48 @@ STATUS_COOLDOWN_SECONDS=0 turns the per-place cooldown off).
 """
 import os
 from datetime import timedelta
+from pathlib import Path
+
+
+def load_env_file(path, environ=None) -> int:
+    """
+    Reads a simple KEY=VALUE file into the environment (a tiny .env loader, no extra package).
+
+    - Blank lines and lines starting with # are skipped. An optional leading "export " is ignored.
+    - One pair of matching single or double quotes around the value is removed.
+    - A variable that is ALREADY set in the real environment is never replaced: the real
+      environment always wins over the file.
+    - A missing or unreadable file is fine (nothing happens).
+
+    Returns how many variables it set. Never prints or returns a value (a file can hold keys).
+    """
+    environ = os.environ if environ is None else environ
+    try:
+        lines = Path(path).read_text(encoding="utf-8-sig").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return 0
+    added = 0
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):].lstrip()
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if not key or key in environ:
+            continue
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        environ[key] = value
+        added += 1
+    return added
+
+
+# backend/.env (ignored by Git) is read once, here, before any setting below. This module is the
+# first thing the app imports, so the file also reaches DATABASE_URL (database.py imports config).
+ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+load_env_file(ENV_FILE)
 
 
 def _number(name: str, default: float) -> float:
@@ -159,3 +201,19 @@ CHAT_IP_WINDOW_SECONDS = int(_number("CHAT_IP_WINDOW_SECONDS", 600))
 CHAT_TIMEOUT_SECONDS = _number("CHAT_TIMEOUT_SECONDS", 15)
 # After a failed weather call, wait this many seconds before asking Open-Meteo again.
 WEATHER_RETRY_SECONDS = _number("WEATHER_RETRY_SECONDS", 30)
+
+# ---- Operations (redesign part 5) ----
+# A phone blocked after too many false reports is unblocked automatically after this many days.
+# 0 (the default) means a block never expires; a Super admin can still unblock a phone by hand.
+BLOCK_EXPIRES_DAYS = int(_number("BLOCK_EXPIRES_DAYS", 0))
+
+# While the server runs, one background task purges old reports, removed centers, rejected places,
+# expired sessions and expired phone blocks every this many minutes. 0 turns it off (the same
+# purges still run once at startup, and by the scripts in backend/scripts).
+PURGE_INTERVAL_MINUTES = int(_number("PURGE_INTERVAL_MINUTES", 60))
+
+# Changing your password: wrong "current password" tries are limited per person and per IP, so the
+# form cannot be used to guess a password. Counted over the window below.
+PASSWORD_CHANGE_MAX_WRONG = int(_number("PASSWORD_CHANGE_MAX_WRONG", 5))
+PASSWORD_CHANGE_IP_MAX_WRONG = int(_number("PASSWORD_CHANGE_IP_MAX_WRONG", 20))
+PASSWORD_CHANGE_WINDOW_SECONDS = int(_number("PASSWORD_CHANGE_WINDOW_SECONDS", 600))

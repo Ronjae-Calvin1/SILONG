@@ -8,6 +8,9 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
+# Importing config first loads backend/.env, so DATABASE_URL can be set there.
+from . import config  # noqa: F401,E402
+
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./typhoon.db")
 
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}

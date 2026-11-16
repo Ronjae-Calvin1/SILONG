@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from . import audit, config
 from .models import AuthSession, User
+from .rate_limit import password_change_limiter
 from .security import DUMMY_HASH, hash_password, hash_token, new_token, verify_password
 
 RESPONDER = "responder"
@@ -47,6 +48,14 @@ def _minutes_left(until: datetime, now: datetime) -> int:
     return max(1, int((until - now).total_seconds() / 60 + 0.999))
 
 
+def check_password_length(password: str) -> None:
+    """The one place the password length rules live (account creation, change and reset)."""
+    if len(password) < config.MIN_PASSWORD_LENGTH:
+        raise AccountError(422, f"The password must be at least {config.MIN_PASSWORD_LENGTH} characters.")
+    if len(password) > PASSWORD_MAX:
+        raise AccountError(422, f"The password must be at most {PASSWORD_MAX} characters.")
+
+
 # ---------------------------------------------------------------- create
 
 def create_user(
@@ -59,10 +68,7 @@ def create_user(
         raise AccountError(422, f"The name must be {NAME_MIN} to {NAME_MAX} characters.")
     if role not in ROLES:
         raise AccountError(422, "The role must be responder or super_admin.")
-    if len(password) < config.MIN_PASSWORD_LENGTH:
-        raise AccountError(422, f"The password must be at least {config.MIN_PASSWORD_LENGTH} characters.")
-    if len(password) > PASSWORD_MAX:
-        raise AccountError(422, f"The password must be at most {PASSWORD_MAX} characters.")
+    check_password_length(password)
     key = normalize_name(clean)
     if db.query(User).filter(User.name_key == key).first():
         raise AccountError(409, "An account with that name already exists.")
@@ -223,3 +229,66 @@ def remove_user(db: Session, actor: User, target: User, request: Optional[Reques
     audit.record(db, actor, "user.remove", target=f"user:{target.id} ({target.name})", detail={"role": target.role}, request=request)
     db.delete(target)
     db.commit()
+
+
+# ---------------------------------------------------------------- passwords
+
+def change_password(
+    db: Session, user: User, token: Optional[str], current_password: str, new_password: str,
+    ip: str, request: Optional[Request] = None,
+) -> int:
+    """
+    Changes the signed-in person's own password. A wrong current password is refused (403) and counts
+    toward a limit per person and per IP (429 once it is used up), so it cannot be used to guess.
+    On success every OTHER session of this person ends and the one making the request stays.
+    Returns how many other sessions it ended. Nothing about either password is logged.
+    """
+    check_password_length(new_password)  # first: a refused new password says nothing about the current one
+    keys = (f"user:{user.id}", f"ip:{ip}")
+    wait = password_change_limiter.blocked(keys)
+    if wait is not None:
+        minutes = max(1, round(wait / 60))
+        raise AccountError(429, f"Too many wrong passwords. Please try again in about {minutes} minute(s).", {"Retry-After": str(wait)})
+    if not verify_password(current_password, user.password_hash):
+        password_change_limiter.fail(keys)
+        raise AccountError(403, "The current password is wrong.")
+    if verify_password(new_password, user.password_hash):
+        raise AccountError(422, "The new password must be different from the current one.")
+
+    password_change_limiter.clear(keys[0])
+    user.password_hash = hash_password(new_password)
+    q = db.query(AuthSession).filter(AuthSession.user_id == user.id)
+    if token:
+        q = q.filter(AuthSession.token_hash != hash_token(token))
+    ended = q.delete(synchronize_session=False)
+    audit.record(db, user, "auth.change_password", target=f"user:{user.id} ({user.name})",
+                 detail={"other_sessions_ended": ended}, request=request)
+    db.commit()
+    return ended
+
+
+def reset_password(db: Session, actor: User, target: User, new_password: str, request: Optional[Request] = None) -> int:
+    """
+    A Super admin sets a new password for someone else. Ends ALL of that person's sessions and clears
+    their wrong-try count and the automatic lock. A lock a Super admin set (is_locked) stays: it is a
+    separate decision, undone with unlock. Returns how many sessions it ended.
+    """
+    if target.id == actor.id:
+        raise AccountError(409, "To change your own password, use Change password with your current password.")
+    check_password_length(new_password)
+    target.password_hash = hash_password(new_password)
+    target.failed_attempts = 0
+    target.locked_until = None
+    ended = db.query(AuthSession).filter(AuthSession.user_id == target.id).delete(synchronize_session=False)
+    password_change_limiter.clear(f"user:{target.id}")
+    audit.record(db, actor, "user.reset_password", target=f"user:{target.id} ({target.name})",
+                 detail={"sessions_ended": ended}, request=request)
+    db.commit()
+    return ended
+
+
+def purge_idle_sessions(db: Session, now: Optional[datetime] = None) -> int:
+    """Delete sessions unused for longer than STAFF_IDLE_MINUTES (they are dead already). Returns how many."""
+    deleted = db.query(AuthSession).filter(AuthSession.last_used_at < (now or _now()) - _idle_limit()).delete(synchronize_session=False)
+    db.commit()
+    return deleted

@@ -373,13 +373,15 @@ moves the timer forward.
 | --- | --- | --- | --- |
 | POST | `/api/auth/sign-in` | Anyone with an account | Sign in, returns the token |
 | POST | `/api/auth/sign-out` | Signed in | End this sign-in (safe to call twice) |
+| POST | `/api/auth/change-password` | Signed in | Change your own password (`current_password`, `new_password`); your other sign-ins end |
 | GET | `/api/me` | Responder, Super admin | Who is signed in and their role |
 | GET | `/api/admin/users` | Super admin | List accounts and whether they are locked |
 | POST | `/api/admin/users` | Super admin | Create an account (`name`, `password`, `role`) |
 | POST | `/api/admin/users/{id}/lock` | Super admin | Lock until unlocked; signs the person out |
 | POST | `/api/admin/users/{id}/unlock` | Super admin | Unlock (also clears a wrong-tries lock) |
+| POST | `/api/admin/users/{id}/reset-password` | Super admin | Set a new password for someone (`new_password`); they are signed out everywhere |
 | DELETE | `/api/admin/users/{id}` | Super admin | Remove the account (its audit entries stay) |
-| GET | `/api/admin/audit-log` | Super admin | Newest first. `limit`, `before_id`, `action`, `actor` |
+| GET | `/api/admin/audit-log` | Super admin | Newest first. `limit`, `offset`, `before_id`, `action`, `actor` (exact name), `person` (part of a name), `from`, `to` (dates, `YYYY-MM-DD`, UTC). The number of matches is in the `X-Total-Count` header |
 
 No token or an expired one gives 401. A signed-in responder on a Super admin
 route gets 403. You cannot lock or remove your own account. The existing map,
@@ -422,10 +424,19 @@ It uses its own temporary database. It checks lockout and unlock, the idle
 timeout, a responder blocked from Super admin routes, no token blocked, and the
 audit entries.
 
-**Not built yet:** the sign-in screens, changing your own password, and a
-password reset by a Super admin. Until then a Super admin sets each person's
-first password, and a forgotten password means removing the account and
-creating it again.
+**Passwords.** Anyone signed in can change their own password
+(`POST /api/auth/change-password`): a wrong current password is refused with a 403 and
+counts toward a limit per person (5 in 10 minutes) and per IP (20 in 10 minutes), then
+the answer is 429. A new password follows the same rules as account creation and must
+differ from the current one. Your other sign-ins end; the one you used stays. **A
+forgotten password no longer means recreating the account:** a Super admin sets a new one
+with `POST /api/admin/users/{id}/reset-password`, tells the person, and the person is
+signed out everywhere, with their wrong-try count and automatic lock cleared. A lock a
+Super admin set by hand stays until unlocked. A Super admin cannot reset their own password
+that way (use change-password). Both actions are audited; passwords are never logged or
+sent back.
+
+**Not built yet:** the sign-in screens.
 
 ## Help requests and hazard reports
 
@@ -678,6 +689,56 @@ network call, the fallback from an unbuilt provider, the length limit, the rate 
 that nothing about the asker is stored, the audit entries, and an older database.
 All four test files: `py tests/run_all.py`.
 
+## Operations: .env, phone blocks, place edits, cleanup, demo data, API reference
+
+**`backend/.env` is read automatically.** `config.py` loads `backend/.env` when the backend starts
+(skips blank lines and `#` comments, removes simple quotes, no extra package). A variable that is
+**already set in the real environment always wins** over the file, and a missing file is fine.
+`backend/.env` is ignored by Git (`.gitignore`). `backend/.env.example` lists every setting; copy it
+to `backend/.env` to change one. `DATABASE_URL` can be set there too.
+
+**Blocked phones.** A phone is blocked from sending reports after 3 false reports. Before, a block
+could never be undone. Now a Super admin can:
+
+| Method | Path | Who | What it does |
+| --- | --- | --- | --- |
+| GET | `/api/admin/blocked-phones` | Super admin | List `id`, `blocked_at`, `false_reports`, `expires_at`. Never the phone ID or its hash |
+| POST | `/api/admin/blocked-phones/{id}/unblock` | Super admin | Let that phone send reports again (audited) |
+
+An unblocked phone starts with a fresh false-report count (a table `forgiven_phones` remembers
+the date, hashed ID only). `BLOCK_EXPIRES_DAYS` (default **0 = never**) ends a block by itself
+after that many days.
+
+**Correct place details.** `PATCH /api/responder/places/{id}` (responder, Super admin) changes the
+`name`, `address`, `barangay`, `contact` or `note` of an evacuation center that was **added through
+the app**. Same limits as adding; send only the fields to change; an empty text clears a field except
+the name. A new name that matches another center within 30 m is refused (409). The audit entry
+(`place.edit`) holds the old and new values. Edits survive a restart because the startup sync rebuilds
+the map row from the center's own row. **Not editable here (409/422):** hospitals and clinics, and
+any center that comes from the data files (`facilities.json`, `manual_facilities.json`), because those
+files are read again at every start and would overwrite an edit. Today the data files hold no
+evacuation centers, so every center can be edited.
+
+**Scheduled cleanup.** One background task runs every `PURGE_INTERVAL_MINUTES` (default **60**,
+**0 = off**): old reports, removed centers and rejected places, sign-ins idle past the limit and
+expired phone blocks. One job failing does not stop the others. The log gets the job name and counts
+only. It stops cleanly when the server stops. The startup purge and the scripts still work. With
+several server processes each runs its own copy (safe).
+
+**Demo data.** `py scripts/seed_demo.py --db demo.db` fills a **separate** database with clearly marked
+DEMO help requests, hazards (one with 3 phones, one verified), approved and pending places, and
+advisories (one pinned). Add `--with-demo-staff` to also make a demo responder and a demo Super admin;
+the script prints their passwords once. It prints which database it uses and **refuses the real
+`typhoon.db`** (or any non-SQLite database) unless you add `--force`. Running it twice adds nothing.
+Start the backend on it with `DATABASE_URL=sqlite:///./demo.db` (or in `backend/.env`).
+
+**API reference for the frontend.** `docs/API.md` is generated from the app's own OpenAPI schema:
+`cd backend` then `py scripts/generate_api_doc.py`. It has an introduction (sign-in, phone ID, roles, error
+codes, four example flows) and a table per area with request and response fields. Run it again after you
+change a route or a field (`--check` tells you if it is out of date).
+
+**Run every check:** `cd backend` then `py tests/run_all.py` (this part: `py tests/test_ops.py`).
+
 ## Using a custom map
 
 A custom map lets you hide icons you do not want while keeping place names.
@@ -731,9 +792,9 @@ Press `Ctrl+C` in each terminal. On Windows, it may ask
 ```
 SILONG/
 ├── backend/
-│   ├── scripts/                # create_super_admin.py (first Super admin), purge_reports.py, purge_removed_centers.py, fetch/backdate helpers
-│   ├── .env.example            # Optional backend settings (chat provider, future AI key placeholder)
-│   ├── tests/                  # test_accounts.py, test_reports.py, test_places.py, test_content.py, run_all.py (runs them all)
+│   ├── scripts/                # create_super_admin.py, seed_demo.py (DEMO data), generate_api_doc.py (docs/API.md), purge scripts, fetch/backdate helpers
+│   ├── .env.example            # Optional backend settings; copy to backend/.env (read automatically, ignored by Git)
+│   ├── tests/                  # test_accounts.py, test_reports.py, test_places.py, test_content.py, test_ops.py, run_all.py (runs them all)
 │   └── app/
 │       ├── main.py             # FastAPI app, loads facilities, /api/facilities and the status routes
 │       ├── content_routes.py   # Weather, advisories, official sources, emergency numbers
@@ -760,6 +821,8 @@ SILONG/
 │       ├── report_schemas.py   # Request/response shapes for reports
 │       ├── report_service.py   # Report rules: hazard groups, approximate spot, false reports, purge
 │       ├── status_service.py   # Latest status / history, source of an update, capacity rule (automatic "Full")
+│       ├── ops_routes.py       # Blocked phones: list and unblock (Super admin)
+│       ├── maintenance.py      # Scheduled cleanup task (every PURGE_INTERVAL_MINUTES)
 │       ├── database.py         # SQLite connection
 │       └── weather_service.py  # Open-Meteo forecast, cache, last good forecast
 └── frontend/

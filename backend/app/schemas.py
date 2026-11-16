@@ -212,6 +212,57 @@ class EvacCenterIn(BaseModel):
         return self
 
 
+class PlaceEditIn(BaseModel):
+    """
+    What a responder sends to correct an added evacuation center (PATCH). Send only the fields to
+    change. Same limits as EvacCenterIn. An empty text (or null) clears address, barangay, contact
+    or note; the name cannot be cleared. Location, type and capacity are not edited here.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = None
+    address: Optional[str] = None
+    barangay: Optional[str] = None
+    contact: Optional[str] = None
+    note: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def _name_clean(cls, v):
+        if v is None:
+            raise ValueError("The name cannot be empty.")
+        v = " ".join(v.split())
+        if not (NAME_MIN <= len(v) <= NAME_MAX):
+            raise ValueError(f"Name must be {NAME_MIN} to {NAME_MAX} characters.")
+        return v
+
+    @field_validator("barangay")
+    @classmethod
+    def _barangay_clean(cls, v):
+        return _clean_text(v, BARANGAY_MAX, "Barangay")
+
+    @field_validator("address")
+    @classmethod
+    def _address_clean(cls, v):
+        return _clean_text(v, ADDRESS_MAX, "Address")
+
+    @field_validator("contact")
+    @classmethod
+    def _contact_clean(cls, v):
+        return _clean_text(v, CONTACT_MAX, "Contact")
+
+    @field_validator("note")
+    @classmethod
+    def _note_clean(cls, v):
+        return _clean_text(v, NOTE_MAX, "Note")
+
+    @model_validator(mode="after")
+    def _something_to_change(self):
+        if not self.model_fields_set:
+            raise ValueError("Send at least one field to change (name, address, barangay, contact or note).")
+        return self
+
+
 class RemovalOut(BaseModel):
     id: int
     key: str

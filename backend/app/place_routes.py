@@ -4,6 +4,7 @@ Staff endpoints for places and statuses (part 3). Every change is audited with t
     GET    /api/responder/places                       responder, super_admin   places waiting for approval (?status=rejected for rejected ones)
     POST   /api/responder/places/{id}/approve          responder, super_admin   make a place public
     POST   /api/responder/places/{id}/reject           responder, super_admin   body (optional): reason
+    PATCH  /api/responder/places/{id}                  responder, super_admin   correct name, address, barangay, contact, note
     DELETE /api/admin/places/{id}                      super_admin              delete a removed center or rejected place for good, now
     POST   /api/responder/facilities/{id}/status-override      responder, super_admin   replace the latest status
     POST   /api/responder/facilities/{id}/capacity-correction  responder, super_admin   correct the maximum capacity
@@ -22,7 +23,7 @@ from .auth import require_responder, require_super_admin
 from .database import get_db
 from .models import Facility, User
 from .schemas import (
-    AdminStatusOut, CapacityCorrectionIn, FacilityOut, PlaceAdminOut, RejectIn, StatusOut, StatusOverrideIn,
+    AdminStatusOut, CapacityCorrectionIn, FacilityOut, PlaceAdminOut, PlaceEditIn, RejectIn, StatusOut, StatusOverrideIn,
 )
 
 router = APIRouter(tags=["places (staff)"])
@@ -39,6 +40,19 @@ def list_places(
     same name within 30 m.
     """
     return place_service.list_places(db, status)
+
+
+@router.patch("/api/responder/places/{facility_id}", response_model=PlaceAdminOut)
+def edit_place(
+    facility_id: int, payload: PlaceEditIn, request: Request,
+    user: User = Depends(require_responder), db: Session = Depends(get_db),
+):
+    """
+    Correct the details of an evacuation center that was added through the app: send only the fields
+    to change (name, address, barangay, contact, note). A new name that matches another center within
+    30 m is refused (409). Centers from the map data files, hospitals and clinics cannot be edited (409).
+    """
+    return place_service.edit_center(db, user, facility_id, {k: getattr(payload, k) for k in payload.model_fields_set}, request)
 
 
 @router.post("/api/responder/places/{facility_id}/approve", response_model=PlaceAdminOut)

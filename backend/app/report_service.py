@@ -39,7 +39,7 @@ from sqlalchemy.orm import Session
 from . import audit, config
 from .database import SessionLocal
 from .evac_service import distance_m, hash_ip
-from .models import BlockedPhone, Report, User
+from .models import BlockedPhone, ForgivenPhone, Report, User
 
 HELP, HAZARD = "help", "hazard"
 NEW, BEING_HANDLED, RESOLVED, FALSE = "new", "being_handled", "resolved", "false"
@@ -80,8 +80,77 @@ def phone_hash_from_header(value: Optional[str], required: bool) -> Optional[str
     return hash_phone_id(value)
 
 
+def block_expires_at(row: BlockedPhone) -> Optional[datetime]:
+    """When a block ends by itself (config.BLOCK_EXPIRES_DAYS), or None when it never does."""
+    if config.BLOCK_EXPIRES_DAYS <= 0:
+        return None
+    return row.blocked_at + timedelta(days=config.BLOCK_EXPIRES_DAYS)
+
+
+def _block_expired(row: BlockedPhone, now: Optional[datetime] = None) -> bool:
+    end = block_expires_at(row)
+    return end is not None and end <= (now or _now())
+
+
 def is_blocked(db: Session, phone_hash: str) -> bool:
-    return db.query(BlockedPhone.id).filter(BlockedPhone.phone_hash == phone_hash).first() is not None
+    """True while the phone is blocked. A block that has run out no longer counts, even before the cleanup removes its row."""
+    row = db.query(BlockedPhone).filter(BlockedPhone.phone_hash == phone_hash).first()
+    return row is not None and not _block_expired(row)
+
+
+def _forgive(db: Session, phone_hash: str, now: Optional[datetime] = None) -> None:
+    """Start the phone's false-report count from zero (see ForgivenPhone). The caller commits."""
+    now = now or _now()
+    row = db.get(ForgivenPhone, phone_hash)
+    if row is None:
+        db.add(ForgivenPhone(phone_hash=phone_hash, since=now))
+    else:
+        row.since = now
+
+
+def lift_expired_blocks(db: Session, now: Optional[datetime] = None) -> int:
+    """
+    Remove the blocks that have run out (config.BLOCK_EXPIRES_DAYS; 0 = never). Each lifted phone
+    starts with a clean false-report count. Returns how many it lifted and writes one audit entry
+    (as "(system)") when it lifted any. Safe to run any time.
+    """
+    if config.BLOCK_EXPIRES_DAYS <= 0:
+        return 0
+    now = now or _now()
+    lifted = 0
+    for row in db.query(BlockedPhone).all():
+        if _block_expired(row, now):
+            _forgive(db, row.phone_hash, now)
+            db.delete(row)
+            lifted += 1
+    if lifted:
+        audit.record(db, None, "report.block_expired", detail={"lifted": lifted, "after_days": config.BLOCK_EXPIRES_DAYS})
+    db.commit()
+    return lifted
+
+
+def list_blocked_phones(db: Session) -> List[dict]:
+    """Blocked phones, newest first. Only the row number, the date and the count: never the phone ID or its hash."""
+    out = []
+    for row in db.query(BlockedPhone).order_by(BlockedPhone.id.desc()).all():
+        if _block_expired(row):
+            continue
+        out.append(dict(id=row.id, blocked_at=row.blocked_at, false_reports=row.false_reports, expires_at=block_expires_at(row)))
+    return out
+
+
+def unblock_phone(db: Session, user: User, block_id: int, request: Optional[Request]) -> dict:
+    """Lets the phone send reports again, with a fresh false-report count. Audited with the person's name."""
+    row = db.get(BlockedPhone, block_id)
+    if row is None:
+        raise ReportError(404, "That blocked phone was not found. It may already have been unblocked.")
+    info = dict(id=row.id, false_reports=row.false_reports)
+    _forgive(db, row.phone_hash)
+    db.delete(row)
+    audit.record(db, user, "report.phone_unblocked", target=f"blocked_phone:{info['id']}",
+                 detail={"false_reports": info["false_reports"]}, request=request)
+    db.commit()
+    return info
 
 
 # ------------------------------------------------------------ locations
@@ -357,7 +426,16 @@ def mark_false(db: Session, user: User, report_id: int, reason: str, request: Op
 
     db.flush()  # the count below must see the rows just changed (the session does not autoflush)
     for phone in sorted({r.phone_hash for r in rows}):
-        strikes = db.query(Report).filter(Report.phone_hash == phone, Report.status == FALSE).count()
+        old_block = db.query(BlockedPhone).filter(BlockedPhone.phone_hash == phone).first()
+        if old_block is not None and _block_expired(old_block, now):
+            _forgive(db, phone, now - timedelta(seconds=1))  # its block ran out: a fresh count, this report included
+            db.delete(old_block)
+        db.flush()
+        q = db.query(Report).filter(Report.phone_hash == phone, Report.status == FALSE)
+        forgiven = db.get(ForgivenPhone, phone)
+        if forgiven is not None:  # unblocked before: only false reports since then count
+            q = q.filter(Report.closed_at >= forgiven.since)
+        strikes = q.count()
         if strikes >= config.FALSE_REPORTS_BEFORE_BLOCK and not is_blocked(db, phone):
             db.add(BlockedPhone(phone_hash=phone, false_reports=strikes))
             audit.record(db, user, "report.phone_blocked", target=f"phone:{phone[:8]}",

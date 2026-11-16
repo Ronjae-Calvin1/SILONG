@@ -44,6 +44,25 @@ class UserCreateIn(BaseModel):
     role: Literal["responder", "super_admin"]
 
 
+class ChangePasswordIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    current_password: str = Field(max_length=accounts.PASSWORD_MAX)
+    new_password: str = Field(max_length=accounts.PASSWORD_MAX)  # same minimum length as account creation
+
+
+class ResetPasswordIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    new_password: str = Field(max_length=accounts.PASSWORD_MAX)  # typed by the Super admin; never sent back
+
+
+class BlockedPhoneOut(BaseModel):
+    """A blocked phone. There is no phone ID and no hash here, on purpose."""
+    id: int
+    blocked_at: datetime
+    false_reports: int  # how many false reports it had when it was blocked
+    expires_at: Optional[datetime] = None  # null = the block never ends by itself (BLOCK_EXPIRES_DAYS=0)
+
+
 class UserOut(BaseModel):
     id: int
     name: str
@@ -80,6 +99,12 @@ def user_out(user: User, message: Optional[str] = None) -> UserOut:
         locked_until=_utc(user.locked_until) if wrong_tries_lock else None,
         created_at=_utc(user.created_at), created_by=user.created_by,
         last_sign_in_at=_utc(user.last_sign_in_at), message=message,
+    )
+
+
+def blocked_phone_out(d: dict) -> BlockedPhoneOut:
+    return BlockedPhoneOut(
+        id=d["id"], blocked_at=_utc(d["blocked_at"]), false_reports=d["false_reports"], expires_at=_utc(d["expires_at"]),
     )
 
 

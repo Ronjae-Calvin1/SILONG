@@ -280,3 +280,59 @@ class ChatRateLimiter:
 
 
 chat_limiter = ChatRateLimiter()
+
+
+class PasswordChangeLimiter:
+    """
+    Limits WRONG "current password" tries on the change-password form, per person and per IP
+    (config.PASSWORD_CHANGE_*). Only failures count: a right password is never held back.
+    `blocked` is asked before the password is checked; `fail` records a wrong try; `clear`
+    forgets a person's wrong tries after a right password. Same limits as the others
+    (memory only, per process, an IP behind a proxy looks shared).
+    """
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic):
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._fails: dict[str, deque] = defaultdict(deque)
+
+    def _limits(self, key: str) -> int:
+        return config.PASSWORD_CHANGE_MAX_WRONG if key.startswith("user:") else config.PASSWORD_CHANGE_IP_MAX_WRONG
+
+    def _prune(self, now: float) -> None:
+        window = config.PASSWORD_CHANGE_WINDOW_SECONDS
+        for key in list(self._fails):
+            q = self._fails[key]
+            while q and now - q[0] > window:
+                q.popleft()
+            if not q:
+                del self._fails[key]
+
+    def blocked(self, keys) -> Optional[int]:
+        """None if the person and the IP may still try, otherwise the seconds to wait."""
+        now = self._clock()
+        with self._lock:
+            self._prune(now)
+            waits = []
+            for key in keys:
+                q = self._fails.get(key)
+                if q and len(q) >= self._limits(key):
+                    waits.append(max(1, int(config.PASSWORD_CHANGE_WINDOW_SECONDS - (now - q[0]) + 0.999)))
+            return max(waits) if waits else None
+
+    def fail(self, keys) -> None:
+        now = self._clock()
+        with self._lock:
+            for key in keys:
+                self._fails[key].append(now)
+
+    def clear(self, key: str) -> None:
+        with self._lock:
+            self._fails.pop(key, None)
+
+    def reset(self) -> None:
+        with self._lock:
+            self._fails.clear()
+
+
+password_change_limiter = PasswordChangeLimiter()

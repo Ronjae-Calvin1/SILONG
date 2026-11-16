@@ -217,6 +217,18 @@ class BlockedPhone(Base):
     false_reports = Column(Integer, nullable=False, default=0)  # how many it had when blocked
 
 
+class ForgivenPhone(Base):
+    """
+    A phone that was unblocked (by a Super admin, or because its block expired). Only the false
+    reports closed AFTER `since` count toward a new block, so an unblocked phone starts fresh
+    instead of being blocked again by its next single false report. Hashed ID only.
+    """
+    __tablename__ = "forgiven_phones"
+
+    phone_hash = Column(String, primary_key=True)
+    since = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
 class StatusUpdate(Base):
     """Capacity / availability report. Newest row per facility = current status."""
     __tablename__ = "status_updates"
