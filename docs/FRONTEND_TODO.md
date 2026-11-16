@@ -260,6 +260,18 @@ My places:
 
 - [ ] The menu row "Admin sign in" goes to `/admin`. The page is a placeholder that says sign-in is not available. Built in 5.1.
 
+### 4.14 Nearby hazards on the map (not built): `pages/MapPage.tsx`, `components/MapPins.css`, `types/index.ts`
+
+Today no screen shows hazards from other people. Only the sender's own reports exist (4.10).
+
+- [ ] Add `api.getNearbyHazards(latitude, longitude)`: `GET /api/hazards/nearby?latitude=..&longitude=..` (query names are `latitude` and `longitude`; the short `lat` and `lng` in the `docs/API.md` intro are wrong). Send `X-Phone-Id` (optional).
+- [ ] Items: `id`, `latitude`, `longitude` (approximate: the middle of a 250 m square, not the real spot), `status` (`unconfirmed` or `verified`), `label` ("Unconfirmed" or "Verified"), `category`. Nothing else is public.
+- [ ] Range is 1 km (`NEAR_ME_KM`) from the position you send. The position is not stored. Use the person's location, or the map centre if location is off (check).
+- [ ] Draw each hazard as an approximate area or marker (not an exact pin), with its `label` and `category`. Make "Unconfirmed" look different from "Verified". The look is not in the designs file (check).
+- [ ] Refresh when the person moves or the map refreshes. Reads are rate limited (429).
+- [ ] A hazard is hidden until 3 different phones report it, and leaves the map when a responder resolves or marks it false.
+- [ ] A help request never appears here. The sender sees only their own status (4.10). Whether the sender also sees their own pin on the map is not in the code (check).
+
 ## 5. Missing screens to build
 
 ### 5.1 Staff sign in and change password (all staff)
@@ -371,6 +383,7 @@ Sizes: S = under half a day, M = about a day, L = several days. These are guesse
 - [ ] Status form: source label and label fix (4.3): S
 - [ ] Pending pin look and panel text (4.4): S
 - [ ] My reports and my places (4.10): M
+- [ ] Nearby hazards on the map (4.14): M
 
 Done when (demo data, phone ID set):
 - [ ] A hazard sent from the form shows in "My reports" with a status label (New, Being handled or Resolved).
@@ -378,6 +391,7 @@ Done when (demo data, phone ID set):
 - [ ] A place added on the map shows dashed blue, survives the 60-second refresh and a reload, and another browser profile does not see it.
 - [ ] A status update shows "Reported by a user". The "People inside" field is labelled correctly.
 - [ ] The seeded pending places do not show on the public map. They belong to the seed's fake phones, so test pending with a place you add yourself. (check)
+- [ ] A hazard reported by 3 different phones (demo data has one) shows on the map as "Unconfirmed" within 1 km, and as "Verified" after a responder verifies it.
 
 ### Phase 2: weather, alerts, hotlines, chat
 
