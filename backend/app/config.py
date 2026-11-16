@@ -44,9 +44,19 @@ DUPLICATE_METERS = 30
 # Largest max_capacity accepted for one center (a typo guard, not a real limit).
 MAX_CAPACITY_LIMIT = int(_number("MAX_CAPACITY_LIMIT", 50_000))
 
-# Add / remove / restore share one allowance per IP.
+# Adding a place has one allowance per IP and one per phone ID. (Removing and
+# restoring are staff actions now: signed in and audited, so they are not limited here.)
 MANAGE_MAX_ACTIONS = int(_number("MANAGE_MAX_ACTIONS", 10))
 MANAGE_WINDOW_SECONDS = int(_number("MANAGE_WINDOW_SECONDS", 600))
+
+# ---- Places: approval and removal (redesign part 3) ----
+# A center removed by a responder or Super admin is hidden for everyone and kept this many
+# days, then deleted together with its status history (see place_service.purge_removed_centers).
+# A Super admin can delete one sooner. Places a responder rejected are deleted after the same time.
+REMOVED_CENTERS_KEEP_DAYS = int(_number("REMOVED_CENTERS_KEEP_DAYS", 30))
+
+# One phone can have at most this many added places waiting for approval at the same time.
+PENDING_PLACES_PER_PHONE = int(_number("PENDING_PLACES_PER_PHONE", 5))
 
 # Salt for the hashed IPs in the action log. Set IP_HASH_SALT in the environment
 # to keep hashes comparable across restarts. If it is not set, a random salt is

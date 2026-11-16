@@ -9,6 +9,9 @@ The server-side role check. Use these as FastAPI dependencies on admin routes:
     @router.get("/api/admin/something")                 # Super admin only
     def something(user: User = Depends(require_super_admin)): ...
 
+For a PUBLIC route where a signed-in staff member counts as an official (a status update), use
+`optional_staff`: it gives the user or None and never raises.
+
 No token -> 401. Expired (idle) or unknown token -> 401. Right sign-in but the
 role is too low -> 403. The check happens on the server, whatever the screens show.
 A Super admin passes every check a responder passes.
@@ -36,6 +39,21 @@ def bearer_token(authorization: Optional[str] = Header(default=None)) -> Optiona
 def current_user(token: Optional[str] = Depends(bearer_token), db: Session = Depends(get_db)) -> User:
     """Any signed-in staff member. Also moves their idle timer forward."""
     return accounts.user_for_token(db, token)
+
+
+def optional_staff(token: Optional[str] = Depends(bearer_token), db: Session = Depends(get_db)) -> Optional[User]:
+    """
+    For PUBLIC routes where a signed-in responder or Super admin counts as an official (a status
+    update). No token, or a token that is wrong or too old, means "not signed in": None, never a 401,
+    so the person is simply treated as a user. A good token moves the idle timer forward, like
+    current_user does.
+    """
+    if not token:
+        return None
+    try:
+        return accounts.user_for_token(db, token)
+    except HTTPException:
+        return None
 
 
 def require_role(minimum: str):

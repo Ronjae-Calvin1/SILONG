@@ -30,18 +30,18 @@ is designed but not built.
 | Function | What it does | Status |
 | --- | --- | --- |
 | Map | Shows hospitals, clinics and evacuation centers. All pins show automatically. Tap a pin for the name, address and a tap-to-call number. | Working |
-| Capacity and availability | Tap a pin to see whether a place is open, busy or full and when that was last updated. Evacuation centers also show a capacity bar ("85 / 100 people", "15 spaces left"). Anyone can update it, with no login. | Working. Planned: "Reported by a user" and "Confirmed by official" labels |
-| Evacuation center manager | Add an evacuation center on the map, remove one, and restore a removed one. Removing hides a center, it never deletes it. | Working today. Planned: new places wait for admin approval, "hide" only affects one phone, admin removal is kept 30 days and then deleted |
+| Capacity and availability | Tap a pin to see whether a place is open, busy or full and when that was last updated. Evacuation centers also show a capacity bar ("85 / 100 people", "15 spaces left"). Anyone can update it, with no login. Each update says who it came from: "Reported by a user" or "Confirmed by official" (a signed-in responder or Super admin). | Working on the server (`source` and `source_label` in `/api/facilities`). Planned: showing the label in the screens |
+| Evacuation center manager | A place a user adds waits for a responder or Super admin to approve it, and only its sender sees it until then. "Hide on this phone" only affects that phone. Removing a center for everyone is an admin action; it is kept 30 days (restorable), then deleted with its history. Only a Super admin can delete one sooner. | Working on the server (add, approve, reject, remove, restore, 30-day purge, permanent delete). The frontend still has no screen to approve places or to send the phone ID with an added place (see below) |
 | Weather forecast | Current weather and a short forecast. | Screen only, sample data |
 | Emergency contacts | Red phone button that opens numbers to call with one tap. | Button only, not wired |
 | Early warning alerts | Bottom panel with weather, official warnings and summarized internet updates. | Screen only, sample data |
 | Incident report | Report an incident with a location from GPS or a point on the map. | Form works, saved on the phone only, not sent to a server |
 | AI chatbot | One question in, one short answer out, from a checked guide only. No follow-ups and no live place status. Every answer ends with "AI-generated. Follow official advisories first." | Button only. Backend answers are stubbed |
 | Help requests and hazard reports (replaces the incident report form) | "I need help" goes to responders only and is never shown on the map. A hazard report shows to nearby people as an approximate spot, "Unconfirmed" after 3 reports from 3 phones, "Verified" once an admin checks it. | Working (backend only, no screens yet). The old incident form above still saves on the phone only |
-| Responder side | Reports list, map, places and a resolve step. Phone and computer layouts. | The report endpoints work on the server (list, take, resolve, mark false, verify). Planned: the screens, the map, places |
+| Responder side | Reports list, map, places and a resolve step. Phone and computer layouts. | The endpoints work on the server: reports (list, take, resolve, mark false, verify), places (approve, reject, remove, restore) and status corrections (override, capacity). Planned: the screens |
 | Staff accounts and sign in | Responder and Super admin accounts, sign in and out, lock after 5 wrong tries, sign out after 30 minutes idle, role checks on the server. | Working (backend only, no screens yet) |
 | Audit log | Every admin action is recorded with the person's name. A Super admin reads it. | Working (backend only, no screens yet) |
-| Super admin side | Everything a responder does, plus advisories, emergency numbers, the chatbot guide, accounts, the audit log and permanent delete. Computer only. | Accounts and audit log work on the server. Planned: screens, advisories, emergency numbers, chatbot guide, permanent delete |
+| Super admin side | Everything a responder does, plus advisories, emergency numbers, the chatbot guide, accounts, the audit log and permanent delete. Computer only. | Accounts, audit log and permanent delete work on the server. Planned: screens, advisories, emergency numbers, chatbot guide |
 | FAQs, support and "My reports and places" | Menu pages. | Planned (designed, not built) |
 
 Status is based on the code in this repository. Anything marked "Not built
@@ -218,8 +218,33 @@ environment variable):
    or `null`) and `GET /api/facilities/3/status/history?limit=10`.
 
 The current data file has no evacuation centers. Add one in the app (see
-"Evacuation centers: add, remove, restore" below), or add one to
+"Evacuation centers: add, approve, remove, restore" below), or add one to
 `backend/data/manual_facilities.json` (see "Updating facility data").
+
+**Who reported it, and corrections by staff:** every status update records its
+source. A normal update is `"source": "user"` (`"Reported by a user"`). When a
+signed-in responder or Super admin sends the same update with their token
+(`Authorization: Bearer ...`), it is `"source": "official"` (`"Confirmed by
+official"`) with their name kept on the row, and it is not slowed down by the
+per-place cooldown. Both fields are inside `status` in `GET /api/facilities`
+(new fields only, nothing was renamed). A wrong or expired token counts as no
+sign-in: the update is saved as a user report.
+
+Staff can also correct a place (every one of these is audited with their name,
+and none of them erases anything; each adds a row to the status history):
+
+| Action | Endpoint | Who |
+| --- | --- | --- |
+| Override the latest status | `POST /api/responder/facilities/{id}/status-override` | Responder, Super admin |
+| Correct the maximum capacity | `POST /api/responder/facilities/{id}/capacity-correction` | Responder, Super admin |
+| Full history with staff names | `GET /api/responder/facilities/{id}/status-history` | Responder, Super admin |
+
+An override takes the same fields as a user report (and the same "at capacity
+means full" rule) plus an optional `reason`. A capacity correction needs a status
+to sit on; it never makes an old status look fresh, and it is not a status in the
+public history. After an official has set a center's capacity, a user report
+cannot change it (the form always sends the number, so the server keeps the
+official one and says so in `message`); a later official change can.
 
 **Facility IDs:** each facility gets a permanent key (its OpenStreetMap
 reference, type + name for manual entries, or `user:<n>` for centers added in
@@ -229,9 +254,9 @@ history when the file is re-fetched or reordered. A place that disappears from
 the file is removed together with its history. Centers added in the app live in
 their own table, so re-fetching the file never removes them.
 
-## Evacuation centers: add, remove, restore
+## Evacuation centers: add, approve, remove, restore
 
-**Add a center**
+**Add a center (anyone, no login)**
 
 1. Tap **Add evacuation center** (bottom left), then tap the map to place the pin.
    Drag the pin to adjust it, then tap **Continue**.
@@ -239,48 +264,83 @@ their own table, so re-fetching the file never removes them.
    are required; barangay, address, contact number and a short note are optional.
    The location must be inside Batangas City (a rough box set in
    `BATANGAS_CITY_BBOX` in `config.py`). Tap **Save evacuation center**.
-3. The pin appears right away with a blue ring. It shows "No status yet" and
+3. The place starts as **pending** (`"approval_status": "pending"`). Only the phone
+   that sent it sees it (the phone ID is the `X-Phone-Id` header, the same one the
+   reports use, stored hashed). Nobody else gets it in `/api/facilities`, and nobody
+   else can read or update it by guessing its number. It shows "No status yet" and
    "Capacity: N people" until someone reports.
+4. A responder or Super admin approves it (everybody sees it from then on) or
+   rejects it (nobody but staff sees it). Staff see a list of pending places with
+   the exact details.
 
-A center with the same name within 30 m of an existing one is refused. If that
-one was removed earlier, the message says to restore it instead.
+A place with the same name within 30 m of an existing one (an approved one, one
+still pending, or one that was removed) is **not refused**: it is flagged, and the
+staff list shows `possible_duplicate` with the other place, its distance and
+whether it was removed. The same phone cannot send the same place twice while it
+waits (409), and one phone can have at most 5 places waiting
+(`PENDING_PLACES_PER_PHONE`).
 
-**Remove a center:** tap its pin, then **Remove from map** and **Yes, remove**.
-Only evacuation centers can be removed; hospitals and clinics cannot.
+**Hide on this phone** happens in the browser only. The server never hears about
+it and it never hides a center for anybody else. Hospitals and clinics cannot be
+hidden. Nothing a user does can remove a center for everyone.
 
-**Restore a center:** tap the menu button (top left), open **Removed centers**
-and tap **Restore** next to the center. Its pin comes back right away, with its
-old status history.
+**Remove for everyone (responder or Super admin):** an approved evacuation center
+is hidden from the map for all users. Its data and status history are kept for
+**30 days** (`REMOVED_CENTERS_KEEP_DAYS` in `config.py`, or the environment
+variable of the same name). A responder or Super admin can restore it until then.
+After 30 days it is **deleted together with its history** by the purge (below).
+Only a Super admin can delete one sooner. Hospitals and clinics cannot be removed.
 
-**Soft delete:** removing never deletes anything. The center and its status
-history stay in the database; a row in `facility_removals` hides it from
-`GET /api/facilities` until it is restored (`restored_at` is filled in). The
-hiding is kept when the backend restarts and when the facilities file is
-re-fetched, and it works the same for centers from OpenStreetMap, the manual
-file and the app. Adds, removals and restores are also written to `action_log`
-with a hashed IP address (never the address itself). There are no accounts, so
-the only protection is a limit: 10 add/remove/restore actions per IP per 10
+| Action | Endpoint | Who |
+| --- | --- | --- |
+| Add (starts pending) | `POST /api/evacuation-centers` | Anyone (header `X-Phone-Id`, optional) |
+| List places waiting for approval | `GET /api/responder/places` (`?status=rejected` for rejected ones) | Responder, Super admin |
+| Approve | `POST /api/responder/places/{id}/approve` | Responder, Super admin |
+| Reject (optional `reason`) | `POST /api/responder/places/{id}/reject` | Responder, Super admin |
+| Remove for everyone | `DELETE /api/evacuation-centers/{id}` | Responder, Super admin |
+| List removed centers (with the day each is deleted) | `GET /api/evacuation-centers/removed` | Responder, Super admin |
+| Restore | `POST /api/evacuation-centers/{id}/restore` | Responder, Super admin |
+| Delete for good, now (a removed center or a rejected place) | `DELETE /api/admin/places/{id}` | Super admin |
+
+Every approve, reject, remove, restore and delete is written to the audit log with
+the person's name. Adding is written to `action_log` with a hashed IP address
+(never the address itself) and limited to 10 adds per IP and per phone per 10
 minutes (`MANAGE_MAX_ACTIONS`, `MANAGE_WINDOW_SECONDS`).
 
-| Action | Endpoint |
-| --- | --- |
-| Add | `POST /api/evacuation-centers` |
-| Remove (hide) | `DELETE /api/evacuation-centers/{id}` |
-| List removed | `GET /api/evacuation-centers/removed` |
-| Restore | `POST /api/evacuation-centers/{id}/restore` |
+**The purge:** `purge_removed_centers` deletes every center that has been removed
+for more than 30 days, with its status history, its removal history and its old
+action-log lines. Places that were rejected more than 30 days ago go too. A center
+that was restored is never touched, and pending places are not purged. It runs
+when the backend starts and from a script (run it from the `backend` folder, for
+example once a day):
+
+```
+py scripts/purge_removed_centers.py
+```
+
+A center that comes from a data file (OpenStreetMap or `manual_facilities.json`)
+would be read from the file again on the next start, so its key is also written to
+the `deleted_facilities` table and skipped. To bring such a center back, delete
+its row from that table. The audit log is never purged.
+
+**Older databases** are upgraded by themselves on the next start (new columns on
+`user_evacuation_centers`, `facility_removals` and `status_updates`, new table
+`deleted_facilities`): centers that were already on the map become "approved",
+older status updates become user reports, nothing is lost.
 
 **Try it** (backend and frontend running; start the backend with
-`STATUS_COOLDOWN_SECONDS=0` so repeated updates are not delayed):
+`STATUS_COOLDOWN_SECONDS=0` so repeated updates are not delayed; sign in with
+`POST /api/auth/sign-in` for the staff steps):
 
-1. Add a center with capacity 100. The panel shows "No status yet" and
-   "Capacity: 100 people".
-2. Update status: **Almost full**, people inside 85. Orange pin, orange bar,
+1. Add a center with capacity 100. You see it, with a dashed blue ring once the
+   screens show `approval_status`; open the map from another browser and you do not.
+2. As a responder, `GET /api/responder/places`, then approve it. Now everybody sees it.
+3. Update status: **Almost full**, people inside 85. Orange pin, orange bar,
    "85 / 100 people", "15 spaces left".
-3. Update status: **Open**, people inside 100. The page shows the "saved as
+4. Update status: **Open**, people inside 100. The page shows the "saved as
    full" message; the pin and bar turn red and the status is **Full**.
-4. Refresh the page: the center and its status are still there.
-5. Remove it, restart the backend, refresh: it stays hidden.
-6. Menu, **Removed centers**, **Restore**: the pin is back.
+5. As a responder, remove it, restart the backend, refresh: it stays hidden.
+   `GET /api/evacuation-centers/removed` lists it with `days_left`; restore it.
 
 ## Staff accounts and roles
 
@@ -471,6 +531,8 @@ environment variable of the same name):
 | Setting | Value |
 | --- | --- |
 | `REPORTS_KEEP_DAYS` | 30 |
+| `REMOVED_CENTERS_KEEP_DAYS` | 30 (removed centers are deleted with their history after this many days) |
+| `PENDING_PLACES_PER_PHONE` | 5 |
 | `HAZARD_UNCONFIRMED_PHONES` | 3 |
 | `FALSE_REPORTS_BEFORE_BLOCK` | 3 |
 | `NEAR_ME_KM` | 1 |
@@ -491,6 +553,21 @@ It uses its own temporary database. It checks that a help request is never
 public, that a hazard is hidden beyond 1 km, that 3 different phones (not 3 reports
 from one phone) make it Unconfirmed, Verified, the false report block, the purge,
 the limits and the role checks.
+
+**Checking the places rules (update 10):**
+
+```
+cd backend
+py tests/test_places.py
+```
+
+It checks that a pending place is seen only by its sender, approve, reject, that
+a user cannot remove or restore for everyone, admin removal and restore, the
+30-day purge (also from the script and on start), "Reported by a user" versus
+"Confirmed by official", that an override and a capacity correction keep the
+history and record the name, and upgrading an older database. To run all three
+test files one after the other: `py tests/run_all.py` (each file needs its own
+process, so do not run them in one `pytest` call).
 
 **Older databases.** The `category`, `people` and `can_move` columns are added to
 an existing `reports` table automatically when the server starts (and when
@@ -554,13 +631,16 @@ Press `Ctrl+C` in each terminal. On Windows, it may ask
 ```
 SILONG/
 ├── backend/
-│   ├── scripts/                # create_super_admin.py (first Super admin), purge_reports.py, fetch/backdate helpers
-│   ├── tests/                  # test_accounts.py, test_reports.py
+│   ├── scripts/                # create_super_admin.py (first Super admin), purge_reports.py, purge_removed_centers.py, fetch/backdate helpers
+│   ├── tests/                  # test_accounts.py, test_reports.py, test_places.py, run_all.py (runs them all)
 │   └── app/
 │       ├── main.py             # FastAPI app, loads facilities, /api/facilities and the status routes
 │       ├── routes.py           # API routes (weather and AI routes are stubs)
-│       ├── evac_routes.py      # Add / remove / restore evacuation centers
-│       ├── evac_service.py     # Center keys, duplicate check, soft delete, action log
+│       ├── evac_routes.py      # Add a place (public, starts pending); remove / restore / removed list (staff)
+│       ├── evac_service.py     # Center keys, duplicate check, what is hidden from whom, action log
+│       ├── place_routes.py     # Staff: pending list, approve, reject, delete for good, status override, capacity correction
+│       ├── place_service.py    # Approval and removal rules, 30-day purge, upgrade of older databases
+│       ├── status_admin.py     # Status override and capacity correction (history rows, audited)
 │       ├── models.py           # SQL tables (facilities, status updates, user centers, removals, action log, users, sessions, audit log, reports, blocked phones)
 │       ├── schemas.py          # Request/response shapes and status rules
 │       ├── config.py           # 6-hour outdated rule, rate limits, city area, duplicate distance, sign-in rules
@@ -568,13 +648,13 @@ SILONG/
 │       ├── account_routes.py   # Sign in/out, /api/me, accounts, audit log endpoints
 │       ├── account_schemas.py  # Request/response shapes for the above
 │       ├── accounts.py         # Create, sign in, sessions, lock/unlock/remove
-│       ├── auth.py             # Role check for admin routes (require_responder, require_super_admin)
+│       ├── auth.py             # Role check for admin routes (require_responder, require_super_admin, optional_staff)
 │       ├── audit.py            # audit.record(...) helper for admin actions
 │       ├── security.py         # Password hashing, token hashing
 │       ├── report_routes.py    # Send a report, my reports, nearby hazards, responder list and actions
 │       ├── report_schemas.py   # Request/response shapes for reports
 │       ├── report_service.py   # Report rules: hazard groups, approximate spot, false reports, purge
-│       ├── status_service.py   # Latest status / history, capacity rule (automatic "Full")
+│       ├── status_service.py   # Latest status / history, source of an update, capacity rule (automatic "Full")
 │       ├── database.py         # SQLite connection
 │       ├── weather_service.py  # Sample weather data (stub)
 │       └── ai_service.py       # Chatbot/AI answers (stub)
@@ -603,6 +683,12 @@ Based on the project documentation:
 - Emergency contacts screen behind the red phone button (numbers must be
   checked with the Batangas City CDRRMO).
 - Real weather (Open-Meteo) and official warnings in the Early Warning panel.
+- Connect the frontend to the places rules (backend is ready): send the `X-Phone-Id`
+  header with `/api/facilities`, the status update and the add-place call (a pending
+  place disappears from its sender's map after a reload without it); show
+  `approval_status` (dashed blue ring while pending) and `status.source_label`; the
+  approve / reject screens and the "Removed centers" list for staff. `RemovedCenters.tsx`
+  is not used by any page and would now need a staff sign-in.
 - Connect the report screens to the report endpoints (the backend is ready, the old incident form still saves on the phone only).
 - Chatbot that answers from a checked guide only, with the fixed "AI-generated.
   Follow official advisories first." line.

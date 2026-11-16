@@ -112,6 +112,9 @@ class StatusOut(BaseModel):
     note: Optional[str] = None
     updated_at: datetime  # UTC
     is_outdated: bool  # computed on the server, see config.OUTDATED_AFTER
+    # Who this update came from (part 3). "official" = a signed-in responder or Super admin.
+    source: str = "user"  # "user" | "official"
+    source_label: str = "Reported by a user"  # "Reported by a user" | "Confirmed by official"
     # Only set on the response to a new report, when the server changed what was
     # sent (for example people_inside reached max_capacity, so it saved "full").
     message: Optional[str] = None
@@ -133,6 +136,9 @@ class FacilityOut(BaseModel):
     notes: Optional[str] = None
     source: str = ""  # "osm" | "manual" | "user"
     center_type: Optional[str] = None  # "permanent" | "temporary"; only for user-added centers
+    # "approved" for every public place. "pending" only for a place this phone added that no
+    # responder has approved yet (nobody else gets it in a list).
+    approval_status: str = "approved"
     # Latest status update, or null if nobody has reported yet ("No status yet").
     status: Optional[StatusOut] = None
     # Capacity fields: evacuation centers only (null for hospitals and clinics,
@@ -212,6 +218,101 @@ class RemovalOut(BaseModel):
     name: str
     removed_at: datetime  # UTC
     message: Optional[str] = None
+    # Added in part 3.
+    removed_by: Optional[str] = None  # staff name; empty on removals made before part 3
+    delete_after: Optional[datetime] = None  # UTC: when the purge deletes it for good
+    days_left: Optional[int] = None  # days until then, rounded up (0 = due at the next purge)
+
+
+REASON_MAX = 140
+
+
+class RejectIn(BaseModel):
+    """Rejecting an added place. The reason is optional; it goes to the audit log."""
+    model_config = ConfigDict(extra="forbid")
+
+    reason: Optional[str] = None
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_clean(cls, v):
+        return _clean_text(v, REASON_MAX, "Reason")
+
+
+class DuplicateOut(BaseModel):
+    """The existing center a new place looks like (same name within config.DUPLICATE_METERS)."""
+    id: int
+    key: str
+    name: str
+    distance_m: float
+    approval_status: str  # "approved" | "pending"
+    removed: bool  # true when that center was removed (it can be restored instead)
+
+
+class PlaceAdminOut(BaseModel):
+    """An added place as a responder or Super admin sees it (exact contact, who reviewed it)."""
+    id: int
+    key: str
+    name: str
+    center_type: str
+    barangay: Optional[str] = None
+    address: Optional[str] = None  # as typed; the map shows barangay and city added to it
+    contact: Optional[str] = None
+    max_capacity: int
+    latitude: float
+    longitude: float
+    note: Optional[str] = None
+    approval_status: str  # "pending" | "approved" | "rejected"
+    submitted_at: datetime  # UTC
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    reject_reason: Optional[str] = None
+    possible_duplicate: Optional[DuplicateOut] = None
+    is_removed: bool = False
+    message: Optional[str] = None
+
+
+# ---- Admin changes to a status (part 3) ----
+
+class StatusOverrideIn(StatusIn):
+    """
+    A responder or Super admin replaces the latest status. Same fields and rules as a user report
+    (including the capacity rule), plus an optional reason that goes to the audit log.
+    """
+    reason: Optional[str] = None
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_clean(cls, v):
+        return _clean_text(v, REASON_MAX, "Reason")
+
+
+class CapacityCorrectionIn(BaseModel):
+    """A responder or Super admin corrects the maximum capacity of an evacuation center."""
+    model_config = ConfigDict(extra="forbid")
+
+    max_capacity: Capacity
+    reason: Optional[str] = None
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_clean(cls, v):
+        return _clean_text(v, REASON_MAX, "Reason")
+
+
+class AdminStatusOut(BaseModel):
+    """One row of a facility's full history, as staff see it."""
+    id: int
+    kind: str  # "report" | "override" | "capacity"
+    status: str
+    people_inside: Optional[int] = None
+    max_capacity: Optional[int] = None
+    resources: List[str] = []
+    note: Optional[str] = None
+    updated_at: datetime  # UTC
+    source: str  # "user" | "official"
+    source_label: str
+    changed_by: Optional[str] = None  # staff name on official rows
 
 
 # ---- Weather ----

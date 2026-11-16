@@ -2,6 +2,58 @@
 
 Short log of what changed in each update, newest first.
 
+## Update 10 — Places rules, status source, overrides (redesign part 3 of 4, backend only)
+- **A place a user adds starts pending.** Only the phone that sent it (hashed
+  `X-Phone-Id`, the same handling as the reports) sees it, in `GET /api/facilities`
+  with `"approval_status": "pending"`. Nobody else can see it, read its history or
+  update its status. A responder or Super admin approves it (public) or rejects it
+  (staff only). The duplicate rule (same name within 30 m) is kept, but it now
+  **flags** the place for the staff list (`possible_duplicate`) instead of refusing it.
+  The same phone cannot send the same place twice while it waits (409) and can have
+  at most 5 waiting (`PENDING_PLACES_PER_PHONE`).
+- **Removing is staff only.** `DELETE /api/evacuation-centers/{id}`, `POST .../restore`
+  and `GET /api/evacuation-centers/removed` now need a responder or Super admin
+  sign-in (401 / 403 otherwise), are audited, and are no longer limited per IP.
+  "Hide on this phone" stays in the browser; the server never hides a center for
+  everyone because a user asked.
+- **30 days, then deleted.** A removed center is kept `REMOVED_CENTERS_KEEP_DAYS`
+  days (30, environment override), then deleted with its status history by
+  `place_service.purge_removed_centers`: on start and with
+  `py scripts/purge_removed_centers.py`. Places rejected that long ago are deleted
+  too. A center from a data file is noted in the new `deleted_facilities` table so
+  the next start does not bring it back. A Super admin can delete one sooner
+  (`DELETE /api/admin/places/{id}`, only a removed center or a rejected place).
+- **Where a status came from.** Every update has `source` (`user` or `official`) and
+  `source_label` ("Reported by a user" / "Confirmed by official"), inside `status`
+  in `/api/facilities`. It is official when a signed-in responder or Super admin
+  sends it. A wrong or expired token counts as a user, not an error.
+- **Overrides and capacity corrections** (responder or Super admin, audited with
+  the name): `POST /api/responder/facilities/{id}/status-override`,
+  `POST .../capacity-correction`, `GET .../status-history`. Each adds a row to the
+  status history; nothing is erased. After an official sets a capacity, a user
+  report cannot change it.
+- New endpoints: `GET /api/responder/places`, `POST /api/responder/places/{id}/approve`,
+  `POST /api/responder/places/{id}/reject`.
+- New columns and table, added automatically to an existing database on the next
+  start: `user_evacuation_centers` (`approval_status`, `phone_hash`, `reviewed_by`,
+  `reviewed_at`, `reject_reason`), `facility_removals` (`removed_by`),
+  `status_updates` (`source`, `kind`, `changed_by`), table `deleted_facilities`.
+  Places already on the map become "approved"; old updates become user reports.
+- `/api/facilities` only gained fields (`approval_status`, `status.source`,
+  `status.source_label`). The removal response gained `removed_by`, `delete_after`,
+  `days_left`.
+- Docs: README and `docs/REDESIGN.md` now mark accounts, reports and the places
+  rules as working (on the server).
+- Tests: `py tests/test_places.py` (32 checks). `py tests/run_all.py` runs it with
+  `test_accounts.py` and `test_reports.py` (each needs its own process).
+  `test_accounts.py` had one check changed: the list of removed centers now
+  answers 401 without a sign-in.
+- Changed: `models.py`, `schemas.py`, `config.py`, `main.py`, `auth.py`,
+  `evac_routes.py`, `evac_service.py`, `status_service.py`, `tests/test_accounts.py`.
+  New: `place_service.py`, `place_routes.py`, `status_admin.py`,
+  `scripts/purge_removed_centers.py`, `tests/test_places.py`, `tests/run_all.py`.
+  No frontend change.
+
 ## Update 9b — Report fields: category, people, can move (backend only)
 - Small change to the reports from update 9, to match the incident form.
 - `POST /api/reports` now needs a **`category`** (1 to 40 characters: what the

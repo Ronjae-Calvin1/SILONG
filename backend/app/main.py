@@ -1,6 +1,7 @@
 """
 Backbone: map slice + capacity/availability status (Batangas City facilities)
-+ evacuation center manager (add / soft remove / restore, see evac_routes.py)
++ evacuation center manager (add as pending, staff approve / remove / restore, see evac_routes.py
+  and place_routes.py; the rules are in place_service.py)
 + staff accounts, roles and the audit log (see account_routes.py)
 + help requests and hazard reports (see report_routes.py).
 Facilities in SQLite -> FastAPI endpoints -> frontend fetches them.
@@ -17,15 +18,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
-from . import evac_service, report_service, status_service
+from . import accounts, audit, evac_service, place_service, report_service, status_service
 from .account_routes import router as account_router
+from .auth import optional_staff
 from .database import Base, engine, SessionLocal, get_db
 from .evac_routes import router as evac_router
-from .models import Facility, StatusUpdate, UserEvacuationCenter
+from .models import DeletedFacility, Facility, StatusUpdate, User, UserEvacuationCenter
+from .place_routes import router as place_router
 from .rate_limit import limiter
-from .report_routes import router as report_router
+from .report_routes import optional_phone, router as report_router
 from .schemas import FacilityOut, StatusIn, StatusOut, validate_for_facility_type
 
 
@@ -46,8 +49,11 @@ _drop_legacy_facilities_table()
 # manager tables on an existing database) and leaves existing tables untouched,
 # so nobody has to delete the database file.
 Base.metadata.create_all(bind=engine)
-# create_all does not add columns to a table that already exists: add the newer report columns.
+# create_all does not add columns to a table that already exists: add the newer report columns
+# and the part 3 place and status columns. This must stay before sync_facilities() below, which
+# reads those columns.
 report_service.upgrade_report_columns(engine)
+place_service.upgrade_place_columns(engine)
 
 
 # Real hospitals in Batangas City, from the city government's official
@@ -151,7 +157,9 @@ def sync_facilities():
 
     User-added centers (key "user:<n>") are listed from their own table, so they
     are never swept away here. Soft-removed centers stay in the table too: the
-    API just hides them.
+    API just hides them. A center from a data file that was deleted for good
+    (place_service.delete_for_good / the purge) is on the deleted_facilities list
+    and is not read from the file again.
     """
     db = SessionLocal()
     try:
@@ -164,6 +172,10 @@ def sync_facilities():
 
         for u in db.query(UserEvacuationCenter).all():
             wanted[f"user:{u.id}"] = evac_service.user_center_facility_fields(u)
+
+        deleted = {key for (key,) in db.query(DeletedFacility.key).all()}
+        for key in deleted:
+            wanted.pop(key, None)
 
         existing = {row.key: row for row in db.query(Facility).all()}
 
@@ -187,11 +199,14 @@ def sync_facilities():
 sync_facilities()
 # Delete reports older than the retention time (see config.REPORTS_KEEP_DAYS).
 report_service.purge_on_startup()
+# Delete removed centers (and rejected places) kept longer than config.REMOVED_CENTERS_KEEP_DAYS.
+place_service.purge_on_startup()
 
 app = FastAPI(title="SILONG API — map and status")
 app.include_router(evac_router)
 app.include_router(account_router)
 app.include_router(report_router)
+app.include_router(place_router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):
@@ -218,26 +233,30 @@ def health():
 
 
 @app.get("/api/facilities", response_model=List[FacilityOut])
-def list_facilities(db: Session = Depends(get_db)):
+def list_facilities(phone: Optional[str] = Depends(optional_phone), db: Session = Depends(get_db)):
     """
     All facilities from every source (osm / manual / user), minus removed
-    evacuation centers. Each has its latest status (or null) and, for
-    evacuation centers, the capacity fields.
+    evacuation centers and places that are not approved. Each has its latest
+    status (or null, with `source` and `source_label` saying who reported it) and,
+    for evacuation centers, the capacity fields. The one extra: with an X-Phone-Id
+    header, the places that phone added and that still wait for approval are in
+    the list too, with "approval_status": "pending".
     """
     latest = status_service.latest_status_by_facility(db)
     status_max = status_service.latest_max_capacity_by_facility(db)
     users = {f"user:{u.id}": u for u in db.query(UserEvacuationCenter).all()}
-    removed = evac_service.removed_keys(db)
+    hidden = evac_service.hidden_keys(db, phone)
     return [
         evac_service.to_facility_out(f, latest.get(f.id), users.get(f.key), status_max.get(f.id))
         for f in db.query(Facility).order_by(Facility.id).all()
-        if f.key not in removed
+        if f.key not in hidden
     ]
 
 
-def _get_facility_or_404(db: Session, facility_id: int) -> Facility:
-    facility = db.get(Facility, facility_id)
-    if facility is None or evac_service.active_removal(db, facility.key):
+def _get_facility_or_404(db: Session, facility_id: int, phone: Optional[str] = None) -> Facility:
+    """The facility, or 404 when this caller may not see it (removed, rejected, or somebody else's pending place)."""
+    facility = evac_service.get_visible_facility(db, facility_id, phone)
+    if facility is None:
         raise HTTPException(status_code=404, detail="Facility not found.")
     return facility
 
@@ -247,10 +266,21 @@ def submit_status(
     facility_id: int,
     payload: StatusIn,
     request: Request,
+    staff: Optional[User] = Depends(optional_staff),
+    phone: Optional[str] = Depends(optional_phone),
     db: Session = Depends(get_db),
 ):
-    """Add a status update (kept as history). Returns the new latest status."""
-    facility = _get_facility_or_404(db, facility_id)
+    """
+    Add a status update (kept as history). Returns the new latest status.
+
+    Anyone can send it and it is saved as "Reported by a user". When a signed-in responder or
+    Super admin sends it (Authorization: Bearer ...), it is saved as "Confirmed by official" with
+    their name, and it can set the maximum capacity. A user's report cannot change a maximum
+    capacity an official has set. A place that is still waiting for approval accepts updates only
+    from the phone that added it (X-Phone-Id).
+    """
+    facility = _get_facility_or_404(db, facility_id, phone)
+    official = staff is not None and accounts.ROLE_RANK.get(staff.role, 0) >= accounts.ROLE_RANK[accounts.RESPONDER]
 
     # The capacity rule (people_inside >= max_capacity -> full) lives in
     # status_service.resolve_status; nothing else decides it.
@@ -260,13 +290,15 @@ def submit_status(
         resolved = status_service.resolve_status(
             payload,
             status_service.effective_max_capacity(db, facility.id, user_row.max_capacity if user_row else None),
+            locked_max=None if official else status_service.official_max_capacity(db, facility.id),
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
     # Rate limit after validation, so a mistyped form does not use up the allowance.
+    # Signed-in staff are not limited: they are known, and in a storm they update many places.
     ip = request.client.host if request.client else "unknown"
-    hit = limiter.check(ip, facility_id)
+    hit = None if official else limiter.check(ip, facility_id)
     if hit:
         scope, wait = hit
         if scope == "place":
@@ -283,8 +315,17 @@ def submit_status(
         max_capacity=resolved.max_capacity,
         resources=json.dumps(payload.resources) if payload.resources else None,
         note=payload.note,
+        source=status_service.OFFICIAL if official else status_service.USER,
+        kind=status_service.REPORT,
+        changed_by=staff.name if official else None,
     )
     db.add(row)
+    if official:
+        audit.record(
+            db, staff, "status.update", target=f"facility:{facility.id} ({facility.name})",
+            detail={"status": resolved.status, "people_inside": resolved.people_inside, "max_capacity": resolved.max_capacity},
+            request=request,
+        )
     db.commit()
     db.refresh(row)
     out = status_service.to_status_out(row)
@@ -296,8 +337,9 @@ def submit_status(
 def status_history(
     facility_id: int,
     limit: int = Query(10, ge=1, le=100),
+    phone: Optional[str] = Depends(optional_phone),
     db: Session = Depends(get_db),
 ):
-    """Newest first. Simple view for debugging and later use."""
-    _get_facility_or_404(db, facility_id)
+    """Newest first. Simple view for debugging and later use. (Staff see overrides and capacity corrections too, with names, in /api/responder/facilities/{id}/status-history.)"""
+    _get_facility_or_404(db, facility_id, phone)
     return status_service.history(db, facility_id, limit)

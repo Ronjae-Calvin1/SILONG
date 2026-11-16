@@ -1,8 +1,22 @@
 # SILONG redesign: rules, roles and build order
 
-This file describes what is **designed but not built yet**. The README
-describes what the code does today. When a part here is built, move it into
-the README and mark it "Working".
+This file describes the redesign: the rules, and what is **not built yet**. The
+README describes what the code does today. When a part here is built, move it
+into the README and mark it "Working" here.
+
+## Build status
+
+| Part | What | Status |
+| --- | --- | --- |
+| 1 | Staff accounts, roles, sign in, audit log | **Working** on the server (no screens yet) |
+| 2, 2b | Help requests and hazard reports, the two visibility kinds, responder actions, purge of old reports | **Working** on the server (no screens yet) |
+| 3 | Places rules (pending, approve, reject, admin removal, 30-day purge, permanent delete), status source, overrides and capacity corrections | **Working** on the server (no screens yet) |
+| 4 | Advisories, emergency numbers, chatbot guide | Not built |
+| Frontend | Responder and Super admin screens, the phone ID on every public call, labels and pin looks for pending places and "Confirmed by official" | Not built |
+| After Nov 20 | Two-step sign in | Planned |
+
+The sections below say "(working)" where the server already follows them. The
+"Settings to confirm" table says which settings exist in `config.py`.
 
 The screens are in the design canvas "SILONG Revised Layout" (43 boards).
 Board numbers below point to it.
@@ -29,7 +43,7 @@ data resets it.
 
 ## Rules by feature
 
-### Map and places (boards 1, 2, 14-19)
+### Map and places (boards 1, 2, 14-19) (working on the server)
 - All pins show automatically. A pin shows the type as a letter plus a shape.
 - Pin looks: hollow = no status yet, dashed and dim = update older than 6 hours,
   small blue ring = added through the app, dashed blue = waiting for approval
@@ -41,14 +55,38 @@ data resets it.
 - Admin removal hides a center for everyone. It is kept 30 days, then deleted
   with its history. Only a Super admin can delete one sooner.
 
-### Status and capacity (boards 3, 16, 17)
+How the server does this (choices the design left open):
+- A pending place is tied to the hashed phone ID (`X-Phone-Id`), like "my reports".
+  Without the header the place is still saved as pending, but only staff will ever
+  see it. The sender's phone sees it in `/api/facilities` as `approval_status: pending`.
+- A possible duplicate does not stop a place from being added. It is flagged, and the
+  responder sees the other place (approved, pending or removed) with its distance.
+- A responder or Super admin can approve or reject. A rejection can be undone by
+  approving. A place already on the map is removed, not rejected. Rejected places are
+  deleted after the same 30 days.
+- A responder or Super admin can remove and restore. A Super admin can delete a removed
+  center or a rejected place at once. A center from a data file is noted in
+  `deleted_facilities` so the next start does not read it again.
+- At most 5 pending places per phone; adding is limited per IP and per phone.
+
+### Status and capacity (boards 3, 16, 17) (working on the server)
 - Status words and pin colors are in the README.
 - A user update is shown as "Reported by a user". An update by a responder or
   Super admin is shown as "Confirmed by official".
 - Admins can override the latest status or correct the capacity. An override is
   added to the history. Nothing is erased, and the person's name is recorded.
 
-### Help requests and hazard reports (boards 5, 21, 22, 30-35, 38, 39)
+How the server does this (choices the design left open):
+- "Official" means the request carries a valid responder or Super admin token. A
+  wrong or expired token counts as a user. Officials are not held back by the
+  per-place cooldown.
+- A capacity correction is a history row that copies the status it sits on. It is not
+  shown as a status and does not make an old status look fresh.
+- After an official sets a center's capacity, a user's report cannot change it (the
+  form always sends the field). A later official change can.
+- The public never gets a staff name. Staff read it in the full history.
+
+### Help requests and hazard reports (boards 5, 21, 22, 30-35, 38, 39) (working on the server)
 - "I need help": goes to responders only. Never shown on the map. The sender
   sees their own pin and a status: New, Being handled, Resolved.
 - Hazard: shown to people within the nearby range as an approximate spot with
@@ -86,7 +124,7 @@ data resets it.
 Location off, map did not load, no search results, can't connect (online only),
 and signed out after being idle.
 
-## Security basics
+## Security basics (accounts, role checks, limits, hashing and the false-report block are working)
 - Passwords are stored hashed. After 5 wrong tries, sign in is locked for 15
   minutes. Staff sessions sign out after 30 minutes without use.
 - Admin routes check the role on the server. Users can only send status, report
@@ -105,8 +143,8 @@ environment variable.
 
 | Setting | Planned value |
 | --- | --- |
-| Removed centers kept before permanent delete | 30 days |
-| Reports kept before deletion | 30 days |
+| Removed centers kept before permanent delete | 30 days (`REMOVED_CENTERS_KEEP_DAYS`, working) |
+| Reports kept before deletion | 30 days (`REPORTS_KEEP_DAYS`, working) |
 | Phones needed for a hazard to show as Unconfirmed | 3 |
 | False reports before a phone is blocked | 3 |
 | "Near me" range for hazard reports | 1 km |
@@ -121,8 +159,9 @@ Two people: one on the backend, one on the frontend.
    reports, roles, sign in). This is the only step that needs both of you.
 2. **Nov 12-15:** backend builds sign in, roles, audit log, status and approval
    rules, hide and removal rules, reports and the two visibility kinds, and the
-   admin endpoints. Frontend applies the layout, builds the user screens, then
-   the responder phone screens against fake data.
+   admin endpoints (**done** on the server: parts 1, 2, 2b and 3). Frontend
+   applies the layout, builds the user screens, then the responder phone screens
+   against fake data.
 3. **Nov 16-17:** connect both sides. Then weather and advisories, emergency
    numbers, and the chatbot guide editor.
 4. **Nov 18-19:** test on the real phone, check every role's permissions, fix

@@ -73,7 +73,8 @@ def test_existing_endpoints_still_work_without_a_token():
     assert facilities.status_code == 200 and len(facilities.json()) > 0
     fid = facilities.json()[0]["id"]
     assert client.get(f"/api/facilities/{fid}/status/history").status_code == 200
-    assert client.get("/api/evacuation-centers/removed").status_code == 200
+    # Part 3: the list of removed centers is for staff now (nothing public in the frontend calls it).
+    assert client.get("/api/evacuation-centers/removed").status_code == 401
 
 
 def test_no_token_is_blocked():

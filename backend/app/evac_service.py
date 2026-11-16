@@ -1,5 +1,6 @@
 """
-Evacuation center manager: stable identity, duplicates, soft delete, action log.
+Evacuation center manager: stable identity, duplicates, pending approval, soft delete, action log.
+(Approving, rejecting, removing, restoring and deleting for good are in place_service.py.)
 
 Identity: every center has a `key` that comes from where it came from and does
 not depend on the database file:
@@ -23,6 +24,9 @@ from .models import ActionLog, Facility, FacilityRemoval, UserEvacuationCenter
 from .schemas import EvacCenterIn, FacilityOut, StatusOut
 
 EVAC_TYPE = "evacuation_center"
+
+# UserEvacuationCenter.approval_status
+PENDING, APPROVED, REJECTED = "pending", "approved", "rejected"
 
 
 def _now() -> datetime:
@@ -67,18 +71,51 @@ def distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 6_371_000 * 2 * math.asin(math.sqrt(a))
 
 
-def find_duplicate(db: Session, name: str, lat: float, lng: float) -> Optional[Tuple[Facility, bool]]:
+def find_duplicate(
+    db: Session, name: str, lat: float, lng: float, exclude_key: Optional[str] = None
+) -> Optional[Tuple[Facility, bool]]:
     """
     An existing evacuation center with the same normalized name within
-    config.DUPLICATE_METERS. Removed centers count too (second value True), so
-    the caller can tell the person to restore it instead of adding it again.
+    config.DUPLICATE_METERS (the closest one). Removed centers count too (second value True),
+    and so do other people's places that are still waiting for approval. Rejected places do not.
+    `exclude_key` leaves one center out (the place being checked).
+    A new place is never refused for this: the result becomes the flag a responder sees.
     """
     wanted = normalize_name(name)
     removed = removed_keys(db)
+    rejected = {f"user:{u.id}" for u in db.query(UserEvacuationCenter).filter(UserEvacuationCenter.approval_status == REJECTED)}
+    best, best_d = None, None
     for f in db.query(Facility).filter(Facility.type == EVAC_TYPE).all():
-        if normalize_name(f.name) == wanted and distance_m(lat, lng, f.latitude, f.longitude) <= config.DUPLICATE_METERS:
-            return f, f.key in removed
+        if f.key == exclude_key or f.key in rejected:
+            continue
+        if normalize_name(f.name) != wanted:
+            continue
+        d = distance_m(lat, lng, f.latitude, f.longitude)
+        if d <= config.DUPLICATE_METERS and (best_d is None or d < best_d):
+            best, best_d = f, d
+    return (best, best.key in removed) if best is not None else None
+
+
+def pending_duplicate_of_phone(db: Session, phone_hash: str, name: str, lat: float, lng: float) -> Optional[UserEvacuationCenter]:
+    """A place this same phone already sent that is still waiting for approval (same name, within config.DUPLICATE_METERS)."""
+    wanted = normalize_name(name)
+    rows = (
+        db.query(UserEvacuationCenter)
+        .filter(UserEvacuationCenter.phone_hash == phone_hash, UserEvacuationCenter.approval_status == PENDING)
+        .all()
+    )
+    for u in rows:
+        if normalize_name(u.name) == wanted and distance_m(lat, lng, u.latitude, u.longitude) <= config.DUPLICATE_METERS:
+            return u
     return None
+
+
+def pending_count_of_phone(db: Session, phone_hash: str) -> int:
+    return (
+        db.query(UserEvacuationCenter)
+        .filter(UserEvacuationCenter.phone_hash == phone_hash, UserEvacuationCenter.approval_status == PENDING)
+        .count()
+    )
 
 
 # ---- Soft delete ----
@@ -86,6 +123,32 @@ def find_duplicate(db: Session, name: str, lat: float, lng: float) -> Optional[T
 def removed_keys(db: Session) -> set:
     rows = db.query(FacilityRemoval.facility_key).filter(FacilityRemoval.restored_at.is_(None)).all()
     return {key for (key,) in rows}
+
+
+def hidden_keys(db: Session, phone_hash: Optional[str] = None) -> set:
+    """
+    Keys of the facilities a list must leave out: removed centers, rejected places and places
+    waiting for approval. The one exception is a pending place that THIS phone sent
+    (`phone_hash`): its sender sees it, nobody else does.
+    """
+    hidden = removed_keys(db)
+    for u in db.query(UserEvacuationCenter).filter(UserEvacuationCenter.approval_status != APPROVED).all():
+        if u.approval_status == PENDING and phone_hash and u.phone_hash == phone_hash:
+            continue
+        hidden.add(f"user:{u.id}")
+    return hidden
+
+
+def get_visible_facility(db: Session, facility_id: int, phone_hash: Optional[str] = None) -> Optional[Facility]:
+    """
+    The facility, or None when this caller may not see it (removed, rejected, or somebody else's
+    pending place). Used by every route that takes a facility id, so a hidden place cannot be read
+    or updated by guessing its number.
+    """
+    f = db.get(Facility, facility_id)
+    if f is None or f.key in hidden_keys(db, phone_hash):
+        return None
+    return f
 
 
 def active_removal(db: Session, key: str) -> Optional[FacilityRemoval]:
@@ -97,8 +160,8 @@ def active_removal(db: Session, key: str) -> Optional[FacilityRemoval]:
     )
 
 
-def mark_removed(db: Session, key: str) -> FacilityRemoval:
-    row = FacilityRemoval(facility_key=key)
+def mark_removed(db: Session, key: str, removed_by: Optional[str] = None) -> FacilityRemoval:
+    row = FacilityRemoval(facility_key=key, removed_by=removed_by)
     db.add(row)
     return row
 
@@ -120,13 +183,17 @@ def log_action(db: Session, action: str, key: str, ip: str) -> None:
 
 # ---- Adding ----
 
-def create_center(db: Session, payload: EvacCenterIn) -> Facility:
-    """Insert the user center and its facilities row. The caller commits."""
+def create_center(db: Session, payload: EvacCenterIn, phone_hash: Optional[str] = None) -> Facility:
+    """
+    Insert the user center and its facilities row. It starts as PENDING: only the phone that
+    sent it (`phone_hash`) sees it until a responder or Super admin approves it. The caller commits.
+    """
     row = UserEvacuationCenter(
         name=payload.name, center_type=payload.center_type,
         barangay=payload.barangay, address=payload.address, contact=payload.contact,
         max_capacity=payload.max_capacity,
         latitude=payload.latitude, longitude=payload.longitude, note=payload.note,
+        approval_status=PENDING, phone_hash=phone_hash,
     )
     db.add(row)
     db.flush()  # assigns row.id, which makes the key
@@ -150,6 +217,7 @@ def to_facility_out(
     """
     out = FacilityOut.model_validate(f)  # `status` is empty on the row itself
     out.source = source_of(f.key)
+    out.approval_status = user_row.approval_status if user_row else APPROVED
     out.status = latest
     out.is_outdated = latest.is_outdated if latest else None
     if f.type == EVAC_TYPE:

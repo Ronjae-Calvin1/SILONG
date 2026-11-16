@@ -3,7 +3,10 @@ SQL models.
 
 Facility: clinics, hospitals, evacuation centers — the map data.
 StatusUpdate: one capacity/availability report for a facility. Rows are never
-    edited or deleted, so they form the history; the newest row is the status.
+    edited, so they form the history; the newest status row is the status. Each row
+    says who it came from (a user or an official) and whether it is a normal report,
+    an override or a capacity correction. Rows go only when their facility is deleted
+    for good (see place_service.py).
 User / AuthSession / AuditLog: staff accounts (Responder, Super admin), their
     sign-in sessions, and the trail of admin actions (see accounts.py, audit.py).
 Report / BlockedPhone: help requests and hazard reports from the public, and
@@ -39,8 +42,12 @@ class UserEvacuationCenter(Base):
     """
     An evacuation center added through the API. Each row also has a matching
     `facilities` row (key "user:<id>"), so map, status history and ids work the
-    same as for OSM and manual centers. Rows are never deleted: removing a center
-    is recorded in FacilityRemoval.
+    same as for OSM and manual centers.
+
+    A place a user adds starts as "pending": only the phone that sent it (phone_hash)
+    sees it until a responder or Super admin approves it ("approved") or rejects it
+    ("rejected"). Rows made before approval existed are "approved". Removing a center
+    is recorded in FacilityRemoval; the row is deleted only by the purge (place_service.py).
     """
     __tablename__ = "user_evacuation_centers"
 
@@ -55,6 +62,12 @@ class UserEvacuationCenter(Base):
     longitude = Column(Float, nullable=False)
     note = Column(String(140), nullable=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    # Added in part 3. Older rows get "approved" and no phone (see place_service.upgrade_place_columns).
+    approval_status = Column(String, nullable=False, default="approved", server_default="approved")  # pending | approved | rejected
+    phone_hash = Column(String, nullable=True, index=True)  # who sent it (hashed phone ID, like reports); empty = unknown
+    reviewed_by = Column(String, nullable=True)  # staff name as text (accounts can be removed)
+    reviewed_at = Column(DateTime, nullable=True)
+    reject_reason = Column(String(140), nullable=True)
 
 
 class FacilityRemoval(Base):
@@ -62,7 +75,8 @@ class FacilityRemoval(Base):
     Soft delete. A center is hidden while it has a row here with restored_at
     empty. Keyed by the facility `key` (not the numeric id) so it works for
     OSM / manual / user centers and survives a rebuild of the facilities table.
-    Restoring sets restored_at; rows are kept as history.
+    Restoring sets restored_at; rows are kept as history until the center itself is
+    deleted for good. removed_at starts the REMOVED_CENTERS_KEEP_DAYS clock.
     """
     __tablename__ = "facility_removals"
 
@@ -70,10 +84,24 @@ class FacilityRemoval(Base):
     facility_key = Column(String, nullable=False, index=True)
     removed_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     restored_at = Column(DateTime, nullable=True)
+    removed_by = Column(String, nullable=True)  # staff name as text; empty on removals made before part 3
+
+
+class DeletedFacility(Base):
+    """
+    A center from a data file (OpenStreetMap or manual_facilities.json) that was deleted for
+    good. Without this note the next start would read the file and bring the center back as a
+    new one. Only the key and the date are kept. Centers added through the app have no such
+    note: their row is simply gone.
+    """
+    __tablename__ = "deleted_facilities"
+
+    key = Column(String, primary_key=True)
+    deleted_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class ActionLog(Base):
-    """Who-did-what trail for add / remove / restore. The IP is stored hashed only."""
+    """Who-did-what trail for adding a place (and, on older databases, remove / restore). The IP is stored hashed only."""
     __tablename__ = "action_log"
 
     id = Column(Integer, primary_key=True)
@@ -201,6 +229,13 @@ class StatusUpdate(Base):
     # Always UTC. SQLite does not keep time zones, so reads come back naive and
     # status_service treats them as UTC.
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    # Added in part 3. Older rows are user reports.
+    source = Column(String, nullable=False, default="user", server_default="user")  # "user" | "official"
+    # "report" = a normal update. "override" = staff replaced the latest status. "capacity" = staff
+    # corrected the maximum capacity only: it copies the status it sits on, is never shown as the
+    # status, and does not make an old status look fresh.
+    kind = Column(String, nullable=False, default="report", server_default="report")
+    changed_by = Column(String, nullable=True)  # staff name as text, on official rows only
 
     __table_args__ = (Index("ix_status_updates_facility_id_id", "facility_id", "id"),)
 
