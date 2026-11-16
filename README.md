@@ -32,16 +32,16 @@ is designed but not built.
 | Map | Shows hospitals, clinics and evacuation centers. All pins show automatically. Tap a pin for the name, address and a tap-to-call number. | Working |
 | Capacity and availability | Tap a pin to see whether a place is open, busy or full and when that was last updated. Evacuation centers also show a capacity bar ("85 / 100 people", "15 spaces left"). Anyone can update it, with no login. Each update says who it came from: "Reported by a user" or "Confirmed by official" (a signed-in responder or Super admin). | Working on the server (`source` and `source_label` in `/api/facilities`). Planned: showing the label in the screens |
 | Evacuation center manager | A place a user adds waits for a responder or Super admin to approve it, and only its sender sees it until then. "Hide on this phone" only affects that phone. Removing a center for everyone is an admin action; it is kept 30 days (restorable), then deleted with its history. Only a Super admin can delete one sooner. | Working on the server (add, approve, reject, remove, restore, 30-day purge, permanent delete). The frontend still has no screen to approve places or to send the phone ID with an added place (see below) |
-| Weather forecast | Current weather and a short forecast. | Screen only, sample data |
-| Emergency contacts | Red phone button that opens numbers to call with one tap. | Button only, not wired |
-| Early warning alerts | Bottom panel with weather, official warnings and summarized internet updates. | Screen only, sample data |
+| Weather forecast | Current weather and a 5-day forecast for Batangas City from Open-Meteo, cached for 10 minutes. If Open-Meteo cannot be reached, the last good forecast is shown with the time it was received. | Working on the server (`GET /api/weather`). The screen still shows "not connected" |
+| Emergency contacts | Red phone button that opens numbers to call with one tap. A Super admin edits the numbers; only 911 is filled in until the Batangas City CDRRMO confirms the others. | Working on the server (`GET /api/emergency-numbers`, Super admin edit endpoints). The screen still has its own fixed list (911 and 143) |
+| Early warning alerts | Bottom panel with weather, official warnings and updates. Advisories are posted by hand by a Super admin and can be pinned; only sources on the official list count as official. Nothing is fetched automatically. | Working on the server (`GET /api/advisories`, Super admin endpoints). The screen still shows "not connected" and sample data |
 | Incident report | Report an incident with a location from GPS or a point on the map. | Form works, saved on the phone only, not sent to a server |
-| AI chatbot | One question in, one short answer out, from a checked guide only. No follow-ups and no live place status. Every answer ends with "AI-generated. Follow official advisories first." | Button only. Backend answers are stubbed |
+| AI chatbot | One question in, one short answer out, from a checked guide only. No follow-ups and no live place status. Every answer ends with "AI-generated. Follow official advisories first." | **Placeholder, AI not connected.** `POST /api/chat` works and gives a fixed answer (Silo is not available yet, call 911, follow official advisories). No AI, no key, no cost. The checked guide and its editor are not built |
 | Help requests and hazard reports (replaces the incident report form) | "I need help" goes to responders only and is never shown on the map. A hazard report shows to nearby people as an approximate spot, "Unconfirmed" after 3 reports from 3 phones, "Verified" once an admin checks it. | Working (backend only, no screens yet). The old incident form above still saves on the phone only |
 | Responder side | Reports list, map, places and a resolve step. Phone and computer layouts. | The endpoints work on the server: reports (list, take, resolve, mark false, verify), places (approve, reject, remove, restore) and status corrections (override, capacity). Planned: the screens |
 | Staff accounts and sign in | Responder and Super admin accounts, sign in and out, lock after 5 wrong tries, sign out after 30 minutes idle, role checks on the server. | Working (backend only, no screens yet) |
 | Audit log | Every admin action is recorded with the person's name. A Super admin reads it. | Working (backend only, no screens yet) |
-| Super admin side | Everything a responder does, plus advisories, emergency numbers, the chatbot guide, accounts, the audit log and permanent delete. Computer only. | Accounts, audit log and permanent delete work on the server. Planned: screens, advisories, emergency numbers, chatbot guide |
+| Super admin side | Everything a responder does, plus advisories, emergency numbers, the chatbot guide, accounts, the audit log and permanent delete. Computer only. | Accounts, audit log, permanent delete, advisories and emergency numbers work on the server. Planned: the screens and the chatbot guide |
 | FAQs, support and "My reports and places" | Menu pages. | Planned (designed, not built) |
 
 Status is based on the code in this repository. Anything marked "Not built
@@ -565,7 +565,7 @@ It checks that a pending place is seen only by its sender, approve, reject, that
 a user cannot remove or restore for everyone, admin removal and restore, the
 30-day purge (also from the script and on start), "Reported by a user" versus
 "Confirmed by official", that an override and a capacity correction keep the
-history and record the name, and upgrading an older database. To run all three
+history and record the name, and upgrading an older database. To run all
 test files one after the other: `py tests/run_all.py` (each file needs its own
 process, so do not run them in one `pytest` call).
 
@@ -577,6 +577,106 @@ an empty category.
 **Not built yet:** the report screens and the responder screens (the frontend
 still has the old incident form), and a way for a Super admin to lift a phone
 block.
+
+## Weather, advisories, emergency numbers and the chatbot placeholder
+
+Redesign part 4 (the last one). Backend only: the screens still show their own
+sample or "not connected" states and are not changed here.
+
+| Method and path | Who | What |
+| --- | --- | --- |
+| `GET /api/weather` | public | Batangas City forecast |
+| `GET /api/advisories` | public | Advisories, pinned first then newest. `?official=true` for official sources only (the Warnings tab), `?limit=` |
+| `POST /api/admin/advisories` | Super admin | Create: `title`, `details`, `organization`, `source_url`, `pinned` |
+| `PATCH /api/admin/advisories/{id}` | Super admin | Change any of `title`, `details`, `organization`, `source_url` |
+| `POST /api/admin/advisories/{id}/pin` and `/unpin` | Super admin | Pin or unpin (safe to call twice) |
+| `DELETE /api/admin/advisories/{id}` | Super admin | Delete |
+| `GET /api/admin/advisory-sources` | Super admin | The names that count as official |
+| `POST /api/admin/advisory-sources` | Super admin | Add a name: `name` |
+| `PATCH /api/admin/advisory-sources/{id}` | Super admin | Rename |
+| `DELETE /api/admin/advisory-sources/{id}` | Super admin | Remove (its advisories stay, no longer official) |
+| `GET /api/emergency-numbers` | public | In the order to show them |
+| `POST /api/admin/emergency-numbers` | Super admin | Add: `number`, `name`, `description` |
+| `PATCH /api/admin/emergency-numbers/{id}` | Super admin | Change any of them (`"description": null` clears it) |
+| `PUT /api/admin/emergency-numbers/order` | Super admin | `{ "ids": [...] }`: every id once, in the new order |
+| `DELETE /api/admin/emergency-numbers/{id}` | Super admin | Remove |
+| `POST /api/chat` | public | `{ "question": "..." }` gives `{ "answer": "...", "topic": null }` |
+
+No token gives 401. A responder gives 403 on every `/api/admin/...` route above.
+Every admin change is written to the audit log with the person's name
+(`advisory.*`, `advisory_source.*`, `emergency_number.*`).
+
+**Weather.** Open-Meteo needs no key. The forecast is cached for
+`WEATHER_CACHE_MINUTES` (10). If the call fails, the last good forecast is served
+with `is_stale: true`, a plain `notice` and `fetched_at` (the time it was
+received); a copy is kept in the database, so this also works after a restart.
+If there has never been a good forecast the answer is a plain 503, never made-up
+numbers. A reply with a missing value counts as a failed call. After a failed call
+the server waits `WEATHER_RETRY_SECONDS` (30) before asking again. `cyclone` is
+always `null`: there is no reliable source yet, and the screen says to check PAGASA.
+
+**Advisories.** Posted by hand only. The source list starts with PAGASA, NDRRMC and
+Batangas City CDRRMO (table `advisory_sources`, filled once when the table is made;
+a Super admin edits it). An advisory is official when its `organization` matches a
+name on the list, ignoring case and extra spaces, so editing the list changes the
+badge on older advisories too. `source_url` is required and must be an http or https
+link (the Updates tab needs a link to the original on every card).
+
+**Emergency numbers.** Stored in the database. Only 911 ("National Emergency") is
+filled in. The screen still has its own fixed list; see `CHANGELOG.md` (Update 11).
+
+**Chatbot (placeholder, AI not connected).** One question in, one answer out. Nothing
+is stored about who asked or what they asked: no database row, no phone ID, no log
+of the question. The only memory is a per-IP counter for the rate limit, kept in
+memory with the IP hashed. The answer ends with "AI-generated. Follow official
+advisories first." The default answer says Silo is not available yet, to call 911 in
+an emergency and to follow the official advisories. Settings (`config.py`, all with
+environment overrides): `CHAT_PROVIDER` (`placeholder`), `CHAT_MAX_QUESTION_LENGTH`
+(200, the same as the chat box), `CHAT_IP_MAX_QUESTIONS` / `CHAT_IP_WINDOW_SECONDS`
+(15 per 10 minutes per IP), `CHAT_TIMEOUT_SECONDS` (15, for the future provider call).
+
+### Plugging in an AI later
+
+- **File and function to edit:** `backend/app/chat_service.py`, the `GeminiProvider.answer`
+  method (the marked empty slot). Then add `"gemini": GeminiProvider` to `_PROVIDERS`
+  in the same file. `chat_routes.py` and `POST /api/chat` do not change: the route only
+  calls `chat_service.answer(question)`.
+- **Settings:** `CHAT_PROVIDER=gemini` and `GEMINI_API_KEY=...` in `backend/.env`
+  (see `backend/.env.example`). The key is read from the environment only. Never write
+  it in the code and never commit it. Add the provider's package to `requirements.txt`
+  when you build it (none is needed today). Use `config.CHAT_TIMEOUT_SECONDS` for the call.
+- **Return** `ChatAnswer(answer=<text without the ending>, topic=<guide entry or None>)`.
+  The ending line is added in one place (`_with_ending`) for every provider, so a
+  provider cannot forget it. A provider that is not built, fails or answers with
+  nothing falls back to the placeholder and never crashes the screen (an unknown
+  `CHAT_PROVIDER` also logs one warning).
+- **Rules the provider must keep:** answer only from checked guide content; say it does
+  not know when unsure (`topic: null`); no live place status; no map links; the ending
+  line "AI-generated. Follow official advisories first." on every answer; keep storing
+  and logging nothing about the question or the person asking.
+- **Cost:** real AI calls can cost money. Keep the per-IP rate limit and the question
+  length limit, and check them before connecting a key.
+
+**Older databases.** The new tables (`advisories`, `advisory_sources`,
+`emergency_numbers`) are created on the next start. No existing table gets a new
+column in part 4. The starting rows (the three official sources, 911) are made only
+when their table is first created, so something a Super admin removed does not come
+back. The weather copy uses the existing `cached_responses` table.
+
+**Run the checks** (needs `pip install -r requirements-dev.txt` once):
+
+```
+cd backend
+py tests/test_content.py
+```
+
+It uses its own temporary database and never calls Open-Meteo (the network call is
+replaced). It checks the last-good-forecast fallback and the plain error, that only
+a Super admin can change advisories, sources and numbers, that public reads work and
+pinned comes first, the chat shape and ending line, that the chat code makes no
+network call, the fallback from an unbuilt provider, the length limit, the rate limit,
+that nothing about the asker is stored, the audit entries, and an older database.
+All four test files: `py tests/run_all.py`.
 
 ## Using a custom map
 
@@ -632,10 +732,15 @@ Press `Ctrl+C` in each terminal. On Windows, it may ask
 SILONG/
 ├── backend/
 │   ├── scripts/                # create_super_admin.py (first Super admin), purge_reports.py, purge_removed_centers.py, fetch/backdate helpers
-│   ├── tests/                  # test_accounts.py, test_reports.py, test_places.py, run_all.py (runs them all)
+│   ├── .env.example            # Optional backend settings (chat provider, future AI key placeholder)
+│   ├── tests/                  # test_accounts.py, test_reports.py, test_places.py, test_content.py, run_all.py (runs them all)
 │   └── app/
 │       ├── main.py             # FastAPI app, loads facilities, /api/facilities and the status routes
-│       ├── routes.py           # API routes (weather and AI routes are stubs)
+│       ├── content_routes.py   # Weather, advisories, official sources, emergency numbers
+│       ├── content_schemas.py  # Request/response shapes for the above and the chat
+│       ├── content_service.py  # Advisory, source and emergency number rules, starting rows, audit
+│       ├── chat_routes.py      # POST /api/chat (only calls chat_service.answer)
+│       ├── chat_service.py     # Chatbot placeholder and the slot for a future AI provider
 │       ├── evac_routes.py      # Add a place (public, starts pending); remove / restore / removed list (staff)
 │       ├── evac_service.py     # Center keys, duplicate check, what is hidden from whom, action log
 │       ├── place_routes.py     # Staff: pending list, approve, reject, delete for good, status override, capacity correction
@@ -656,8 +761,7 @@ SILONG/
 │       ├── report_service.py   # Report rules: hazard groups, approximate spot, false reports, purge
 │       ├── status_service.py   # Latest status / history, source of an update, capacity rule (automatic "Full")
 │       ├── database.py         # SQLite connection
-│       ├── weather_service.py  # Sample weather data (stub)
-│       └── ai_service.py       # Chatbot/AI answers (stub)
+│       └── weather_service.py  # Open-Meteo forecast, cache, last good forecast
 └── frontend/
     ├── .env.example            # Copy to .env and add your MapTiler key
     └── src/
@@ -680,9 +784,11 @@ SILONG/
 
 Based on the project documentation:
 
-- Emergency contacts screen behind the red phone button (numbers must be
-  checked with the Batangas City CDRRMO).
-- Real weather (Open-Meteo) and official warnings in the Early Warning panel.
+- Connect the screens to the part 4 endpoints (the backend is ready): the weather and
+  alerts panel (`/api/weather`, `/api/advisories`), the emergency numbers panel
+  (`/api/emergency-numbers`, which has only 911 until the Batangas City CDRRMO
+  confirms the others), and the Super admin screens to post advisories and edit
+  numbers.
 - Connect the frontend to the places rules (backend is ready): send the `X-Phone-Id`
   header with `/api/facilities`, the status update and the add-place call (a pending
   place disappears from its sender's map after a reload without it); show
@@ -690,8 +796,8 @@ Based on the project documentation:
   approve / reject screens and the "Removed centers" list for staff. `RemovedCenters.tsx`
   is not used by any page and would now need a staff sign-in.
 - Connect the report screens to the report endpoints (the backend is ready, the old incident form still saves on the phone only).
-- Chatbot that answers from a checked guide only, with the fixed "AI-generated.
-  Follow official advisories first." line.
+- Chatbot: the placeholder works. Still to build: the checked guide, its editor and
+  the wrong-answer report, then an AI provider (see "Plugging in an AI later").
 - Clean-up to match "online only": the offline code in `_later/` and the PWA
   install settings in `frontend/vite.config.ts` are left from an earlier plan
   and should be removed.

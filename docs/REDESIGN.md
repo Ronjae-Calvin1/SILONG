@@ -11,7 +11,8 @@ into the README and mark it "Working" here.
 | 1 | Staff accounts, roles, sign in, audit log | **Working** on the server (no screens yet) |
 | 2, 2b | Help requests and hazard reports, the two visibility kinds, responder actions, purge of old reports | **Working** on the server (no screens yet) |
 | 3 | Places rules (pending, approve, reject, admin removal, 30-day purge, permanent delete), status source, overrides and capacity corrections | **Working** on the server (no screens yet) |
-| 4 | Advisories, emergency numbers, chatbot guide | Not built |
+| 4 | Weather, advisories, emergency numbers | **Working** on the server (no screens yet) |
+| 4 | Chatbot | **Placeholder, AI not connected** (`POST /api/chat` gives a fixed answer). The checked guide, the guide editor and "Report a wrong answer" are not built |
 | Frontend | Responder and Super admin screens, the phone ID on every public call, labels and pin looks for pending places and "Confirmed by official" | Not built |
 | After Nov 20 | Two-step sign in | Planned |
 
@@ -101,7 +102,7 @@ How the server does this (choices the design left open):
 - Reports are deleted after a set number of days.
 - The site is not a replacement for calling 911 and says so.
 
-### Weather, warnings and contacts (boards 4, 6, 23, 27)
+### Weather, warnings and contacts (boards 4, 6, 23, 27) (working on the server)
 - Weather comes from Open-Meteo and is cached. If it fails, the last good
   forecast stays with its time.
 - Advisories are posted by hand by a Super admin and can be pinned. Only listed
@@ -110,7 +111,19 @@ How the server does this (choices the design left open):
 - Emergency numbers are edited in the app by a Super admin. Only 911 is filled
   in until the Batangas City CDRRMO confirms the others.
 
-### Chatbot (boards 9-13, 28, 42)
+How the server does this (choices the design left open):
+- Weather is for one point in Batangas City, cached 10 minutes. A failed call serves the last
+  good forecast with `is_stale` and the time it was received (a copy is kept in the database).
+  With no good forecast ever, the answer is a plain 503. A reply with a missing number counts
+  as failed; nothing is filled in. `cyclone` is always null (no reliable source).
+- An advisory has a title, details, the organization that issued it, and a required link to the
+  original (http or https). It is official when the organization is on the list in the
+  `advisory_sources` table (PAGASA, NDRRMC, Batangas City CDRRMO at first), compared without case
+  or extra spaces. A Super admin edits the list. Pinned advisories come first, then newest first.
+- Emergency numbers are one list in the database, shown in a Super admin's order. Only 911 at first.
+- Every change is audited with the person's name.
+
+### Chatbot (boards 9-13, 28, 42) (placeholder, AI not connected)
 - One question in, one answer out. No follow-ups and no history. A new question
   starts fresh.
 - Answers come from the checked guide only. The bot matches the meaning of the
@@ -120,11 +133,17 @@ How the server does this (choices the design left open):
 - "Report a wrong answer" sends the question and answer to the Super admin.
   A Super admin edits the guide.
 
+Today the server has the placeholder only: `POST /api/chat` gives a fixed answer (Silo is not
+available yet, call 911, follow official advisories) with the ending line. No guide, no AI, no key,
+no cost, and nothing about the question or the person asking is stored. A future AI plugs in at one
+place (`chat_service.py`); see "Plugging in an AI later" in the README. Not built: the guide table,
+the guide editor and the wrong-answer report.
+
 ### Errors and empty states (board 41)
 Location off, map did not load, no search results, can't connect (online only),
 and signed out after being idle.
 
-## Security basics (accounts, role checks, limits, hashing and the false-report block are working)
+## Security basics (accounts, role checks, limits, hashing and the false-report block are working; the chat endpoint has a per-IP limit and a question length limit)
 - Passwords are stored hashed. After 5 wrong tries, sign in is locked for 15
   minutes. Staff sessions sign out after 30 minutes without use.
 - Admin routes check the role on the server. Users can only send status, report
@@ -151,6 +170,10 @@ environment variable.
 | Staff idle sign out | 30 minutes |
 | Wrong sign-in tries before lock | 5 (locked 15 minutes) |
 | Responder screen refresh | about 10 seconds |
+| Weather cache | 10 minutes (`WEATHER_CACHE_MINUTES`, working); wait 30 seconds after a failed call (`WEATHER_RETRY_SECONDS`) |
+| Longest chatbot question | 200 characters (`CHAT_MAX_QUESTION_LENGTH`, working) |
+| Chatbot questions per IP | 15 per 10 minutes (`CHAT_IP_MAX_QUESTIONS`, `CHAT_IP_WINDOW_SECONDS`, working) |
+| Chatbot provider and its timeout | `placeholder`; 15 seconds for a future provider (`CHAT_PROVIDER`, `CHAT_TIMEOUT_SECONDS`, working) |
 
 ## Build order and split
 Two people: one on the backend, one on the frontend.
@@ -163,13 +186,13 @@ Two people: one on the backend, one on the frontend.
    applies the layout, builds the user screens, then the responder phone screens
    against fake data.
 3. **Nov 16-17:** connect both sides. Then weather and advisories, emergency
-   numbers, and the chatbot guide editor.
+   numbers (backend **done**: part 4), and the chatbot guide editor (not built).
 4. **Nov 18-19:** test on the real phone, check every role's permissions, fix
    bugs.
 5. **Nov 20:** buffer.
 
 If time runs short, shrink the last items (automatic warnings, the guide
-editor). Keep the security rules and the status rules.
+editor, connecting an AI). Keep the security rules and the status rules.
 
 ## Testing on a phone
 GPS only works on a secure page. `localhost` counts as secure, but

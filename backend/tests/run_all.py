@@ -1,5 +1,6 @@
 """
-Runs every test file in this folder, each in its own process, and says which ones failed.
+Runs every test file in this folder (test_accounts, test_reports, test_places, test_content), each in its own
+process, and says which ones failed. A new test_*.py file is picked up by its name.
 
     py tests/run_all.py
 

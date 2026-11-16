@@ -11,8 +11,10 @@ User / AuthSession / AuditLog: staff accounts (Responder, Super admin), their
     sign-in sessions, and the trail of admin actions (see accounts.py, audit.py).
 Report / BlockedPhone: help requests and hazard reports from the public, and
     the phones blocked after too many false reports (see report_service.py).
-CachedResponse: generic key/value cache for AI outputs (prep plans, weather
-    explainers, etc.) so the frontend can fetch-once and reuse offline.
+Advisory / AdvisorySource / EmergencyNumber: advisories posted by hand, the list of sources that
+    count as official, and the emergency numbers (see content_service.py).
+CachedResponse: generic key/value cache. Today it holds the last good weather forecast
+    (see weather_service.py).
 """
 from datetime import datetime, timezone
 
@@ -240,12 +242,50 @@ class StatusUpdate(Base):
     __table_args__ = (Index("ix_status_updates_facility_id_id", "facility_id", "id"),)
 
 
+class Advisory(Base):
+    """
+    An advisory a Super admin posted by hand. Nothing is fetched automatically. `source` is
+    plain text; it counts as official when it matches a name in advisory_sources (compared
+    without case and extra spaces), so editing that list changes the badge on old advisories too.
+    """
+    __tablename__ = "advisories"
+
+    id = Column(Integer, primary_key=True)
+    title = Column(String, nullable=False)
+    details = Column(Text, nullable=False)
+    source = Column(String, nullable=False)  # who issued it, e.g. "PAGASA"
+    source_url = Column(String, nullable=False)  # link to the original (http or https)
+    pinned = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
+    updated_at = Column(DateTime, nullable=True)
+    created_by = Column(String, nullable=True)  # staff name, kept as text
+    updated_by = Column(String, nullable=True)
+
+
+class AdvisorySource(Base):
+    """A source that counts as official. A Super admin edits the list. Starts with config.DEFAULT_OFFICIAL_SOURCES."""
+    __tablename__ = "advisory_sources"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)  # as typed
+    name_key = Column(String, unique=True, index=True, nullable=False)  # lower case, one space between words
+
+
+class EmergencyNumber(Base):
+    """One emergency number. `position` is the order shown (smallest first). Starts with 911 only."""
+    __tablename__ = "emergency_numbers"
+
+    id = Column(Integer, primary_key=True)
+    number = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    position = Column(Integer, nullable=False, default=0, index=True)
+
+
 class CachedResponse(Base):
     """
-    Generic cache row for AI-generated content.
-    `key` examples: "prep_plan:household_hash", "weather_explainer:2026-09-29"
-    Frontend stores the same thing in IndexedDB for offline use; this table
-    is the server-side source of truth / fallback.
+    Generic key/value cache row. Today: the last good weather forecast (key "weather:current",
+    kind "weather", content = the forecast as JSON), so it survives a restart.
     """
     __tablename__ = "cached_responses"
 

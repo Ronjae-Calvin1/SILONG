@@ -244,3 +244,39 @@ class ReportReadLimiter:
 
 
 read_limiter = ReportReadLimiter()
+
+
+class ChatRateLimiter:
+    """
+    Sliding window per IP for POST /api/chat: at most CHAT_IP_MAX_QUESTIONS in
+    CHAT_IP_WINDOW_SECONDS (config.py). It is the cost and abuse guard for a future AI
+    provider, so keep it. Same limits as the others (memory only, per process, an IP behind a
+    proxy looks shared). The route passes the HASHED IP, so no address is kept even in memory.
+    """
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic):
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._hits: dict[str, deque] = defaultdict(deque)
+
+    def check(self, ip_key: str) -> Optional[int]:
+        """None if allowed (and recorded), otherwise the seconds to wait."""
+        now = self._clock()
+        window = config.CHAT_IP_WINDOW_SECONDS
+        with self._lock:
+            hits = self._hits[ip_key]
+            while hits and now - hits[0] > window:
+                hits.popleft()
+            if len(hits) >= config.CHAT_IP_MAX_QUESTIONS:
+                return max(1, int(window - (now - hits[0]) + 0.999))
+            hits.append(now)
+            for other in [k for k, q in self._hits.items() if k != ip_key and now - q[-1] > window]:
+                del self._hits[other]
+            return None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._hits.clear()
+
+
+chat_limiter = ChatRateLimiter()

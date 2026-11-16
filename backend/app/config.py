@@ -119,3 +119,43 @@ REPORT_WINDOW_SECONDS = int(_number("REPORT_WINDOW_SECONDS", 3600))
 # Reading "my reports" and nearby hazards: at most this many requests per IP and per phone per window.
 REPORT_READ_MAX = int(_number("REPORT_READ_MAX", 60))
 REPORT_READ_WINDOW_SECONDS = int(_number("REPORT_READ_WINDOW_SECONDS", 60))
+
+# ---- Weather (redesign part 4) ----
+# Open-Meteo needs no key. The point is the middle of Batangas City.
+WEATHER_LOCATION_NAME = os.getenv("WEATHER_LOCATION_NAME", "Batangas City")
+WEATHER_LATITUDE = _number("WEATHER_LATITUDE", 13.7565)
+WEATHER_LONGITUDE = _number("WEATHER_LONGITUDE", 121.0583)
+# A forecast this young is served again without asking Open-Meteo.
+WEATHER_CACHE_MINUTES = _number("WEATHER_CACHE_MINUTES", 10)
+# Give up on Open-Meteo after this many seconds (then the last good forecast is served).
+WEATHER_TIMEOUT_SECONDS = _number("WEATHER_TIMEOUT_SECONDS", 8)
+WEATHER_API_URL = os.getenv("WEATHER_API_URL", "https://api.open-meteo.com/v1/forecast")
+
+# ---- Advisories and emergency numbers (redesign part 4) ----
+# Only these sources count as "official" on first start. After that the list lives in the
+# database (table advisory_sources) and a Super admin edits it; changing this tuple later
+# changes nothing on a database that already has a list.
+DEFAULT_OFFICIAL_SOURCES = ("PAGASA", "NDRRMC", "Batangas City CDRRMO")
+ADVISORY_TITLE_MAX = 120
+ADVISORY_DETAILS_MAX = 1000
+ADVISORY_SOURCE_MAX = 80
+ADVISORY_URL_MAX = 500
+EMERGENCY_NAME_MAX = 80
+EMERGENCY_NUMBER_MAX = 30
+EMERGENCY_DESCRIPTION_MAX = 140
+# Only 911 is filled in until the Batangas City CDRRMO confirms the others.
+DEFAULT_EMERGENCY_NUMBERS = (("911", "National Emergency"),)
+
+# ---- Chatbot (redesign part 4: placeholder, no AI connected) ----
+# Which provider answers. "placeholder" is the only one built. An unknown name falls back to
+# the placeholder with one warning in the log (see chat_service.py).
+CHAT_PROVIDER = (os.getenv("CHAT_PROVIDER") or "placeholder").strip().lower()
+# Longest question accepted (characters). The chat box on the site counts to 200 too.
+CHAT_MAX_QUESTION_LENGTH = int(_number("CHAT_MAX_QUESTION_LENGTH", 200))
+# Per-IP limit on POST /api/chat: at most this many questions in the window.
+CHAT_IP_MAX_QUESTIONS = int(_number("CHAT_IP_MAX_QUESTIONS", 15))
+CHAT_IP_WINDOW_SECONDS = int(_number("CHAT_IP_WINDOW_SECONDS", 600))
+# For the future provider call: give up after this many seconds. Not used by the placeholder.
+CHAT_TIMEOUT_SECONDS = _number("CHAT_TIMEOUT_SECONDS", 15)
+# After a failed weather call, wait this many seconds before asking Open-Meteo again.
+WEATHER_RETRY_SECONDS = _number("WEATHER_RETRY_SECONDS", 30)

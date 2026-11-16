@@ -3,9 +3,10 @@ Backbone: map slice + capacity/availability status (Batangas City facilities)
 + evacuation center manager (add as pending, staff approve / remove / restore, see evac_routes.py
   and place_routes.py; the rules are in place_service.py)
 + staff accounts, roles and the audit log (see account_routes.py)
-+ help requests and hazard reports (see report_routes.py).
++ help requests and hazard reports (see report_routes.py)
++ weather, advisories and emergency numbers (see content_routes.py)
++ the chatbot placeholder (see chat_routes.py and chat_service.py).
 Facilities in SQLite -> FastAPI endpoints -> frontend fetches them.
-Weather/AI modules still exist in the folder but aren't wired in yet.
 """
 import json
 import re
@@ -20,9 +21,11 @@ from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
-from . import accounts, audit, evac_service, place_service, report_service, status_service
+from . import accounts, audit, content_service, evac_service, place_service, report_service, status_service
 from .account_routes import router as account_router
 from .auth import optional_staff
+from .chat_routes import router as chat_router
+from .content_routes import router as content_router
 from .database import Base, engine, SessionLocal, get_db
 from .evac_routes import router as evac_router
 from .models import DeletedFacility, Facility, StatusUpdate, User, UserEvacuationCenter
@@ -45,6 +48,9 @@ def _drop_legacy_facilities_table():
 
 
 _drop_legacy_facilities_table()
+# The official-sources and emergency-numbers tables get their starting rows (PAGASA, NDRRMC,
+# Batangas City CDRRMO; 911) only when they are first created, so this runs before create_all.
+content_service.prepare_tables(engine)
 # Creates any table that does not exist yet (including the evacuation center
 # manager tables on an existing database) and leaves existing tables untouched,
 # so nobody has to delete the database file.
@@ -207,6 +213,8 @@ app.include_router(evac_router)
 app.include_router(account_router)
 app.include_router(report_router)
 app.include_router(place_router)
+app.include_router(content_router)
+app.include_router(chat_router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):
