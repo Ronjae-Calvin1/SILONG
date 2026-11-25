@@ -129,6 +129,33 @@ Then open the URL it prints (usually `http://localhost:5173`). Restart
 You should see a map of Batangas City with all the pins already on it. Tap a
 pin to see its address and phone number.
 
+### 4. Admin console and the two origins (CORS)
+
+SILONG runs as **two frontends and one backend**:
+
+| Part | Address |
+| --- | --- |
+| User site (the `frontend` folder) | `http://localhost:5173` |
+| Admin console (a separate frontend) | `http://localhost:5174` |
+| Backend (Terminal 1) | `http://127.0.0.1:8000` |
+
+The browser only lets a site read the backend's answers if the backend allows that site (CORS). The backend allows
+exactly the four addresses above (`localhost` and `127.0.0.1` on 5173 and 5174) and nothing else, so no other website
+can use an Admin's browser to read data. Nothing to set up for this on your own computer.
+
+To allow other addresses (for example when the sites go online), set `CORS_ORIGINS` in `backend/.env`, comma separated,
+without a path or a trailing `/`:
+
+```
+CORS_ORIGINS=https://silong.example.ph,https://admin.silong.example.ph
+```
+
+Restart the backend after changing it. Not set, or empty, means the four default addresses. `CORS_ORIGINS=*` (any website)
+is accepted **only if you write it yourself**; the backend then prints a warning at start. See `backend/.env.example`.
+
+The Admin token is sent only in the `Authorization` header, only to the backend, and never put in a URL. Keep it out
+of the user site.
+
 ## Capacity and availability
 
 Tap a pin to see its status, when it was last updated ("15 minutes ago") and,

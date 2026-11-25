@@ -2,6 +2,34 @@
 
 Short log of what changed in each update, newest first.
 
+## Update 16 — Two-origin hardening (backend only)
+Makes the two-frontend setup (user site 5173, admin console 5174, backend 8000) safe and proves it with tests. No path, method or
+answer shape changed. The only behaviour change is CORS; the rest is new checks of things that already held.
+- **CORS.** `main.py` allowed every origin (`"*"`). It now allows only the origins in `CORS_ORIGINS` (`backend/.env`, read in
+  `config.py`, comma separated). Default: `http://localhost:5173`, `http://127.0.0.1:5173`, `http://localhost:5174`,
+  `http://127.0.0.1:5174`. Not set or empty means the default. `*` works only if it is written in `CORS_ORIGINS`, and the backend
+  logs a warning at start when it is. Allowed request headers are now `Authorization`, `X-Phone-Id` and `Content-Type` (before:
+  all), allowed methods `GET HEAD POST PUT PATCH DELETE OPTIONS`; `X-Total-Count` is still exposed. Credentials stay off (the token
+  is a header, not a cookie). Documented in `backend/.env.example`, README and `docs/API.md`.
+- **Admin route sweep.** `test_accounts.py` found admin routes by reading six hand-listed router modules, so the four routes in
+  `console_routes.py` and `settings_routes.py` (`/api/admin/summary`, `/api/admin/me/activity`, `/api/admin/contact-settings` GET
+  and PATCH) were never checked for 401/403. It now reads every route of the app (`tests/route_helpers.py`), 44 admin routes instead
+  of 40, and a new test checks that route list against the app's own OpenAPI list. New guard: a route under `/api/admin` without
+  `require_admin` fails the test, by name. (The routes themselves were already protected.)
+- **Public leak sweep.** New `tests/test_public_leaks.py`: seeded demo data (help requests with contacts, hazards, a pending place, a
+  removed center, a report taken by an Admin, a blocked phone, Admin-written advisories and settings), every public GET called as no
+  token, a phone ID, a wrong token, an expired Admin token and a locked Admin's token. It fails on a report contact, a phone ID or hash,
+  an exact help or hazard coordinate, an Admin's name, the control-room number, an audit or internal field. It also checks the answers
+  of the public routes that take an optional token (a wrong, expired or locked token counts as a user, never as an Admin). Nothing
+  leaked; the sweep itself is tested against injected leaks.
+- **Token handling.** New `tests/test_security.py`: the token is read only from the `Authorization` header (a query, a cookie or another
+  header counts for nothing on any admin route; no route has a token parameter), it is not in the audit log, the audit-log answer or
+  the server log, only its hash is stored, and sign-out, the idle limit, lock, removal, password reset and password change end the
+  session on the server (the row is gone). Nothing needed fixing.
+- Tests: `test_security.py` (17 checks), `test_public_leaks.py` (8), two new checks in `test_accounts.py` (route list complete, admin dependency guard) and the four routes added to its list. `docs/API.md` regenerated
+  (a CORS paragraph in the introduction; no route changed).
+- Not done: no frontend, CSS or chatbot changes. The admin console's own code is not in this repository.
+
 ## Update 15 — Takeover and the status filter (backend only)
 Stops a report from getting stuck on an Admin who went offline, and adds the status filter the console design asks for. No path or
 answer shape changed; the only new thing in an answer is the audit detail below.

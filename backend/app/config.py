@@ -65,6 +65,32 @@ def _number(name: str, default: float) -> float:
 # displays it.
 OUTDATED_AFTER = timedelta(hours=_number("STATUS_OUTDATED_AFTER_HOURS", 6))
 
+# ---- CORS: which websites may call this backend from a browser ----
+# SILONG runs as two frontends and one backend: the user site (5173) and the admin console (5174).
+# Only these origins may read answers in a browser. "*" (any website) is allowed ONLY when it is set
+# explicitly in CORS_ORIGINS. Not set, or empty, means the default list below.
+DEFAULT_CORS_ORIGINS = (
+    "http://localhost:5173", "http://127.0.0.1:5173",
+    "http://localhost:5174", "http://127.0.0.1:5174",
+)
+
+
+def parse_cors_origins(raw):
+    """
+    CORS_ORIGINS (comma separated) as a list. Spaces, empty parts and a trailing "/" are dropped, case
+    does not matter (browsers send the origin in lower case) and repeats are removed. Nothing usable
+    (not set, empty) gives the default list. "*" anywhere in the list means any website.
+    """
+    origins = []
+    for part in (raw or "").split(","):
+        origin = part.strip().rstrip("/").lower()
+        if origin and origin not in origins:
+            origins.append(origin)
+    return origins or list(DEFAULT_CORS_ORIGINS)
+
+
+CORS_ORIGINS = parse_cors_origins(os.getenv("CORS_ORIGINS"))
+
 # ---- Spam protection (no accounts, so we limit by client IP) ----
 # At most 1 update per place per IP within this many seconds.
 STATUS_COOLDOWN_SECONDS = int(_number("STATUS_COOLDOWN_SECONDS", 60))

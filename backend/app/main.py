@@ -10,6 +10,7 @@ Backbone: map slice + capacity/availability status (Batangas City facilities)
 Facilities in SQLite -> FastAPI endpoints -> frontend fetches them.
 """
 import json
+import logging
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -23,7 +24,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
-from . import accounts, audit, content_service, evac_service, place_service, report_service, status_service
+from . import accounts, audit, config, content_service, evac_service, place_service, report_service, status_service
 from .account_routes import router as account_router
 from .auth import optional_staff
 from .chat_routes import router as chat_router
@@ -248,11 +249,17 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errors)})
 
 
+# Only the origins in CORS_ORIGINS (config.py, default: the two Vite sites) may call the API from a
+# browser. The admin token travels in the Authorization header, never in a cookie, so credentials
+# stay off. "*" works only when it is set explicitly in backend/.env.
+if "*" in config.CORS_ORIGINS:
+    logging.getLogger("silong.main").warning("CORS_ORIGINS contains '*': any website can call this backend from a browser.")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=config.CORS_ORIGINS,
+    allow_methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "X-Phone-Id", "Content-Type"],
     expose_headers=["X-Total-Count"],  # lets the browser read the audit-log total from another origin
 )
 
