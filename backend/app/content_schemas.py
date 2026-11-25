@@ -1,7 +1,7 @@
 """Request/response shapes for weather, advisories, official sources and emergency numbers."""
 import re
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Literal, Optional
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -198,12 +198,17 @@ def _clean_number(v: str) -> str:
     return cleaned
 
 
+# What a number is for; the hotline sheet filters on it (same words as config.EMERGENCY_CATEGORIES).
+EmergencyCategory = Literal["medical", "accident", "flood", "violence", "missing_person"]
+
+
 class EmergencyNumberIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     number: str
     name: str
     description: Optional[str] = None
+    category: Optional[EmergencyCategory] = None  # leave out for a general number
 
     @field_validator("number")
     @classmethod
@@ -222,12 +227,13 @@ class EmergencyNumberIn(BaseModel):
 
 
 class EmergencyNumberUpdateIn(BaseModel):
-    """Only the fields that are sent change. Send "description": null to clear it."""
+    """Only the fields that are sent change. Send "description": null (or "category": null) to clear it."""
     model_config = ConfigDict(extra="forbid")
 
     number: Optional[str] = None
     name: Optional[str] = None
     description: Optional[str] = None
+    category: Optional[EmergencyCategory] = None
 
     @field_validator("number")
     @classmethod
@@ -266,10 +272,14 @@ class EmergencyNumberOut(BaseModel):
     name: str
     description: Optional[str] = None
     position: int
+    category: Optional[EmergencyCategory] = None  # medical | accident | flood | violence | missing_person; null = general
 
 
 def number_out(n: EmergencyNumber) -> EmergencyNumberOut:
-    return EmergencyNumberOut(id=n.id, number=n.number, name=n.name, description=n.description, position=n.position)
+    return EmergencyNumberOut(
+        id=n.id, number=n.number, name=n.name, description=n.description, position=n.position,
+        category=n.category if n.category in config.EMERGENCY_CATEGORIES else None,
+    )
 
 
 # ---------------------------------------------------------------- chat

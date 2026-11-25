@@ -73,7 +73,7 @@ body is a list of `{type, loc, msg}`). Show `detail` to the person when it is a 
 3. An Admin signs in, `GET /api/admin/places` (the queue; `possible_duplicate` is set when a same-name center is within 30 m), then `POST /api/admin/places/{id}/approve` (or `.../reject` with an optional `reason`).
 4. An Admin can fix details later with `PATCH /api/admin/places/{id}`.
 
-This reference lists **54 endpoints** in 8 areas.
+This reference lists **60 endpoints** in 10 areas.
 
 
 ---
@@ -415,6 +415,7 @@ Let this phone send reports again. Its count of false reports starts from zero, 
 | `GET` | `/api/hazards/nearby` | Public (X-Phone-Id optional) | Hazards within the near-me range (config.NEAR_ME_KM) that are Unconfirmed or Verified, as an approximate spot with a status and no details. The position you send is used for this answer only and is not stored. |
 | `GET` | `/api/admin/reports` | Admin | Poll this about every `refresh_seconds` (10). `has_new_help` is true while any help request is still New: show the red "Needs help" alert. Open reports only, unless include_closed is set. A hazard is one line for all reports about the same place. |
 | `POST` | `/api/admin/reports/{report_id}/take` | Admin | Take it: New -> Being handled. 409 if someone else already has it. Safe to call twice. |
+| `POST` | `/api/admin/reports/{report_id}/release` | Admin | Give back a report you took: Being handled -> New, nobody assigned. 409 if another Admin has it or it is closed. Safe to call twice. |
 | `POST` | `/api/admin/reports/{report_id}/resolve` | Admin | Resolve. Needs `what_was_done`. The sender then sees Resolved. |
 | `POST` | `/api/admin/reports/{report_id}/mark-false` | Admin | Mark false. Needs a `reason`. A phone with 3 false reports is blocked from sending reports. |
 | `POST` | `/api/admin/reports/{report_id}/verify` | Admin | Verify a hazard: the public then sees it as Verified. Hazards only. Safe to call twice. |
@@ -510,7 +511,7 @@ A list of `NearbyHazardOut`.
 
 **Who:** Admin
 
-Poll this about every `refresh_seconds` (10). `has_new_help` is true while any help request is still New: show the red "Needs help" alert. Open reports only, unless include_closed is set. A hazard is one line for all reports about the same place.
+Poll this about every `refresh_seconds` (10). `has_new_help` is true while any help request is still New: show the red "Needs help" alert. Open reports only, unless include_closed is set. A hazard is one line for all reports about the same place. `mine=true` keeps only the reports you took. Send `latitude` and `longitude` together to get `distance_m` on every item (the order stays most urgent first). For polling, send the last answer's `server_time` as `since`: you get only the items that changed since, and that includes reports that were just resolved or marked false, so you can drop them from your list. `new_help_count`, `has_new_help` and `latest_report_id` always cover everything.
 
 **Request fields**
 
@@ -518,6 +519,10 @@ Poll this about every `refresh_seconds` (10). `has_new_help` is true while any h
 | --- | --- | --- | --- |
 | `include_closed` | boolean | optional | in query; Also list resolved and false reports |
 | `kind` | one of `help`, `hazard` or null | optional | in query |
+| `mine` | boolean | optional | in query; Only reports you took (the Mine filter) |
+| `latitude` | number or null | optional | in query; With longitude: add distance_m to each item |
+| `longitude` | number or null | optional | in query; With latitude: add distance_m to each item |
+| `since` | string (date and time, UTC) or null | optional | in query; Only items that changed at or after this time (ISO 8601; no zone = UTC). Use the last server_time |
 
 **Response** `200`
 
@@ -528,6 +533,7 @@ Poll this about every `refresh_seconds` (10). `has_new_help` is true while any h
 | `new_help_count` | integer | required |  |
 | `has_new_help` | boolean | required |  |
 | `latest_report_id` | integer or null | optional |  |
+| `since` | string (date and time, UTC) or null | optional |  |
 | `items` | array of AdminReportOut | required |  |
 
 ### `POST /api/admin/reports/{report_id}/take`
@@ -561,6 +567,50 @@ Take it: New -> Being handled. 409 if someone else already has it. Safe to call 
 | `created_at` | string (date and time, UTC) | required |  |
 | `updated_at` | string (date and time, UTC) | required |  |
 | `taken_by` | string or null | optional |  |
+| `is_mine` | boolean | optional | default `False` |
+| `distance_m` | number or null | optional |  |
+| `closed_by` | string or null | optional |  |
+| `resolution_note` | string or null | optional |  |
+| `false_reason` | string or null | optional |  |
+| `verified` | boolean | required |  |
+| `verified_by` | string or null | optional |  |
+| `hazard_state` | one of `pending`, `unconfirmed`, `verified` or null | optional |  |
+| `phones` | integer | required |  |
+| `report_count` | integer | required |  |
+
+### `POST /api/admin/reports/{report_id}/release`
+
+**Who:** Admin
+
+Give back a report you took: Being handled -> New, nobody assigned. 409 if another Admin has it or it is closed. Safe to call twice.
+
+**Request fields**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `report_id` | integer | required | in path |
+
+**Response** `200`
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | integer | required |  |
+| `kind` | one of `help`, `hazard` | required |  |
+| `status` | one of `new`, `being_handled`, `resolved`, `false` | required |  |
+| `is_new_help` | boolean | required |  |
+| `category` | string or null | optional |  |
+| `categories` | array of string | optional | default `[]` |
+| `people` | integer or null | optional |  |
+| `can_move` | one of `yes`, `no`, `unsure` or null | optional |  |
+| `latitude` | number | required |  |
+| `longitude` | number | required |  |
+| `contacts` | array of string | required |  |
+| `notes` | array of string | required |  |
+| `created_at` | string (date and time, UTC) | required |  |
+| `updated_at` | string (date and time, UTC) | required |  |
+| `taken_by` | string or null | optional |  |
+| `is_mine` | boolean | optional | default `False` |
+| `distance_m` | number or null | optional |  |
 | `closed_by` | string or null | optional |  |
 | `resolution_note` | string or null | optional |  |
 | `false_reason` | string or null | optional |  |
@@ -602,6 +652,8 @@ Resolve. Needs `what_was_done`. The sender then sees Resolved.
 | `created_at` | string (date and time, UTC) | required |  |
 | `updated_at` | string (date and time, UTC) | required |  |
 | `taken_by` | string or null | optional |  |
+| `is_mine` | boolean | optional | default `False` |
+| `distance_m` | number or null | optional |  |
 | `closed_by` | string or null | optional |  |
 | `resolution_note` | string or null | optional |  |
 | `false_reason` | string or null | optional |  |
@@ -643,6 +695,8 @@ Mark false. Needs a `reason`. A phone with 3 false reports is blocked from sendi
 | `created_at` | string (date and time, UTC) | required |  |
 | `updated_at` | string (date and time, UTC) | required |  |
 | `taken_by` | string or null | optional |  |
+| `is_mine` | boolean | optional | default `False` |
+| `distance_m` | number or null | optional |  |
 | `closed_by` | string or null | optional |  |
 | `resolution_note` | string or null | optional |  |
 | `false_reason` | string or null | optional |  |
@@ -683,6 +737,8 @@ Verify a hazard: the public then sees it as Verified. Hazards only. Safe to call
 | `created_at` | string (date and time, UTC) | required |  |
 | `updated_at` | string (date and time, UTC) | required |  |
 | `taken_by` | string or null | optional |  |
+| `is_mine` | boolean | optional | default `False` |
+| `distance_m` | number or null | optional |  |
 | `closed_by` | string or null | optional |  |
 | `resolution_note` | string or null | optional |  |
 | `false_reason` | string or null | optional |  |
@@ -1147,6 +1203,128 @@ Ask
 
 ---
 
+## Admin console helpers (badge counts, my recent actions)
+
+| Method | Path | Who can call it | What it does |
+| --- | --- | --- | --- |
+| `GET` | `/api/admin/summary` | Admin | The numbers for the tab and chip badges, in one call (a few COUNT queries, no lists): new reports, being handled, mine, places waiting for approval, removed centers. Poll it with the report list. |
+| `GET` | `/api/admin/me/activity` | Admin | The signed-in Admin's own recent actions from the audit log (newest first, sign-ins left out) and how many different reports they handled today. Only your own actions are ever returned. |
+
+### `GET /api/admin/summary`
+
+**Who:** Admin
+
+The numbers for the tab and chip badges, in one call (a few COUNT queries, no lists): new reports, being handled, mine, places waiting for approval, removed centers. Poll it with the report list.
+
+**Request fields**
+
+None.
+
+**Response** `200`
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `server_time` | string (date and time, UTC) | required |  |
+| `new_reports` | integer | required |  |
+| `being_handled` | integer | required |  |
+| `mine` | integer | required |  |
+| `pending_places` | integer | required |  |
+| `removed_centers` | integer | required |  |
+
+### `GET /api/admin/me/activity`
+
+**Who:** Admin
+
+The signed-in Admin's own recent actions from the audit log (newest first, sign-ins left out) and how many different reports they handled today. Only your own actions are ever returned.
+
+**Request fields**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `limit` | integer | optional | in query; How many recent actions to list |
+
+**Response** `200`
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `server_time` | string (date and time, UTC) | required |  |
+| `handled_today` | integer | required |  |
+| `today_starts_at` | string (date and time, UTC) | required |  |
+| `items` | array of ActivityItemOut | required |  |
+
+---
+
+## Contact settings
+
+| Method | Path | Who can call it | What it does |
+| --- | --- | --- | --- |
+| `GET` | `/api/support-contact` | Public | Support email and number for the Contact screen. A value that is not set is null: show nothing, not a placeholder. |
+| `GET` | `/api/admin/contact-settings` | Admin | The control-room number (for the Me screen's call button) and the support contact. null = not set. |
+| `PATCH` | `/api/admin/contact-settings` | Admin | Send only the fields to change. null or an empty text clears one. A change is audited with the Admin's name. |
+
+### `GET /api/support-contact`
+
+**Who:** Public
+
+Support email and number for the Contact screen. A value that is not set is null: show nothing, not a placeholder.
+
+**Request fields**
+
+None.
+
+**Response** `200`
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `support_email` | string or null | optional |  |
+| `support_number` | string or null | optional |  |
+
+### `GET /api/admin/contact-settings`
+
+**Who:** Admin
+
+The control-room number (for the Me screen's call button) and the support contact. null = not set.
+
+**Request fields**
+
+None.
+
+**Response** `200`
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `control_room_number` | string or null | optional |  |
+| `support_email` | string or null | optional |  |
+| `support_number` | string or null | optional |  |
+| `updated_at` | string (date and time, UTC) or null | optional |  |
+| `updated_by` | string or null | optional |  |
+
+### `PATCH /api/admin/contact-settings`
+
+**Who:** Admin
+
+Send only the fields to change. null or an empty text clears one. A change is audited with the Admin's name.
+
+**Request fields**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `control_room_number` | string or null | optional | in body |
+| `support_email` | string or null | optional | in body |
+| `support_number` | string or null | optional | in body |
+
+**Response** `200`
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `control_room_number` | string or null | optional |  |
+| `support_email` | string or null | optional |  |
+| `support_number` | string or null | optional |  |
+| `updated_at` | string (date and time, UTC) or null | optional |  |
+| `updated_by` | string or null | optional |  |
+
+---
+
 ## Other
 
 | Method | Path | Who can call it | What it does |
@@ -1291,7 +1469,7 @@ A list of `StatusOut`.
 | `POST` | `/api/admin/advisory-sources` | Admin | Add Source |
 | `PATCH` | `/api/admin/advisory-sources/{source_id}` | Admin | Rename Source |
 | `DELETE` | `/api/admin/advisory-sources/{source_id}` | Admin | Advisories from this source stay, but no longer show as official. |
-| `GET` | `/api/emergency-numbers` | Public | In the order to show them. Only 911 until the Batangas City CDRRMO confirms the others. |
+| `GET` | `/api/emergency-numbers` | Public | In the order to show them. Only 911 until the Batangas City CDRRMO confirms the others. Each number has a `category` (medical, accident, flood, violence, missing_person) or null for a general number such as 911. |
 | `POST` | `/api/admin/emergency-numbers` | Admin | Add Number |
 | `PUT` | `/api/admin/emergency-numbers/order` | Admin | Send every id once, in the order to show them. |
 | `PATCH` | `/api/admin/emergency-numbers/{number_id}` | Admin | Update Number |
@@ -1562,11 +1740,13 @@ No body.
 
 **Who:** Public
 
-In the order to show them. Only 911 until the Batangas City CDRRMO confirms the others.
+In the order to show them. Only 911 until the Batangas City CDRRMO confirms the others. Each number has a `category` (medical, accident, flood, violence, missing_person) or null for a general number such as 911.
 
 **Request fields**
 
-None.
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `category` | one of `medical`, `accident`, `flood`, `violence`, `missing_person` or null | optional | in query; Only the numbers tagged with this category (the hotline sheet filter). Untagged numbers are left out. |
 
 **Response** `200`
 
@@ -1579,6 +1759,7 @@ A list of `EmergencyNumberOut`.
 | `name` | string | required |  |
 | `description` | string or null | optional |  |
 | `position` | integer | required |  |
+| `category` | one of `medical`, `accident`, `flood`, `violence`, `missing_person` or null | optional |  |
 
 ### `POST /api/admin/emergency-numbers`
 
@@ -1593,6 +1774,7 @@ Add Number
 | `number` | string | required | in body |
 | `name` | string | required | in body |
 | `description` | string or null | optional | in body |
+| `category` | one of `medical`, `accident`, `flood`, `violence`, `missing_person` or null | optional | in body |
 
 **Response** `201`
 
@@ -1603,6 +1785,7 @@ Add Number
 | `name` | string | required |  |
 | `description` | string or null | optional |  |
 | `position` | integer | required |  |
+| `category` | one of `medical`, `accident`, `flood`, `violence`, `missing_person` or null | optional |  |
 
 ### `PUT /api/admin/emergency-numbers/order`
 
@@ -1627,6 +1810,7 @@ A list of `EmergencyNumberOut`.
 | `name` | string | required |  |
 | `description` | string or null | optional |  |
 | `position` | integer | required |  |
+| `category` | one of `medical`, `accident`, `flood`, `violence`, `missing_person` or null | optional |  |
 
 ### `PATCH /api/admin/emergency-numbers/{number_id}`
 
@@ -1642,6 +1826,7 @@ Update Number
 | `number` | string or null | optional | in body |
 | `name` | string or null | optional | in body |
 | `description` | string or null | optional | in body |
+| `category` | one of `medical`, `accident`, `flood`, `violence`, `missing_person` or null | optional | in body |
 
 **Response** `200`
 
@@ -1652,6 +1837,7 @@ Update Number
 | `name` | string | required |  |
 | `description` | string or null | optional |  |
 | `position` | integer | required |  |
+| `category` | one of `medical`, `accident`, `flood`, `violence`, `missing_person` or null | optional |  |
 
 ### `DELETE /api/admin/emergency-numbers/{number_id}`
 
@@ -1674,6 +1860,16 @@ No body.
 ## Shapes used above
 
 
+### ActivityItemOut
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | integer | required |  |
+| `created_at` | string (date and time, UTC) | required |  |
+| `action` | string | required |  |
+| `target` | string or null | optional |  |
+| `detail` | any or null | optional |  |
+
 ### AdminListOut
 
 | Field | Type | Required | Notes |
@@ -1683,6 +1879,7 @@ No body.
 | `new_help_count` | integer | required |  |
 | `has_new_help` | boolean | required |  |
 | `latest_report_id` | integer or null | optional |  |
+| `since` | string (date and time, UTC) or null | optional |  |
 | `items` | array of AdminReportOut | required |  |
 
 ### AdminReportOut
@@ -1704,6 +1901,8 @@ No body.
 | `created_at` | string (date and time, UTC) | required |  |
 | `updated_at` | string (date and time, UTC) | required |  |
 | `taken_by` | string or null | optional |  |
+| `is_mine` | boolean | optional | default `False` |
+| `distance_m` | number or null | optional |  |
 | `closed_by` | string or null | optional |  |
 | `resolution_note` | string or null | optional |  |
 | `false_reason` | string or null | optional |  |
@@ -1825,6 +2024,24 @@ No body.
 | `answer` | string | required |  |
 | `topic` | string or null | optional |  |
 
+### ContactSettingsIn
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `control_room_number` | string or null | optional |  |
+| `support_email` | string or null | optional |  |
+| `support_number` | string or null | optional |  |
+
+### ContactSettingsOut
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `control_room_number` | string or null | optional |  |
+| `support_email` | string or null | optional |  |
+| `support_number` | string or null | optional |  |
+| `updated_at` | string (date and time, UTC) or null | optional |  |
+| `updated_by` | string or null | optional |  |
+
 ### DuplicateOut
 
 | Field | Type | Required | Notes |
@@ -1843,6 +2060,7 @@ No body.
 | `number` | string | required |  |
 | `name` | string | required |  |
 | `description` | string or null | optional |  |
+| `category` | one of `medical`, `accident`, `flood`, `violence`, `missing_person` or null | optional |  |
 
 ### EmergencyNumberOut
 
@@ -1853,6 +2071,7 @@ No body.
 | `name` | string | required |  |
 | `description` | string or null | optional |  |
 | `position` | integer | required |  |
+| `category` | one of `medical`, `accident`, `flood`, `violence`, `missing_person` or null | optional |  |
 
 ### EmergencyNumberUpdateIn
 
@@ -1861,6 +2080,7 @@ No body.
 | `number` | string or null | optional |  |
 | `name` | string or null | optional |  |
 | `description` | string or null | optional |  |
+| `category` | one of `medical`, `accident`, `flood`, `violence`, `missing_person` or null | optional |  |
 
 ### EmergencyOrderIn
 
@@ -1925,6 +2145,15 @@ No body.
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `message` | string | required |  |
+
+### MyActivityOut
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `server_time` | string (date and time, UTC) | required |  |
+| `handled_today` | integer | required |  |
+| `today_starts_at` | string (date and time, UTC) | required |  |
+| `items` | array of ActivityItemOut | required |  |
 
 ### MyReportOut
 
@@ -2092,6 +2321,24 @@ No body.
 | `resources` | array of string or null | optional |  |
 | `note` | string or null | optional |  |
 | `reason` | string or null | optional |  |
+
+### SummaryOut
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `server_time` | string (date and time, UTC) | required |  |
+| `new_reports` | integer | required |  |
+| `being_handled` | integer | required |  |
+| `mine` | integer | required |  |
+| `pending_places` | integer | required |  |
+| `removed_centers` | integer | required |  |
+
+### SupportContactOut
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `support_email` | string or null | optional |  |
+| `support_number` | string or null | optional |  |
 
 ### UserCreateIn
 

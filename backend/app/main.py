@@ -27,6 +27,7 @@ from . import accounts, audit, content_service, evac_service, place_service, rep
 from .account_routes import router as account_router
 from .auth import optional_staff
 from .chat_routes import router as chat_router
+from .console_routes import router as console_router
 from .content_routes import router as content_router
 from .database import Base, engine, SessionLocal, get_db
 from .evac_routes import router as evac_router
@@ -35,6 +36,7 @@ from .models import DeletedFacility, Facility, StatusUpdate, User, UserEvacuatio
 from .ops_routes import router as ops_router
 from .place_routes import router as place_router
 from .rate_limit import limiter
+from .settings_routes import router as settings_router
 from .report_routes import optional_phone, router as report_router
 from .schemas import FacilityOut, StatusIn, StatusOut, validate_for_facility_type
 
@@ -232,6 +234,8 @@ app.include_router(place_router)
 app.include_router(content_router)
 app.include_router(chat_router)
 app.include_router(ops_router)
+app.include_router(console_router)
+app.include_router(settings_router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):

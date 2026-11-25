@@ -2,6 +2,41 @@
 
 Short log of what changed in each update, newest first.
 
+## Update 14 — Admin console gaps (backend only)
+Filled the gaps between the admin console design (the 38-page mockup and its notes) and the API. Everything below is additive:
+no path, method or answer shape that existed changed, and every public answer is the same plus, at most, new optional fields.
+- **Mine and release.** `GET /api/admin/reports` takes `mine=true` (only reports you took; with `include_closed` also the ones you
+  took and closed). Each item has `is_mine` for the "Mine" chip. New `POST /api/admin/reports/{id}/release`: Being handled -> New,
+  nobody assigned; only the Admin who took it (409 for others, and for a closed report), safe to call twice, a whole hazard group
+  moves together, audited as `report.release`. The assigned Admin's name was already in `taken_by`.
+- **Badge counts.** New `GET /api/admin/summary`: `new_reports`, `being_handled`, `mine`, `pending_places`, `removed_centers`
+  (a few COUNT queries, no lists; a hazard counts once for all its reports).
+- **Recent activity.** New `GET /api/admin/me/activity` (`limit`, default 20, max 100): the signed-in Admin's own audit entries
+  newest first (sign-ins and sign-outs left out) and `handled_today`: different reports they took (and did not release), resolved,
+  marked false or verified since local midnight. Midnight uses `ADMIN_DAY_UTC_OFFSET_HOURS` (default 8; the Philippines has no
+  daylight saving, so no time zone database is needed on Windows).
+- **Contact settings.** New table `app_settings` (made by `create_all`; old databases need nothing). `GET /api/support-contact`
+  (public) gives `support_email` and `support_number`; `GET` and `PATCH /api/admin/contact-settings` (Admin) also give and change
+  `control_room_number`, which is never in a public answer. A value not set, or cleared (send `null` or an empty text), is `null`,
+  never placeholder text. A real change is audited as `settings.contact_update` (changed fields and their old values); sending the
+  same value again logs nothing. Numbers follow the emergency-number rules; the email is checked loosely (max 120 characters).
+- **Emergency number categories.** New nullable column `emergency_numbers.category`: `medical`, `accident`, `flood`, `violence`,
+  `missing_person`, or `null` for a general number. Added to an existing database on startup by `content_service.upgrade_number_columns`
+  (idempotent, keeps every row; existing numbers, 911 included, stay untagged). `category` is accepted on `POST` and `PATCH
+  /api/admin/emergency-numbers` (`null` clears it), is in every number's answer, and `GET /api/emergency-numbers?category=` filters
+  (untagged numbers are only in the unfiltered list, so the sheet pins 911 itself).
+- **Polling and distance.** `GET /api/admin/reports` takes `latitude` and `longitude` together (422 for one alone): each item gets
+  `distance_m` (null otherwise; the order stays most urgent first). `since` (ISO 8601, no zone = UTC) returns only items that changed at
+  or after it, **including closed ones**, so a screen can drop a report another Admin just closed; send the last answer's `server_time`
+  (now taken before the query, so a change made while it runs is seen by the next poll). `new_help_count`, `has_new_help` and
+  `latest_report_id` still cover everything. The answer echoes `since`.
+- **Already there, not changed:** hazard detail for Admins (`report_count`, `phones`, `hazard_state` pending/unconfirmed/verified,
+  `verified`, `verified_by`, and `verify` and `mark-false` on the same item), and the assigned Admin's name (`taken_by`).
+- Tests: new `tests/test_console.py` (12 checks, including an old database with an emergency_numbers table that has no `category`,
+  started twice). `docs/API.md` regenerated. New setting in `.env.example`.
+- Not done: no frontend, CSS or chatbot changes. The admin console design asks for a mine/status filter on the list; only `mine` was
+  asked for, so the Resolved filter still uses `include_closed`.
+
 ## Update 13 — One role: Admin (Admin console, backend part 1)
 - **One role, `admin`.** The rank system, `require_responder` and `require_super_admin` are gone; `auth.require_admin` is the one
   check. `optional_staff` still gives a signed-in Admin (or None) to public routes, which count that Admin as an "official".

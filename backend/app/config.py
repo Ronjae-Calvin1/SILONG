@@ -188,6 +188,12 @@ EMERGENCY_NUMBER_MAX = 30
 EMERGENCY_DESCRIPTION_MAX = 140
 # Only 911 is filled in until the Batangas City CDRRMO confirms the others.
 DEFAULT_EMERGENCY_NUMBERS = (("911", "National Emergency"),)
+# What an emergency number is for. The hotline sheet filters on these. A number with no tag is general.
+EMERGENCY_CATEGORIES = ("medical", "accident", "flood", "violence", "missing_person")
+SETTING_EMAIL_MAX = 120  # support email
+# "Today" in the Admin's Me screen ("handled N reports today") starts at local midnight. The Philippines has
+# no daylight saving, so a fixed offset from UTC is enough (and needs no time zone database on Windows).
+ADMIN_DAY_UTC_OFFSET_HOURS = _number("ADMIN_DAY_UTC_OFFSET_HOURS", 8)
 
 # ---- Chatbot (redesign part 4: placeholder, no AI connected) ----
 # Which provider answers. "placeholder" is the only one built. An unknown name falls back to

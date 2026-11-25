@@ -102,6 +102,8 @@ AREAS = {  # tag -> heading, in this order; a tag not listed here is added at th
     "places (admin)": "Places review and status corrections (Admin)",
     "content": "Weather, advisories and emergency numbers",
     "chat": "Chat",
+    "admin console": "Admin console helpers (badge counts, my recent actions)",
+    "contact settings": "Contact settings",
 }
 
 
@@ -231,7 +233,7 @@ def build() -> str:
                 ops.append(((op.get("tags") or ["other"])[0], path, method.upper(), op))
 
     order = list(AREAS)
-    tags = sorted({t for t, *_ in ops}, key=lambda t: order.index(t) if t in order else len(order))
+    tags = sorted({t for t, *_ in ops}, key=lambda t: (order.index(t) if t in order else len(order), t))  # same order on every run
     out = [INTRO, f"This reference lists **{len(ops)} endpoints** in {len(tags)} areas.\n"]
     used_shapes = set()
 
