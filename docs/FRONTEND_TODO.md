@@ -1,5 +1,7 @@
 # SILONG frontend to-do
 
+> **One role (backend part 1 of the Admin console).** There is only the Admin role now: `/api/responder/*` is `/api/admin/*`, every Admin can use every admin endpoint, and `role` is always `"admin"`. Where this file says Responder or Super admin, `ADMIN_CONSOLE.md` wins.
+
 Checklist for connecting the existing screens to the server and building the missing staff screens.
 Facts come from `docs/API.md`, `docs/REDESIGN.md`, `README.md`, `CHANGELOG.md` (Updates 9 to 12) and the code in `frontend/src`, `backend/app`.
 Where the docs and the code disagree, the code is what this file follows, and it says so.
@@ -15,11 +17,11 @@ Where the docs and the code disagree, the code is what this file follows, and it
 
 - [ ] Run the backend (README, "How to run it"): `cd backend`, `pip install -r requirements.txt`, `uvicorn app.main:app --reload --port 8000`. On Windows use `py -m ...`.
   - check it: `GET /api/health` answers `{"status": "ok"}` (`api.health()` in `client.ts`)
-- [ ] Create the first Super admin once: `py scripts/create_super_admin.py` (README, "Staff accounts and roles"). It uses `typhoon.db` in the folder you run it from.
+- [ ] Create the first Admin once: `py scripts/create_admin.py` (README, "Admin accounts"). It uses `typhoon.db` in the folder you run it from.
 - [ ] Load demo data into a separate file (README, "Operations"):
   - `py scripts/seed_demo.py --db demo.db --with-demo-staff`
   - start the backend with `DATABASE_URL=sqlite:///./demo.db` (or put it in `backend/.env`)
-  - it makes the staff accounts "Demo Responder" and "Demo Super Admin" and prints their passwords once
+  - it makes the Admin accounts "Demo Admin" and "Demo Admin 2" and prints their passwords once
   - it refuses `typhoon.db` unless you add `--force`; do not
 - [ ] Set `VITE_API_URL` in `frontend/.env` if the backend is not at `http://127.0.0.1:8000/api` (the default in `src/api/client.ts`). It is not listed in `frontend/.env.example`.
 - [ ] Set `VITE_MAPTILER_KEY` (README, "Map setup"). The key's allowed origin is the host name only, for example `localhost`, without `http://`.
@@ -289,31 +291,31 @@ Route `/admin` exists in `App.tsx`. Replace the placeholder `AdminSignInPage`.
 
 Reports list:
 
-- [ ] `GET /api/responder/reports` (query `include_closed`, `kind`). Poll every `refresh_seconds` from the answer (10), not a fixed number.
+- [ ] `GET /api/admin/reports` (query `include_closed`, `kind`). Poll every `refresh_seconds` from the answer (10), not a fixed number.
 - [ ] Red "Needs help" alert while `has_new_help` is true. `new_help_count` and `latest_report_id` are in the answer.
 - [ ] Item fields: `id`, `kind`, `status` (`new`, `being_handled`, `resolved`, `false`), `is_new_help`, `category`, `categories`, `people`, `can_move`, `latitude`, `longitude`, `contacts`, `notes`, `created_at`, `updated_at`, `taken_by`, `closed_by`, `resolution_note`, `false_reason`, `verified`, `verified_by`, `hazard_state` (`pending`, `unconfirmed`, `verified`), `phones`, `report_count`.
 - [ ] A hazard is one line for all reports about the same place (within 100 m). Show `report_count`, `phones`, every `categories` value, all `contacts` and `notes`.
-- [ ] Take: `POST /api/responder/reports/{report_id}/take`, no body. 409 means someone else has it. Safe to call twice.
+- [ ] Take: `POST /api/admin/reports/{report_id}/take`, no body. 409 means someone else has it. Safe to call twice.
 - [ ] Call: a `tel:` link from `contacts`. No endpoint.
 - [ ] Navigate: a link with `latitude` and `longitude`. No endpoint. Which maps app is not decided. (check)
-- [ ] Resolve: `POST /api/responder/reports/{report_id}/resolve` with `what_was_done` (3 to 500 characters). Ask the responder what was done first.
-- [ ] Mark false: `POST /api/responder/reports/{report_id}/mark-false` with `reason` (3 to 500). Ask for the reason first. 3 false reports from one phone block that phone.
-- [ ] Verify a hazard: `POST /api/responder/reports/{report_id}/verify`, no body, hazards only, safe to call twice. The public then sees "Verified".
+- [ ] Resolve: `POST /api/admin/reports/{report_id}/resolve` with `what_was_done` (3 to 500 characters). Ask the responder what was done first.
+- [ ] Mark false: `POST /api/admin/reports/{report_id}/mark-false` with `reason` (3 to 500). Ask for the reason first. 3 false reports from one phone block that phone.
+- [ ] Verify a hazard: `POST /api/admin/reports/{report_id}/verify`, no body, hazards only, safe to call twice. The public then sees "Verified".
 - [ ] Rules from REDESIGN: exact location and contact are visible to staff only; the site cannot text or page anyone; the page is not a replacement for 911.
 
 Places to review:
 
-- [ ] `GET /api/responder/places` (default: pending, longest waiting first; `status=rejected` lists rejected). Item fields: `id`, `key`, `name`, `center_type`, `barangay`, `address`, `contact`, `max_capacity`, `latitude`, `longitude`, `note`, `approval_status`, `submitted_at`, `reviewed_by`, `reviewed_at`, `reject_reason`, `possible_duplicate`, `is_removed`, `message`.
+- [ ] `GET /api/admin/places` (default: pending, longest waiting first; `status=rejected` lists rejected). Item fields: `id`, `key`, `name`, `center_type`, `barangay`, `address`, `contact`, `max_capacity`, `latitude`, `longitude`, `note`, `approval_status`, `submitted_at`, `reviewed_by`, `reviewed_at`, `reject_reason`, `possible_duplicate`, `is_removed`, `message`.
 - [ ] Show `possible_duplicate` (`name`, `distance_m`, `approval_status`, `removed`) so the reviewer sees the other place.
-- [ ] Approve: `POST /api/responder/places/{facility_id}/approve`. Also undoes a rejection. Safe to call twice.
-- [ ] Reject: `POST /api/responder/places/{facility_id}/reject` with an optional `reason`. A place already on the map gets 409 (remove it instead).
-- [ ] Edit details: `PATCH /api/responder/places/{facility_id}` with only the changed fields of `name`, `address`, `barangay`, `contact`, `note`. 409 when a new name matches another center within 30 m, or the place is a hospital, a clinic or from the data files.
+- [ ] Approve: `POST /api/admin/places/{facility_id}/approve`. Also undoes a rejection. Safe to call twice.
+- [ ] Reject: `POST /api/admin/places/{facility_id}/reject` with an optional `reason`. A place already on the map gets 409 (remove it instead).
+- [ ] Edit details: `PATCH /api/admin/places/{facility_id}` with only the changed fields of `name`, `address`, `barangay`, `contact`, `note`. 409 when a new name matches another center within 30 m, or the place is a hospital, a clinic or from the data files.
 
 Status override and capacity:
 
-- [ ] Override latest status: `POST /api/responder/facilities/{facility_id}/status-override` (`status`, `people_inside`, `max_capacity`, `resources`, `note`, optional `reason`). Saved as "Confirmed by official" with the name; the old status stays in the history.
-- [ ] Correct capacity: `POST /api/responder/facilities/{facility_id}/capacity-correction` (`max_capacity` 1 to 50000, optional `reason`). Users cannot change it afterwards.
-- [ ] History: `GET /api/responder/facilities/{facility_id}/status-history` (optional `limit`). Fields include `kind`, `source`, `source_label`, `changed_by`.
+- [ ] Override latest status: `POST /api/admin/facilities/{facility_id}/status-override` (`status`, `people_inside`, `max_capacity`, `resources`, `note`, optional `reason`). Saved as "Confirmed by official" with the name; the old status stays in the history.
+- [ ] Correct capacity: `POST /api/admin/facilities/{facility_id}/capacity-correction` (`max_capacity` 1 to 50000, optional `reason`). Users cannot change it afterwards.
+- [ ] History: `GET /api/admin/facilities/{facility_id}/status-history` (optional `limit`). Fields include `kind`, `source`, `source_label`, `changed_by`.
 - [ ] A normal status update with a token (`POST /api/facilities/{facility_id}/status`) is also "Confirmed by official" and is not held back by the per-place cooldown (REDESIGN).
 
 Removed places:
@@ -416,7 +418,7 @@ Done when:
 - [ ] Status override, capacity, history (5.2): S
 - [ ] Removed places (5.2, 4.12): S
 
-Done when (sign in as "Demo Responder"):
+Done when (sign in as "Demo Admin"):
 - [ ] The seeded new help request shows the red alert. After "Take" the alert goes away within `refresh_seconds`.
 - [ ] A second responder taking the same report gets the 409 message.
 - [ ] Resolve and mark false both refuse an empty text.
@@ -434,7 +436,7 @@ Done when (sign in as "Demo Responder"):
 - [ ] Audit log with filters and paging (5.3): M
 - [ ] Blocked phones, permanent delete (5.3): S
 
-Done when (sign in as "Demo Super Admin", on a computer):
+Done when (sign in as "Demo Admin", on a computer):
 - [ ] A new advisory appears in the Updates tab; pinning moves it first; deleting removes it.
 - [ ] A new emergency number appears in the hotlines panel in the order set.
 - [ ] A new responder account can sign in; locking it signs them out; reset password lets them in with the new one.

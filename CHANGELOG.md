@@ -2,6 +2,35 @@
 
 Short log of what changed in each update, newest first.
 
+## Update 13 — One role: Admin (Admin console, backend part 1)
+- **One role, `admin`.** The rank system, `require_responder` and `require_super_admin` are gone; `auth.require_admin` is the one
+  check. `optional_staff` still gives a signed-in Admin (or None) to public routes, which count that Admin as an "official".
+  Everything that was Super-admin-only (accounts, audit log, delete a center now, advisories, sources, emergency numbers,
+  unblock phones, reset password) is open to every Admin. Nothing is locked by role.
+- **Renamed, old paths removed (breaking):** `/api/responder/reports*`, `/api/responder/places*` and
+  `/api/responder/facilities/{id}/{status-override,capacity-correction,status-history}` are now under `/api/admin/`. Same
+  methods, bodies and answers. `/api/evacuation-centers/removed`, `DELETE /api/evacuation-centers/{id}` and `.../restore` keep their
+  paths (Admin only, as before). Public endpoints are unchanged.
+- **Migration on startup** (`accounts.migrate_roles`, called from `main.py`): accounts with role `responder` or `super_admin`
+  become `admin`. Idempotent, never wipes anything, one audit entry per account (`user.role_migrated`, by `(system)`, with the old
+  role) and a server log line. Old audit entries keep the role they had.
+- **Safeguards:** you cannot lock or remove yourself, and the last active Admin cannot be locked or removed (409).
+- **401 vs 403:** no token, an unknown token or an idle sign-in is 401. A sign-in that is still alive but whose account is locked or
+  was removed is now 403 (and the sign-in is deleted). Locking or removing through the API still ends the sessions at once, so
+  the old token then gets 401.
+- **Bodies and answers:** `role` in `/api/me`, sign-in and the account list is always `"admin"`. `POST /api/admin/users` no longer
+  needs `role`; a legacy `role` (`admin`, `responder`, `super_admin`) is **accepted and ignored for one release** (the answer's
+  `message` says so), then it will be rejected. Public wording that said "responders" now says "Admins".
+- **Scripts:** `create_super_admin.py` is replaced by `create_admin.py` (first Admin only, password prompt, same checks).
+  `seed_demo.py --with-demo-staff` makes "Demo Admin" and "Demo Admin 2" (a second one so lock and remove can be tried).
+  `generate_api_doc.py` and `docs/API.md` regenerated.
+- Setting names `STAFF_IDLE_MINUTES` and `RESPONDER_REFRESH_SECONDS` are kept so existing `.env` files keep working.
+- Tests: all five files use the single role. New: 401 on every admin route (found from the routes themselves), 403 for a locked or
+  removed account on every admin route, the migration (in process and against an old database on startup), the last-Admin rule,
+  the legacy `role` field, `create_admin.py`.
+- **Frontend not changed** and still calls `/api/responder/*`: it needs the new paths. `ADMIN_CONSOLE.md` was not available while
+  doing this; README, `docs/REDESIGN.md` and `docs/FRONTEND_TODO.md` got only the factual fixes and a pointer to it.
+
 ## Update 12 — Operations: .env, passwords, phone blocks, place edits, audit filters, cleanup, demo data, API reference (redesign part 5, backend only)
 - **`backend/.env` is loaded automatically** by `config.py` (no new dependency). Blank lines and `#`
   comments are skipped, simple quotes removed, a real environment variable is never overridden, a missing file

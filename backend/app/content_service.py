@@ -26,7 +26,7 @@ def utcnow_naive() -> datetime:
 def prepare_tables(engine=default_engine) -> None:
     """
     Make the two list tables and fill them with their starting rows, ONCE: only when the table
-    did not exist yet. So a Super admin who removes a source or the 911 row does not get it
+    did not exist yet. So an Admin who removes a source or the 911 row does not get it
     back on the next start. Call this BEFORE Base.metadata.create_all. No existing table gets a
     new column in part 4, so there is no column upgrade here.
     """

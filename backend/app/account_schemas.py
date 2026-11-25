@@ -1,4 +1,4 @@
-"""Request/response shapes for sign in, /api/me, accounts and the audit log."""
+"""Request/response shapes for sign in, /api/me, Admin accounts and the audit log."""
 import json
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
@@ -23,7 +23,7 @@ class SignInIn(BaseModel):
 class MeOut(BaseModel):
     id: int
     name: str
-    role: Literal["responder", "super_admin"]
+    role: Literal["admin"]  # always "admin": there is one role
     idle_timeout_minutes: int
 
 
@@ -41,7 +41,10 @@ class UserCreateIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(max_length=100)
     password: str = Field(max_length=accounts.PASSWORD_MAX)
-    role: Literal["responder", "super_admin"]
+    # LEGACY, ignored. There is one role, so every new account is an Admin whatever is sent here. Still
+    # accepted for ONE release so screens built for the old roles keep working; it will be rejected
+    # (extra field) after that. Leave it out. Anything but "admin", "responder" or "super_admin" is a 422.
+    role: Optional[Literal["admin", "responder", "super_admin"]] = Field(default=None, description="Deprecated and ignored: every account is an Admin. Accepted for one release.")
 
 
 class ChangePasswordIn(BaseModel):
@@ -52,7 +55,7 @@ class ChangePasswordIn(BaseModel):
 
 class ResetPasswordIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    new_password: str = Field(max_length=accounts.PASSWORD_MAX)  # typed by the Super admin; never sent back
+    new_password: str = Field(max_length=accounts.PASSWORD_MAX)  # typed by the Admin; never sent back
 
 
 class BlockedPhoneOut(BaseModel):
@@ -66,7 +69,7 @@ class BlockedPhoneOut(BaseModel):
 class UserOut(BaseModel):
     id: int
     name: str
-    role: Literal["responder", "super_admin"]
+    role: Literal["admin"]  # always "admin": there is one role
     status: Literal["active", "locked_by_admin", "locked_for_wrong_tries"]
     locked_until: Optional[datetime] = None  # only while locked for wrong tries
     created_at: datetime
@@ -87,7 +90,7 @@ class AuditEntryOut(BaseModel):
 
 
 def me_out(user: User) -> MeOut:
-    return MeOut(id=user.id, name=user.name, role=user.role, idle_timeout_minutes=config.STAFF_IDLE_MINUTES)
+    return MeOut(id=user.id, name=user.name, role=accounts.ADMIN, idle_timeout_minutes=config.STAFF_IDLE_MINUTES)
 
 
 def user_out(user: User, message: Optional[str] = None) -> UserOut:
@@ -95,7 +98,7 @@ def user_out(user: User, message: Optional[str] = None) -> UserOut:
     wrong_tries_lock = user.locked_until is not None and user.locked_until > now
     status = "locked_by_admin" if user.is_locked else "locked_for_wrong_tries" if wrong_tries_lock else "active"
     return UserOut(
-        id=user.id, name=user.name, role=user.role, status=status,
+        id=user.id, name=user.name, role=accounts.ADMIN, status=status,
         locked_until=_utc(user.locked_until) if wrong_tries_lock else None,
         created_at=_utc(user.created_at), created_by=user.created_by,
         last_sign_in_at=_utc(user.last_sign_in_at), message=message,

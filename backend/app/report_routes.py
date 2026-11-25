@@ -4,15 +4,15 @@ Help requests and hazard reports.
     POST /api/reports                          public, X-Phone-Id   send a help request or a hazard
     GET  /api/reports/mine                     public, X-Phone-Id   this phone's own reports and their status
     GET  /api/hazards/nearby                   public               hazards within the near-me range (approximate spot)
-    GET  /api/responder/reports                responder, super_admin   list for the responder screens (poll ~10 s)
-    POST /api/responder/reports/{id}/take      responder, super_admin
-    POST /api/responder/reports/{id}/resolve   responder, super_admin   body: what_was_done
-    POST /api/responder/reports/{id}/mark-false responder, super_admin  body: reason
-    POST /api/responder/reports/{id}/verify    responder, super_admin   hazards only
+    GET  /api/admin/reports                    admin                list for the Admin screens (poll ~10 s)
+    POST /api/admin/reports/{id}/take          admin
+    POST /api/admin/reports/{id}/resolve       admin                body: what_was_done
+    POST /api/admin/reports/{id}/mark-false    admin                body: reason
+    POST /api/admin/reports/{id}/verify        admin                hazards only
 
 The public endpoints have no sign-in: the protection is the phone ID, the
 per-phone and per-IP limits (rate_limit.py) and the block after false reports.
-Responder actions are audited (audit.py).
+Admin actions are audited (audit.py).
 """
 from datetime import timezone
 from typing import List, Literal, Optional
@@ -21,13 +21,13 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, R
 from sqlalchemy.orm import Session
 
 from . import report_service
-from .auth import require_responder
+from .auth import require_admin
 from .database import get_db
 from .models import User
 from .rate_limit import read_limiter, report_limiter
 from .report_schemas import (
     MarkFalseIn, MyReportOut, NearbyHazardOut, ReportIn, ReportSentOut, ResolveIn,
-    ResponderListOut, ResponderReportOut, my_report_out, responder_item_out, responder_list_out,
+    AdminListOut, AdminReportOut, admin_item_out, admin_list_out, my_report_out,
 )
 
 router = APIRouter(tags=["reports"])
@@ -96,7 +96,7 @@ def send_report(
         response.status_code = 200
     status = report_service.PUBLIC_STATUS[row.status]
     if payload.kind == report_service.HELP:
-        message = "Your request was sent to the responders. If it is an emergency, also call 911."
+        message = "Your request was sent to the Admins. If it is an emergency, also call 911."
     elif created:
         message = "Thank you. Your hazard report was received."
     else:
@@ -131,13 +131,13 @@ def nearby_hazards(
     return [NearbyHazardOut(**h) for h in report_service.nearby_hazards(db, latitude, longitude)]
 
 
-# ---- Responders and Super admins ----
+# ---- Admins ----
 
-@router.get("/api/responder/reports", response_model=ResponderListOut)
-def responder_reports(
+@router.get("/api/admin/reports", response_model=AdminListOut)
+def admin_reports(
     include_closed: bool = Query(False, description="Also list resolved and false reports"),
     kind: Optional[Literal["help", "hazard"]] = Query(None),
-    user: User = Depends(require_responder),
+    user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """
@@ -146,28 +146,28 @@ def responder_reports(
     only, unless include_closed is set. A hazard is one line for all reports
     about the same place.
     """
-    return responder_list_out(report_service.responder_list(db, include_closed=include_closed, kind=kind))
+    return admin_list_out(report_service.admin_list(db, include_closed=include_closed, kind=kind))
 
 
-@router.post("/api/responder/reports/{report_id}/take", response_model=ResponderReportOut)
-def take_report(report_id: int, request: Request, user: User = Depends(require_responder), db: Session = Depends(get_db)):
+@router.post("/api/admin/reports/{report_id}/take", response_model=AdminReportOut)
+def take_report(report_id: int, request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
     """Take it: New -> Being handled. 409 if someone else already has it. Safe to call twice."""
-    return responder_item_out(report_service.take(db, user, report_id, request))
+    return admin_item_out(report_service.take(db, user, report_id, request))
 
 
-@router.post("/api/responder/reports/{report_id}/resolve", response_model=ResponderReportOut)
-def resolve_report(report_id: int, payload: ResolveIn, request: Request, user: User = Depends(require_responder), db: Session = Depends(get_db)):
+@router.post("/api/admin/reports/{report_id}/resolve", response_model=AdminReportOut)
+def resolve_report(report_id: int, payload: ResolveIn, request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
     """Resolve. Needs `what_was_done`. The sender then sees Resolved."""
-    return responder_item_out(report_service.resolve(db, user, report_id, payload.what_was_done, request))
+    return admin_item_out(report_service.resolve(db, user, report_id, payload.what_was_done, request))
 
 
-@router.post("/api/responder/reports/{report_id}/mark-false", response_model=ResponderReportOut)
-def mark_report_false(report_id: int, payload: MarkFalseIn, request: Request, user: User = Depends(require_responder), db: Session = Depends(get_db)):
+@router.post("/api/admin/reports/{report_id}/mark-false", response_model=AdminReportOut)
+def mark_report_false(report_id: int, payload: MarkFalseIn, request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
     """Mark false. Needs a `reason`. A phone with 3 false reports is blocked from sending reports."""
-    return responder_item_out(report_service.mark_false(db, user, report_id, payload.reason, request))
+    return admin_item_out(report_service.mark_false(db, user, report_id, payload.reason, request))
 
 
-@router.post("/api/responder/reports/{report_id}/verify", response_model=ResponderReportOut)
-def verify_report(report_id: int, request: Request, user: User = Depends(require_responder), db: Session = Depends(get_db)):
+@router.post("/api/admin/reports/{report_id}/verify", response_model=AdminReportOut)
+def verify_report(report_id: int, request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
     """Verify a hazard: the public then sees it as Verified. Hazards only. Safe to call twice."""
-    return responder_item_out(report_service.verify(db, user, report_id, request))
+    return admin_item_out(report_service.verify(db, user, report_id, request))

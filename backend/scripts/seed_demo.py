@@ -10,7 +10,8 @@ What it makes (everything says DEMO in its text, and the fake phones are "demo-p
     a hazard reported by 3 phones (shows as Unconfirmed), a verified hazard, and a hazard with one report
   - evacuation centers: approved ones (one with a status) and pending ones (one is a possible duplicate)
   - advisories (one pinned, one from an official source)
-  - with --with-demo-staff only: a demo responder and a demo Super admin. The script PRINTS their
+  - with --with-demo-staff only: two demo Admins ("Demo Admin" and "Demo Admin 2": a second one so you can
+    try locking and removing an account, which you cannot do to yourself). The script PRINTS their
     passwords once, when it makes them.
 
 Safety:
@@ -65,7 +66,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Fill a database with DEMO data for building screens.")
     ap.add_argument("--db", help="SQLite file to use (made if missing). Without it, DATABASE_URL or typhoon.db.")
     ap.add_argument("--force", action="store_true", help="allow the real database (typhoon.db) or a non-SQLite one")
-    ap.add_argument("--with-demo-staff", action="store_true", help="also make a demo responder and a demo Super admin")
+    ap.add_argument("--with-demo-staff", action="store_true", help="also make two demo Admins (Demo Admin, Demo Admin 2)")
     args = ap.parse_args(argv)
 
     url = _database_url(args.db)
@@ -166,16 +167,16 @@ def main(argv=None) -> int:
                 made["advisories"] += 1
         db.commit()
 
-        # ---- demo staff (only on request) ----
+        # ---- demo Admins (only on request) ----
         if args.with_demo_staff:
-            for name, role in (("Demo Responder", "responder"), ("Demo Super Admin", "super_admin")):
+            for name in ("Demo Admin", "Demo Admin 2"):
                 if db.query(User).filter(User.name_key == accounts.normalize_name(name)).first():
                     print(f"Account '{name}' already exists. Its password is not shown again.")
                     continue
                 password = secrets.token_urlsafe(12)
-                accounts.create_user(db, name, password, role, actor="DEMO seed script")
+                accounts.create_user(db, name, password, actor="DEMO seed script")
                 made["accounts"] += 1
-                print(f"Made account '{name}' ({role}) with password: {password}")
+                print(f"Made account '{name}' with password: {password}")
     finally:
         db.close()
 

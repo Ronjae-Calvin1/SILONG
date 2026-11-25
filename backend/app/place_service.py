@@ -1,15 +1,15 @@
 """
 Places: approval, removal, deleting for good, and upgrading an older database.
-The routes are in evac_routes.py (public add, remove, restore) and place_routes.py (staff).
+The routes are in evac_routes.py (public add, remove, restore) and place_routes.py (Admin).
 
 The rules (docs/REDESIGN.md, "Map and places"):
 
   pending     A place a user adds. Only the phone that sent it (hashed phone ID) sees it.
-  approved    A responder or Super admin approved it: everybody sees it.
-  rejected    A responder or Super admin rejected it: nobody but staff sees it.
-  removed     A responder or Super admin removed an approved center. Hidden for everyone and kept
+  approved    An Admin approved it: everybody sees it.
+  rejected    An Admin rejected it: nobody but Admins see it.
+  removed     An Admin removed an approved center. Hidden for everyone and kept
               config.REMOVED_CENTERS_KEEP_DAYS days (30), then deleted together with its status
-              history by purge_removed_centers(). A Super admin can delete it sooner.
+              history by purge_removed_centers(). An Admin can delete it sooner.
 
 "Hide on this phone" is NOT here on purpose: it lives in the browser only and the server never
 hears about it. A user cannot remove or hide a center for anybody else.
@@ -194,14 +194,14 @@ def reject(db: Session, user: User, facility_id: int, reason: Optional[str], req
 
 # ------------------------------------------------------------ edit details (staff)
 
-# What a responder may correct, and where each field lives on the added place.
+# What an Admin may correct, and where each field lives on the added place.
 EDITABLE_FIELDS = ("name", "address", "barangay", "contact", "note")
 
 
 def edit_center(db: Session, user: User, facility_id: int, changes: dict, request: Optional[Request]) -> PlaceAdminOut:
     """
     Correct the name, address, barangay, contact or note of an evacuation center that was added
-    through the app. `changes` holds only the fields the responder sent (already cleaned).
+    through the app. `changes` holds only the fields the Admin sent (already cleaned).
 
     Why only added centers: their details live in their own row (user_evacuation_centers) and the
     startup sync rebuilds the facilities row FROM that row, so an edit survives every restart.
@@ -333,7 +333,7 @@ def _delete_rows_for_key(db: Session, key: str) -> None:
 
 def delete_for_good(db: Session, user: User, facility_id: int, request: Optional[Request]) -> dict:
     """
-    Super admin only (the route checks): delete a removed center, or a rejected place, now instead
+    Delete a removed center, or a rejected place, now instead
     of waiting for the purge. The center and its status history are gone for good.
     """
     f = get_center(db, facility_id)

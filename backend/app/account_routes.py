@@ -1,19 +1,21 @@
 """
-Staff accounts and sign in.
+Admin accounts and sign in. One role, Admin: every route below that is not public needs a signed-in
+Admin, and every Admin can use all of them.
 
-    POST   /api/auth/sign-in               public (needs a staff account)
+    POST   /api/auth/sign-in               public (needs an Admin account)
     POST   /api/auth/sign-out              signed in
-    POST   /api/auth/change-password       signed in (responder, super_admin)
-    GET    /api/me                         responder, super_admin
-    GET    /api/admin/users                super_admin
-    POST   /api/admin/users                super_admin
-    POST   /api/admin/users/{id}/lock      super_admin
-    POST   /api/admin/users/{id}/unlock    super_admin
-    POST   /api/admin/users/{id}/reset-password  super_admin
-    DELETE /api/admin/users/{id}           super_admin
-    GET    /api/admin/audit-log            super_admin
+    POST   /api/auth/change-password       signed in
+    GET    /api/me                         admin
+    GET    /api/admin/users                admin
+    POST   /api/admin/users                admin
+    POST   /api/admin/users/{id}/lock      admin
+    POST   /api/admin/users/{id}/unlock    admin
+    POST   /api/admin/users/{id}/reset-password  admin
+    DELETE /api/admin/users/{id}           admin
+    GET    /api/admin/audit-log            admin
 
-There is no public sign-up. Every change below is written to the audit log.
+There is no public sign-up. Every change below is written to the audit log. You cannot lock or remove
+yourself, and the last active Admin cannot be locked or removed.
 """
 from datetime import datetime, timedelta
 from typing import List, Optional
@@ -27,7 +29,7 @@ from .account_schemas import (
     AuditEntryOut, ChangePasswordIn, MeOut, MessageOut, ResetPasswordIn, SignInIn, SignInOut, UserCreateIn, UserOut,
     audit_out, me_out, user_out,
 )
-from .auth import bearer_token, current_user, require_responder, require_super_admin
+from .auth import bearer_token, current_user, require_admin
 from .database import get_db
 from .models import AuditLog, User
 from .rate_limit import signin_limiter
@@ -76,35 +78,39 @@ def change_password(
 
 
 @router.get("/api/me", response_model=MeOut)
-def me(user: User = Depends(require_responder)):
-    """Who is signed in. Any staff role."""
+def me(user: User = Depends(require_admin)):
+    """Who is signed in."""
     return me_out(user)
 
 
-# ---- Super admin: accounts ----
+# ---- Admin: accounts ----
 
 @router.get("/api/admin/users", response_model=List[UserOut])
-def list_users(user: User = Depends(require_super_admin), db: Session = Depends(get_db)):
+def list_users(user: User = Depends(require_admin), db: Session = Depends(get_db)):
     return [user_out(u) for u in db.query(User).order_by(User.id).all()]
 
 
 @router.post("/api/admin/users", response_model=UserOut, status_code=201)
-def create_user(payload: UserCreateIn, request: Request, user: User = Depends(require_super_admin), db: Session = Depends(get_db)):
-    """Create a responder or Super admin account. There is no public sign-up."""
-    created = accounts.create_user(db, payload.name, payload.password, payload.role, actor=user, request=request)
-    return user_out(created)
+def create_user(payload: UserCreateIn, request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """
+    Create an Admin account. There is no public sign-up. `role` is a legacy field: it is ignored (every
+    account is an Admin) and accepted for one release only; leave it out.
+    """
+    created = accounts.create_user(db, payload.name, payload.password, actor=user, request=request)
+    note = "The role field is ignored: every account is an Admin." if payload.role is not None else None
+    return user_out(created, note)
 
 
 @router.post("/api/admin/users/{user_id}/lock", response_model=UserOut)
-def lock_user(user_id: int, request: Request, user: User = Depends(require_super_admin), db: Session = Depends(get_db)):
-    """Lock an account until a Super admin unlocks it. The person is signed out right away."""
+def lock_user(user_id: int, request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Lock an account until an Admin unlocks it. The person is signed out right away. Not your own account, and not the last active Admin."""
     target = accounts.get_user_or_404(db, user_id)
     changed = accounts.lock_user(db, user, target, request)
     return user_out(target, None if changed else "This account was already locked.")
 
 
 @router.post("/api/admin/users/{user_id}/unlock", response_model=UserOut)
-def unlock_user(user_id: int, request: Request, user: User = Depends(require_super_admin), db: Session = Depends(get_db)):
+def unlock_user(user_id: int, request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
     """Unlock an account (also clears a lock from too many wrong tries)."""
     target = accounts.get_user_or_404(db, user_id)
     accounts.unlock_user(db, user, target, request)
@@ -114,7 +120,7 @@ def unlock_user(user_id: int, request: Request, user: User = Depends(require_sup
 @router.post("/api/admin/users/{user_id}/reset-password", response_model=UserOut)
 def reset_password(
     user_id: int, payload: ResetPasswordIn, request: Request,
-    user: User = Depends(require_super_admin), db: Session = Depends(get_db),
+    user: User = Depends(require_admin), db: Session = Depends(get_db),
 ):
     """
     Set a new password for someone else (a forgotten password). The person is signed out everywhere and
@@ -127,15 +133,15 @@ def reset_password(
 
 
 @router.delete("/api/admin/users/{user_id}", response_model=MessageOut)
-def remove_user(user_id: int, request: Request, user: User = Depends(require_super_admin), db: Session = Depends(get_db)):
-    """Remove an account. Its audit entries are kept."""
+def remove_user(user_id: int, request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Remove an account. Its audit entries are kept. Not your own account, and not the last active Admin."""
     target = accounts.get_user_or_404(db, user_id)
     name = target.name
     accounts.remove_user(db, user, target, request)
     return MessageOut(message=f"The account for {name} was removed.")
 
 
-# ---- Super admin: audit log ----
+# ---- Admin: audit log ----
 
 def _day(value: Optional[str], label: str) -> Optional[datetime]:
     """A YYYY-MM-DD date (UTC, like every time here) as the start of that day, or a plain 422."""
@@ -163,7 +169,7 @@ def read_audit_log(
     person: Optional[str] = Query(None, max_length=100, description="Name search: part of a name, any capitals"),
     date_from: Optional[str] = Query(None, alias="from", description="First day to include, YYYY-MM-DD (UTC)"),
     date_to: Optional[str] = Query(None, alias="to", description="Last day to include, YYYY-MM-DD (UTC)"),
-    user: User = Depends(require_super_admin),
+    user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """

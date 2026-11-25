@@ -1,5 +1,7 @@
 # SILONG redesign: rules, roles and build order
 
+> **Roles changed.** There is now ONE role, Admin (see `ADMIN_CONSOLE.md`). Where this file says Responder or Super admin, `ADMIN_CONSOLE.md` wins; the `/api/responder/*` routes are `/api/admin/*`.
+
 This file describes the redesign: the rules, and what is **not built yet**. The
 README describes what the code does today. When a part here is built, move it
 into the README and mark it "Working" here.

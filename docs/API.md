@@ -8,8 +8,8 @@ The same information is live at `/docs` while the backend runs.
 
 **Base URL.** Every path below starts with `/api`. Bodies and answers are JSON.
 
-**Sign-in (staff only).** There is no public sign-up. A responder or Super admin signs in with
-`POST /api/auth/sign-in` (`name`, `password`) and gets a `token`. Send it on every staff request as
+**Sign-in (Admins only).** There is no public sign-up. An Admin signs in with
+`POST /api/auth/sign-in` (`name`, `password`) and gets a `token`. Send it on every Admin request as
 `Authorization: Bearer <token>`. A sign-in ends after **30 minutes without any request** (each request
 starts the 30 minutes again). **A `401` means sign in again**: the token is missing, unknown, or ran out.
 
@@ -18,13 +18,16 @@ and sends it as the header `X-Phone-Id`: **16 to 64 letters, digits, `-` or `_`*
 `k3J9x-Qe7_Lm2Pz0aB4c`). It is how "my reports" and "my pending places" work. It is not proof of who
 someone is, and the server stores only a hash of it.
 
-**Roles.**
+**Roles.** There is one role, Admin. Nothing is locked by role: every Admin can use every Admin endpoint.
 
 | Role | Who | Can do |
 | --- | --- | --- |
 | Public | Anyone, no sign-in | Read the map, weather, advisories and numbers; send a status update, a report or a new place (some need `X-Phone-Id`) |
-| Responder | Signed-in staff | Everything public, plus the responder screens: reports, places to approve, status overrides |
-| Super admin | Signed-in staff | Everything a responder can, plus accounts, the audit log, blocked phones, advisories and emergency numbers |
+| Admin | Signed-in Admin (`role` is always `"admin"`) | Everything public, plus everything under `/api/admin`: reports, places to approve, status overrides, accounts, the audit log, blocked phones, advisories, official sources and emergency numbers. Removing, restoring and listing removed centers (`/api/evacuation-centers`) are Admin endpoints too |
+
+You cannot lock or remove your own account, and the last active Admin cannot be locked or removed.
+`POST /api/admin/users` still accepts a legacy `role` (`admin`, `responder` or `super_admin`) for one release and
+ignores it: every new account is an Admin. Stop sending it.
 
 **Common error codes.** The body is `{"detail": "<plain-language message>"}` (a `422` from a badly shaped
 body is a list of `{type, loc, msg}`). Show `detail` to the person when it is a text.
@@ -33,11 +36,11 @@ body is a list of `{type, loc, msg}`). Show `detail` to the person when it is a 
 | --- | --- |
 | 400 | The `X-Phone-Id` header is missing or not in the right format |
 | 401 | Not signed in, or the sign-in ran out. Sign in again |
-| 403 | Signed in, but this role may not do it; or a wrong current password; or this phone is blocked from reports |
+| 403 | The sign-in belongs to an account that is locked or was removed; or a wrong current password; or this phone is blocked from reports |
 | 404 | The thing does not exist, or this caller may not see it |
 | 409 | It clashes with the current state (already handled, a duplicate name, locked by someone else) |
 | 422 | A value is not accepted (too short, too long, outside Batangas City, wrong date format). The message says which |
-| 423 | The account is locked (too many wrong passwords, or locked by a Super admin) |
+| 423 | The account is locked (too many wrong passwords, or locked by an Admin) |
 | 429 | Too many requests. Wait the number of seconds in the `Retry-After` header |
 
 ## Example flows
@@ -56,19 +59,19 @@ body is a list of `{type, loc, msg}`). Show `detail` to the person when it is a 
 3. `GET /api/reports/mine` lists this phone's reports and their status. `GET /api/hazards/nearby?latitude=..&longitude=..` shows hazards others can see.
 4. A `403` means this phone was blocked after false reports; a `429` means wait `Retry-After` seconds.
 
-**3. A responder takes and resolves a help request**
+**3. An Admin takes and resolves a help request**
 
-1. Sign in (flow 1). `GET /api/responder/reports` lists open reports; poll it about every `refresh_seconds`.
-2. `POST /api/responder/reports/{id}/take` (no body). A `409` says someone else is already handling it.
-3. `POST /api/responder/reports/{id}/resolve` with `{"what_was_done": "Team sent, family moved to the gym"}`.
+1. Sign in (flow 1). `GET /api/admin/reports` lists open reports; poll it about every `refresh_seconds`.
+2. `POST /api/admin/reports/{id}/take` (no body). A `409` says someone else is already handling it.
+3. `POST /api/admin/reports/{id}/resolve` with `{"what_was_done": "Team sent, family moved to the gym"}`.
 4. Use `mark-false` (`{"reason": "..."}`) instead of `resolve` for a false report.
 
-**4. A user adds a place and a responder approves it**
+**4. A user adds a place and an Admin approves it**
 
 1. With `X-Phone-Id`, `POST /api/evacuation-centers` with `{"name", "center_type": "temporary", "max_capacity", "latitude", "longitude", ...}`. Answer `201`, with `"approval_status": "pending"`.
 2. `GET /api/facilities` with the same header shows that phone its own pending place; everybody else does not see it yet.
-3. A responder signs in, `GET /api/responder/places` (the queue; `possible_duplicate` is set when a same-name center is within 30 m), then `POST /api/responder/places/{id}/approve` (or `.../reject` with an optional `reason`).
-4. A responder can fix details later with `PATCH /api/responder/places/{id}`.
+3. An Admin signs in, `GET /api/admin/places` (the queue; `possible_duplicate` is set when a same-name center is within 30 m), then `POST /api/admin/places/{id}/approve` (or `.../reject` with an optional `reason`).
+4. An Admin can fix details later with `PATCH /api/admin/places/{id}`.
 
 This reference lists **54 endpoints** in 8 areas.
 
@@ -81,15 +84,15 @@ This reference lists **54 endpoints** in 8 areas.
 | --- | --- | --- | --- |
 | `POST` | `/api/auth/sign-in` | Public | Sign in with a name and password. Locked for 15 minutes after 5 wrong tries in a row. |
 | `POST` | `/api/auth/sign-out` | Public (sends the token it wants to end) | Ends this sign-in. Safe to call twice. |
-| `POST` | `/api/auth/change-password` | Any signed-in staff | Change your own password. A wrong current password is refused (403) and counted toward a limit per person and per IP (429 when it is used up). Your other sign-ins end; this one stays. |
-| `GET` | `/api/me` | Responder or Super admin | Who is signed in. Any staff role. |
-| `GET` | `/api/admin/users` | Super admin | List Users |
-| `POST` | `/api/admin/users` | Super admin | Create a responder or Super admin account. There is no public sign-up. |
-| `POST` | `/api/admin/users/{user_id}/lock` | Super admin | Lock an account until a Super admin unlocks it. The person is signed out right away. |
-| `POST` | `/api/admin/users/{user_id}/unlock` | Super admin | Unlock an account (also clears a lock from too many wrong tries). |
-| `POST` | `/api/admin/users/{user_id}/reset-password` | Super admin | Set a new password for someone else (a forgotten password). The person is signed out everywhere and their wrong-try count and automatic lock are cleared. Tell them the new password yourself: it is never shown again. Not for your own account (use change-password). |
-| `DELETE` | `/api/admin/users/{user_id}` | Super admin | Remove an account. Its audit entries are kept. |
-| `GET` | `/api/admin/audit-log` | Super admin | Newest first. The body is the same list as before; the number of entries that match the filters (before limit and offset) is in the X-Total-Count response header. |
+| `POST` | `/api/auth/change-password` | Any signed-in Admin | Change your own password. A wrong current password is refused (403) and counted toward a limit per person and per IP (429 when it is used up). Your other sign-ins end; this one stays. |
+| `GET` | `/api/me` | Admin | Who is signed in. |
+| `GET` | `/api/admin/users` | Admin | List Users |
+| `POST` | `/api/admin/users` | Admin | Create an Admin account. There is no public sign-up. `role` is a legacy field: it is ignored (every account is an Admin) and accepted for one release only; leave it out. |
+| `POST` | `/api/admin/users/{user_id}/lock` | Admin | Lock an account until an Admin unlocks it. The person is signed out right away. Not your own account, and not the last active Admin. |
+| `POST` | `/api/admin/users/{user_id}/unlock` | Admin | Unlock an account (also clears a lock from too many wrong tries). |
+| `POST` | `/api/admin/users/{user_id}/reset-password` | Admin | Set a new password for someone else (a forgotten password). The person is signed out everywhere and their wrong-try count and automatic lock are cleared. Tell them the new password yourself: it is never shown again. Not for your own account (use change-password). |
+| `DELETE` | `/api/admin/users/{user_id}` | Admin | Remove an account. Its audit entries are kept. Not your own account, and not the last active Admin. |
+| `GET` | `/api/admin/audit-log` | Admin | Newest first. The body is the same list as before; the number of entries that match the filters (before limit and offset) is in the X-Total-Count response header. |
 
 ### `POST /api/auth/sign-in`
 
@@ -130,7 +133,7 @@ None.
 
 ### `POST /api/auth/change-password`
 
-**Who:** Any signed-in staff
+**Who:** Any signed-in Admin
 
 Change your own password. A wrong current password is refused (403) and counted toward a limit per person and per IP (429 when it is used up). Your other sign-ins end; this one stays.
 
@@ -149,9 +152,9 @@ Change your own password. A wrong current password is refused (403) and counted 
 
 ### `GET /api/me`
 
-**Who:** Responder or Super admin
+**Who:** Admin
 
-Who is signed in. Any staff role.
+Who is signed in.
 
 **Request fields**
 
@@ -163,12 +166,12 @@ None.
 | --- | --- | --- | --- |
 | `id` | integer | required |  |
 | `name` | string | required |  |
-| `role` | one of `responder`, `super_admin` | required |  |
+| `role` | string | required |  |
 | `idle_timeout_minutes` | integer | required |  |
 
 ### `GET /api/admin/users`
 
-**Who:** Super admin
+**Who:** Admin
 
 List Users
 
@@ -184,7 +187,7 @@ A list of `UserOut`.
 | --- | --- | --- | --- |
 | `id` | integer | required |  |
 | `name` | string | required |  |
-| `role` | one of `responder`, `super_admin` | required |  |
+| `role` | string | required |  |
 | `status` | one of `active`, `locked_by_admin`, `locked_for_wrong_tries` | required |  |
 | `locked_until` | string (date and time, UTC) or null | optional |  |
 | `created_at` | string (date and time, UTC) | required |  |
@@ -194,9 +197,9 @@ A list of `UserOut`.
 
 ### `POST /api/admin/users`
 
-**Who:** Super admin
+**Who:** Admin
 
-Create a responder or Super admin account. There is no public sign-up.
+Create an Admin account. There is no public sign-up. `role` is a legacy field: it is ignored (every account is an Admin) and accepted for one release only; leave it out.
 
 **Request fields**
 
@@ -204,7 +207,7 @@ Create a responder or Super admin account. There is no public sign-up.
 | --- | --- | --- | --- |
 | `name` | string | required | in body; max length 100 |
 | `password` | string | required | in body; max length 200 |
-| `role` | one of `responder`, `super_admin` | required | in body |
+| `role` | one of `admin`, `responder`, `super_admin` or null | optional | in body; Deprecated and ignored: every account is an Admin. Accepted for one release. |
 
 **Response** `201`
 
@@ -212,7 +215,7 @@ Create a responder or Super admin account. There is no public sign-up.
 | --- | --- | --- | --- |
 | `id` | integer | required |  |
 | `name` | string | required |  |
-| `role` | one of `responder`, `super_admin` | required |  |
+| `role` | string | required |  |
 | `status` | one of `active`, `locked_by_admin`, `locked_for_wrong_tries` | required |  |
 | `locked_until` | string (date and time, UTC) or null | optional |  |
 | `created_at` | string (date and time, UTC) | required |  |
@@ -222,9 +225,9 @@ Create a responder or Super admin account. There is no public sign-up.
 
 ### `POST /api/admin/users/{user_id}/lock`
 
-**Who:** Super admin
+**Who:** Admin
 
-Lock an account until a Super admin unlocks it. The person is signed out right away.
+Lock an account until an Admin unlocks it. The person is signed out right away. Not your own account, and not the last active Admin.
 
 **Request fields**
 
@@ -238,7 +241,7 @@ Lock an account until a Super admin unlocks it. The person is signed out right a
 | --- | --- | --- | --- |
 | `id` | integer | required |  |
 | `name` | string | required |  |
-| `role` | one of `responder`, `super_admin` | required |  |
+| `role` | string | required |  |
 | `status` | one of `active`, `locked_by_admin`, `locked_for_wrong_tries` | required |  |
 | `locked_until` | string (date and time, UTC) or null | optional |  |
 | `created_at` | string (date and time, UTC) | required |  |
@@ -248,7 +251,7 @@ Lock an account until a Super admin unlocks it. The person is signed out right a
 
 ### `POST /api/admin/users/{user_id}/unlock`
 
-**Who:** Super admin
+**Who:** Admin
 
 Unlock an account (also clears a lock from too many wrong tries).
 
@@ -264,7 +267,7 @@ Unlock an account (also clears a lock from too many wrong tries).
 | --- | --- | --- | --- |
 | `id` | integer | required |  |
 | `name` | string | required |  |
-| `role` | one of `responder`, `super_admin` | required |  |
+| `role` | string | required |  |
 | `status` | one of `active`, `locked_by_admin`, `locked_for_wrong_tries` | required |  |
 | `locked_until` | string (date and time, UTC) or null | optional |  |
 | `created_at` | string (date and time, UTC) | required |  |
@@ -274,7 +277,7 @@ Unlock an account (also clears a lock from too many wrong tries).
 
 ### `POST /api/admin/users/{user_id}/reset-password`
 
-**Who:** Super admin
+**Who:** Admin
 
 Set a new password for someone else (a forgotten password). The person is signed out everywhere and their wrong-try count and automatic lock are cleared. Tell them the new password yourself: it is never shown again. Not for your own account (use change-password).
 
@@ -291,7 +294,7 @@ Set a new password for someone else (a forgotten password). The person is signed
 | --- | --- | --- | --- |
 | `id` | integer | required |  |
 | `name` | string | required |  |
-| `role` | one of `responder`, `super_admin` | required |  |
+| `role` | string | required |  |
 | `status` | one of `active`, `locked_by_admin`, `locked_for_wrong_tries` | required |  |
 | `locked_until` | string (date and time, UTC) or null | optional |  |
 | `created_at` | string (date and time, UTC) | required |  |
@@ -301,9 +304,9 @@ Set a new password for someone else (a forgotten password). The person is signed
 
 ### `DELETE /api/admin/users/{user_id}`
 
-**Who:** Super admin
+**Who:** Admin
 
-Remove an account. Its audit entries are kept.
+Remove an account. Its audit entries are kept. Not your own account, and not the last active Admin.
 
 **Request fields**
 
@@ -319,7 +322,7 @@ Remove an account. Its audit entries are kept.
 
 ### `GET /api/admin/audit-log`
 
-**Who:** Super admin
+**Who:** Admin
 
 Newest first. The body is the same list as before; the number of entries that match the filters (before limit and offset) is in the X-Total-Count response header.
 
@@ -359,12 +362,12 @@ Response header `X-Total-Count`: How many entries match the filters, before limi
 
 | Method | Path | Who can call it | What it does |
 | --- | --- | --- | --- |
-| `GET` | `/api/admin/blocked-phones` | Super admin | Blocked phones, newest first. `expires_at` is null when blocks never expire. |
-| `POST` | `/api/admin/blocked-phones/{block_id}/unblock` | Super admin | Let this phone send reports again. Its count of false reports starts from zero, so it takes a fresh set of false reports to block it again. |
+| `GET` | `/api/admin/blocked-phones` | Admin | Blocked phones, newest first. `expires_at` is null when blocks never expire. |
+| `POST` | `/api/admin/blocked-phones/{block_id}/unblock` | Admin | Let this phone send reports again. Its count of false reports starts from zero, so it takes a fresh set of false reports to block it again. |
 
 ### `GET /api/admin/blocked-phones`
 
-**Who:** Super admin
+**Who:** Admin
 
 Blocked phones, newest first. `expires_at` is null when blocks never expire.
 
@@ -385,7 +388,7 @@ A list of `BlockedPhoneOut`.
 
 ### `POST /api/admin/blocked-phones/{block_id}/unblock`
 
-**Who:** Super admin
+**Who:** Admin
 
 Let this phone send reports again. Its count of false reports starts from zero, so it takes a fresh set of false reports to block it again.
 
@@ -410,11 +413,11 @@ Let this phone send reports again. Its count of false reports starts from zero, 
 | `POST` | `/api/reports` | Public (X-Phone-Id required) | Send a help request ("kind": "help") or a hazard report ("kind": "hazard"). Both need a `category`; a help request also needs a `contact` and may have `people` and `can_move` (not allowed on a hazard). Field rules are in ReportIn. |
 | `GET` | `/api/reports/mine` | Public (X-Phone-Id required) | This phone's own reports, newest first, with a status: New, Being handled or Resolved. |
 | `GET` | `/api/hazards/nearby` | Public (X-Phone-Id optional) | Hazards within the near-me range (config.NEAR_ME_KM) that are Unconfirmed or Verified, as an approximate spot with a status and no details. The position you send is used for this answer only and is not stored. |
-| `GET` | `/api/responder/reports` | Responder or Super admin | Poll this about every `refresh_seconds` (10). `has_new_help` is true while any help request is still New: show the red "Needs help" alert. Open reports only, unless include_closed is set. A hazard is one line for all reports about the same place. |
-| `POST` | `/api/responder/reports/{report_id}/take` | Responder or Super admin | Take it: New -> Being handled. 409 if someone else already has it. Safe to call twice. |
-| `POST` | `/api/responder/reports/{report_id}/resolve` | Responder or Super admin | Resolve. Needs `what_was_done`. The sender then sees Resolved. |
-| `POST` | `/api/responder/reports/{report_id}/mark-false` | Responder or Super admin | Mark false. Needs a `reason`. A phone with 3 false reports is blocked from sending reports. |
-| `POST` | `/api/responder/reports/{report_id}/verify` | Responder or Super admin | Verify a hazard: the public then sees it as Verified. Hazards only. Safe to call twice. |
+| `GET` | `/api/admin/reports` | Admin | Poll this about every `refresh_seconds` (10). `has_new_help` is true while any help request is still New: show the red "Needs help" alert. Open reports only, unless include_closed is set. A hazard is one line for all reports about the same place. |
+| `POST` | `/api/admin/reports/{report_id}/take` | Admin | Take it: New -> Being handled. 409 if someone else already has it. Safe to call twice. |
+| `POST` | `/api/admin/reports/{report_id}/resolve` | Admin | Resolve. Needs `what_was_done`. The sender then sees Resolved. |
+| `POST` | `/api/admin/reports/{report_id}/mark-false` | Admin | Mark false. Needs a `reason`. A phone with 3 false reports is blocked from sending reports. |
+| `POST` | `/api/admin/reports/{report_id}/verify` | Admin | Verify a hazard: the public then sees it as Verified. Hazards only. Safe to call twice. |
 
 ### `POST /api/reports`
 
@@ -503,9 +506,9 @@ A list of `NearbyHazardOut`.
 | `label` | string | required |  |
 | `category` | string or null | optional |  |
 
-### `GET /api/responder/reports`
+### `GET /api/admin/reports`
 
-**Who:** Responder or Super admin
+**Who:** Admin
 
 Poll this about every `refresh_seconds` (10). `has_new_help` is true while any help request is still New: show the red "Needs help" alert. Open reports only, unless include_closed is set. A hazard is one line for all reports about the same place.
 
@@ -525,11 +528,11 @@ Poll this about every `refresh_seconds` (10). `has_new_help` is true while any h
 | `new_help_count` | integer | required |  |
 | `has_new_help` | boolean | required |  |
 | `latest_report_id` | integer or null | optional |  |
-| `items` | array of ResponderReportOut | required |  |
+| `items` | array of AdminReportOut | required |  |
 
-### `POST /api/responder/reports/{report_id}/take`
+### `POST /api/admin/reports/{report_id}/take`
 
-**Who:** Responder or Super admin
+**Who:** Admin
 
 Take it: New -> Being handled. 409 if someone else already has it. Safe to call twice.
 
@@ -567,9 +570,9 @@ Take it: New -> Being handled. 409 if someone else already has it. Safe to call 
 | `phones` | integer | required |  |
 | `report_count` | integer | required |  |
 
-### `POST /api/responder/reports/{report_id}/resolve`
+### `POST /api/admin/reports/{report_id}/resolve`
 
-**Who:** Responder or Super admin
+**Who:** Admin
 
 Resolve. Needs `what_was_done`. The sender then sees Resolved.
 
@@ -608,9 +611,9 @@ Resolve. Needs `what_was_done`. The sender then sees Resolved.
 | `phones` | integer | required |  |
 | `report_count` | integer | required |  |
 
-### `POST /api/responder/reports/{report_id}/mark-false`
+### `POST /api/admin/reports/{report_id}/mark-false`
 
-**Who:** Responder or Super admin
+**Who:** Admin
 
 Mark false. Needs a `reason`. A phone with 3 false reports is blocked from sending reports.
 
@@ -649,9 +652,9 @@ Mark false. Needs a `reason`. A phone with 3 false reports is blocked from sendi
 | `phones` | integer | required |  |
 | `report_count` | integer | required |  |
 
-### `POST /api/responder/reports/{report_id}/verify`
+### `POST /api/admin/reports/{report_id}/verify`
 
-**Who:** Responder or Super admin
+**Who:** Admin
 
 Verify a hazard: the public then sees it as Verified. Hazards only. Safe to call twice.
 
@@ -695,16 +698,16 @@ Verify a hazard: the public then sees it as Verified. Hazards only. Safe to call
 
 | Method | Path | Who can call it | What it does |
 | --- | --- | --- | --- |
-| `POST` | `/api/evacuation-centers` | Public (X-Phone-Id optional) | Add an evacuation center. Field rules live in schemas.EvacCenterIn. The place starts as PENDING ("approval_status": "pending"): you see it, nobody else does, until a responder or Super admin approves it. Send the X-Phone-Id header (the same one the reports use), or you will not see it again after a reload. A possible duplicate (same name within 30 m) does not stop the place: it is flagged for the responder who reviews it. |
-| `GET` | `/api/evacuation-centers/removed` | Responder or Super admin | Centers that are removed right now, newest first, each with the day it will be deleted for good. |
-| `DELETE` | `/api/evacuation-centers/{facility_id}` | Responder or Super admin | Remove a center for everyone. Its data and status history are kept (30 days) so it can be restored. |
-| `POST` | `/api/evacuation-centers/{facility_id}/restore` | Responder or Super admin | Bring a removed center back on the map. |
+| `POST` | `/api/evacuation-centers` | Public (X-Phone-Id optional) | Add an evacuation center. Field rules live in schemas.EvacCenterIn. The place starts as PENDING ("approval_status": "pending"): you see it, nobody else does, until an Admin approves it. Send the X-Phone-Id header (the same one the reports use), or you will not see it again after a reload. A possible duplicate (same name within 30 m) does not stop the place: it is flagged for the Admin who reviews it. |
+| `GET` | `/api/evacuation-centers/removed` | Admin | Centers that are removed right now, newest first, each with the day it will be deleted for good. |
+| `DELETE` | `/api/evacuation-centers/{facility_id}` | Admin | Remove a center for everyone. Its data and status history are kept (30 days) so it can be restored. |
+| `POST` | `/api/evacuation-centers/{facility_id}/restore` | Admin | Bring a removed center back on the map. |
 
 ### `POST /api/evacuation-centers`
 
 **Who:** Public (X-Phone-Id optional)
 
-Add an evacuation center. Field rules live in schemas.EvacCenterIn. The place starts as PENDING ("approval_status": "pending"): you see it, nobody else does, until a responder or Super admin approves it. Send the X-Phone-Id header (the same one the reports use), or you will not see it again after a reload. A possible duplicate (same name within 30 m) does not stop the place: it is flagged for the responder who reviews it.
+Add an evacuation center. Field rules live in schemas.EvacCenterIn. The place starts as PENDING ("approval_status": "pending"): you see it, nobody else does, until an Admin approves it. Send the X-Phone-Id header (the same one the reports use), or you will not see it again after a reload. A possible duplicate (same name within 30 m) does not stop the place: it is flagged for the Admin who reviews it.
 
 **Request fields**
 
@@ -746,7 +749,7 @@ Add an evacuation center. Field rules live in schemas.EvacCenterIn. The place st
 
 ### `GET /api/evacuation-centers/removed`
 
-**Who:** Responder or Super admin
+**Who:** Admin
 
 Centers that are removed right now, newest first, each with the day it will be deleted for good.
 
@@ -771,7 +774,7 @@ A list of `RemovalOut`.
 
 ### `DELETE /api/evacuation-centers/{facility_id}`
 
-**Who:** Responder or Super admin
+**Who:** Admin
 
 Remove a center for everyone. Its data and status history are kept (30 days) so it can be restored.
 
@@ -796,7 +799,7 @@ Remove a center for everyone. Its data and status history are kept (30 days) so 
 
 ### `POST /api/evacuation-centers/{facility_id}/restore`
 
-**Who:** Responder or Super admin
+**Who:** Admin
 
 Bring a removed center back on the map.
 
@@ -831,22 +834,22 @@ Bring a removed center back on the map.
 
 ---
 
-## Places review and status corrections (staff)
+## Places review and status corrections (Admin)
 
 | Method | Path | Who can call it | What it does |
 | --- | --- | --- | --- |
-| `GET` | `/api/responder/places` | Responder or Super admin | Added places with their exact details. Pending ones (the default) are the queue to review, the longest-waiting first; each carries `possible_duplicate` when an existing center has the same name within 30 m. |
-| `PATCH` | `/api/responder/places/{facility_id}` | Responder or Super admin | Correct the details of an evacuation center that was added through the app: send only the fields to change (name, address, barangay, contact, note). A new name that matches another center within 30 m is refused (409). Centers from the map data files, hospitals and clinics cannot be edited (409). |
-| `POST` | `/api/responder/places/{facility_id}/approve` | Responder or Super admin | Make a pending place public. Also undoes a rejection. Safe to call twice. |
-| `POST` | `/api/responder/places/{facility_id}/reject` | Responder or Super admin | Reject a pending place (the reason is optional). A place already on the map is removed instead (409). Safe to call twice. |
-| `DELETE` | `/api/admin/places/{facility_id}` | Super admin | Super admin only. Delete a removed center, or a rejected place, together with its status history, now. |
-| `POST` | `/api/responder/facilities/{facility_id}/status-override` | Responder or Super admin | Replace the latest status. Same fields as a user report plus an optional `reason`. It is added to the history as "Confirmed by official" with your name; the status it replaces stays in the history. |
-| `POST` | `/api/responder/facilities/{facility_id}/capacity-correction` | Responder or Super admin | Correct the maximum capacity of an evacuation center. Added to the history; users cannot change it afterwards. |
-| `GET` | `/api/responder/facilities/{facility_id}/status-history` | Responder or Super admin | Every row of the history, newest first, including overrides and capacity corrections, with staff names. |
+| `GET` | `/api/admin/places` | Admin | Added places with their exact details. Pending ones (the default) are the queue to review, the longest-waiting first; each carries `possible_duplicate` when an existing center has the same name within 30 m. |
+| `PATCH` | `/api/admin/places/{facility_id}` | Admin | Correct the details of an evacuation center that was added through the app: send only the fields to change (name, address, barangay, contact, note). A new name that matches another center within 30 m is refused (409). Centers from the map data files, hospitals and clinics cannot be edited (409). |
+| `DELETE` | `/api/admin/places/{facility_id}` | Admin | Delete a removed center, or a rejected place, together with its status history, now (instead of waiting for the purge). |
+| `POST` | `/api/admin/places/{facility_id}/approve` | Admin | Make a pending place public. Also undoes a rejection. Safe to call twice. |
+| `POST` | `/api/admin/places/{facility_id}/reject` | Admin | Reject a pending place (the reason is optional). A place already on the map is removed instead (409). Safe to call twice. |
+| `POST` | `/api/admin/facilities/{facility_id}/status-override` | Admin | Replace the latest status. Same fields as a user report plus an optional `reason`. It is added to the history as "Confirmed by official" with your name; the status it replaces stays in the history. |
+| `POST` | `/api/admin/facilities/{facility_id}/capacity-correction` | Admin | Correct the maximum capacity of an evacuation center. Added to the history; users cannot change it afterwards. |
+| `GET` | `/api/admin/facilities/{facility_id}/status-history` | Admin | Every row of the history, newest first, including overrides and capacity corrections, with staff names. |
 
-### `GET /api/responder/places`
+### `GET /api/admin/places`
 
-**Who:** Responder or Super admin
+**Who:** Admin
 
 Added places with their exact details. Pending ones (the default) are the queue to review, the longest-waiting first; each carries `possible_duplicate` when an existing center has the same name within 30 m.
 
@@ -882,9 +885,9 @@ A list of `PlaceAdminOut`.
 | `is_removed` | boolean | optional | default `False` |
 | `message` | string or null | optional |  |
 
-### `PATCH /api/responder/places/{facility_id}`
+### `PATCH /api/admin/places/{facility_id}`
 
-**Who:** Responder or Super admin
+**Who:** Admin
 
 Correct the details of an evacuation center that was added through the app: send only the fields to change (name, address, barangay, contact, note). A new name that matches another center within 30 m is refused (409). Centers from the map data files, hospitals and clinics cannot be edited (409).
 
@@ -923,9 +926,26 @@ Correct the details of an evacuation center that was added through the app: send
 | `is_removed` | boolean | optional | default `False` |
 | `message` | string or null | optional |  |
 
-### `POST /api/responder/places/{facility_id}/approve`
+### `DELETE /api/admin/places/{facility_id}`
 
-**Who:** Responder or Super admin
+**Who:** Admin
+
+Delete a removed center, or a rejected place, together with its status history, now (instead of waiting for the purge).
+
+**Request fields**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `facility_id` | integer | required | in path |
+
+**Response** `200`
+
+`any`.
+
+
+### `POST /api/admin/places/{facility_id}/approve`
+
+**Who:** Admin
 
 Make a pending place public. Also undoes a rejection. Safe to call twice.
 
@@ -959,9 +979,9 @@ Make a pending place public. Also undoes a rejection. Safe to call twice.
 | `is_removed` | boolean | optional | default `False` |
 | `message` | string or null | optional |  |
 
-### `POST /api/responder/places/{facility_id}/reject`
+### `POST /api/admin/places/{facility_id}/reject`
 
-**Who:** Responder or Super admin
+**Who:** Admin
 
 Reject a pending place (the reason is optional). A place already on the map is removed instead (409). Safe to call twice.
 
@@ -996,26 +1016,9 @@ Reject a pending place (the reason is optional). A place already on the map is r
 | `is_removed` | boolean | optional | default `False` |
 | `message` | string or null | optional |  |
 
-### `DELETE /api/admin/places/{facility_id}`
+### `POST /api/admin/facilities/{facility_id}/status-override`
 
-**Who:** Super admin
-
-Super admin only. Delete a removed center, or a rejected place, together with its status history, now.
-
-**Request fields**
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `facility_id` | integer | required | in path |
-
-**Response** `200`
-
-`any`.
-
-
-### `POST /api/responder/facilities/{facility_id}/status-override`
-
-**Who:** Responder or Super admin
+**Who:** Admin
 
 Replace the latest status. Same fields as a user report plus an optional `reason`. It is added to the history as "Confirmed by official" with your name; the status it replaces stays in the history.
 
@@ -1047,9 +1050,9 @@ Replace the latest status. Same fields as a user report plus an optional `reason
 | `source_label` | string | optional | default `Reported by a user` |
 | `message` | string or null | optional |  |
 
-### `POST /api/responder/facilities/{facility_id}/capacity-correction`
+### `POST /api/admin/facilities/{facility_id}/capacity-correction`
 
-**Who:** Responder or Super admin
+**Who:** Admin
 
 Correct the maximum capacity of an evacuation center. Added to the history; users cannot change it afterwards.
 
@@ -1084,9 +1087,9 @@ Correct the maximum capacity of an evacuation center. Added to the history; user
 | `percent_full` | number or null | optional |  |
 | `is_outdated` | boolean or null | optional |  |
 
-### `GET /api/responder/facilities/{facility_id}/status-history`
+### `GET /api/admin/facilities/{facility_id}/status-history`
 
-**Who:** Responder or Super admin
+**Who:** Admin
 
 Every row of the history, newest first, including overrides and capacity corrections, with staff names.
 
@@ -1150,8 +1153,8 @@ Ask
 | --- | --- | --- | --- |
 | `GET` | `/api/health` | Public | Health |
 | `GET` | `/api/facilities` | Public (X-Phone-Id optional) | All facilities from every source (osm / manual / user), minus removed evacuation centers and places that are not approved. Each has its latest status (or null, with `source` and `source_label` saying who reported it) and, for evacuation centers, the capacity fields. The one extra: with an X-Phone-Id header, the places that phone added and that still wait for approval are in the list too, with "approval_status": "pending". |
-| `POST` | `/api/facilities/{facility_id}/status` | Public (signed-in staff count as officials) (X-Phone-Id optional) | Add a status update (kept as history). Returns the new latest status. |
-| `GET` | `/api/facilities/{facility_id}/status/history` | Public (X-Phone-Id optional) | Newest first. Simple view for debugging and later use. (Staff see overrides and capacity corrections too, with names, in /api/responder/facilities/{id}/status-history.) |
+| `POST` | `/api/facilities/{facility_id}/status` | Public (a signed-in Admin counts as an official) (X-Phone-Id optional) | Add a status update (kept as history). Returns the new latest status. |
+| `GET` | `/api/facilities/{facility_id}/status/history` | Public (X-Phone-Id optional) | Newest first. Simple view for debugging and later use. (Admins see overrides and capacity corrections too, with names, in /api/admin/facilities/{id}/status-history.) |
 
 ### `GET /api/health`
 
@@ -1207,9 +1210,9 @@ A list of `FacilityOut`.
 
 ### `POST /api/facilities/{facility_id}/status`
 
-**Who:** Public (signed-in staff count as officials) (X-Phone-Id optional)
+**Who:** Public (a signed-in Admin counts as an official) (X-Phone-Id optional)
 
-Add a status update (kept as history). Returns the new latest status. Anyone can send it and it is saved as "Reported by a user". When a signed-in responder or Super admin sends it (Authorization: Bearer ...), it is saved as "Confirmed by official" with their name, and it can set the maximum capacity. A user's report cannot change a maximum capacity an official has set. A place that is still waiting for approval accepts updates only from the phone that added it (X-Phone-Id).
+Add a status update (kept as history). Returns the new latest status. Anyone can send it and it is saved as "Reported by a user". When a signed-in Admin sends it (Authorization: Bearer ...), it is saved as "Confirmed by official" with their name, and it can set the maximum capacity. A user's report cannot change a maximum capacity an official has set. A place that is still waiting for approval accepts updates only from the phone that added it (X-Phone-Id).
 
 **Request fields**
 
@@ -1243,7 +1246,7 @@ Add a status update (kept as history). Returns the new latest status. Anyone can
 
 **Who:** Public (X-Phone-Id optional)
 
-Newest first. Simple view for debugging and later use. (Staff see overrides and capacity corrections too, with names, in /api/responder/facilities/{id}/status-history.)
+Newest first. Simple view for debugging and later use. (Admins see overrides and capacity corrections too, with names, in /api/admin/facilities/{id}/status-history.)
 
 **Request fields**
 
@@ -1279,20 +1282,20 @@ A list of `StatusOut`.
 | --- | --- | --- | --- |
 | `GET` | `/api/weather` | Public | The forecast for Batangas City. `is_stale` is true (with a plain-language `notice`) when Open-Meteo could not be reached and this is the last good forecast; `fetched_at` says when it was received. 503 with a plain message when there has never been a good forecast. |
 | `GET` | `/api/advisories` | Public | Pinned first, then newest first. `is_official` is true when the organization is on the official list. |
-| `POST` | `/api/admin/advisories` | Super admin | Create Advisory |
-| `PATCH` | `/api/admin/advisories/{advisory_id}` | Super admin | Update Advisory |
-| `DELETE` | `/api/admin/advisories/{advisory_id}` | Super admin | Delete Advisory |
-| `POST` | `/api/admin/advisories/{advisory_id}/pin` | Super admin | Safe to call twice. |
-| `POST` | `/api/admin/advisories/{advisory_id}/unpin` | Super admin | Safe to call twice. |
-| `GET` | `/api/admin/advisory-sources` | Super admin | The names that count as official. Starts with PAGASA, NDRRMC and Batangas City CDRRMO. |
-| `POST` | `/api/admin/advisory-sources` | Super admin | Add Source |
-| `PATCH` | `/api/admin/advisory-sources/{source_id}` | Super admin | Rename Source |
-| `DELETE` | `/api/admin/advisory-sources/{source_id}` | Super admin | Advisories from this source stay, but no longer show as official. |
+| `POST` | `/api/admin/advisories` | Admin | Create Advisory |
+| `PATCH` | `/api/admin/advisories/{advisory_id}` | Admin | Update Advisory |
+| `DELETE` | `/api/admin/advisories/{advisory_id}` | Admin | Delete Advisory |
+| `POST` | `/api/admin/advisories/{advisory_id}/pin` | Admin | Safe to call twice. |
+| `POST` | `/api/admin/advisories/{advisory_id}/unpin` | Admin | Safe to call twice. |
+| `GET` | `/api/admin/advisory-sources` | Admin | The names that count as official. Starts with PAGASA, NDRRMC and Batangas City CDRRMO. |
+| `POST` | `/api/admin/advisory-sources` | Admin | Add Source |
+| `PATCH` | `/api/admin/advisory-sources/{source_id}` | Admin | Rename Source |
+| `DELETE` | `/api/admin/advisory-sources/{source_id}` | Admin | Advisories from this source stay, but no longer show as official. |
 | `GET` | `/api/emergency-numbers` | Public | In the order to show them. Only 911 until the Batangas City CDRRMO confirms the others. |
-| `POST` | `/api/admin/emergency-numbers` | Super admin | Add Number |
-| `PUT` | `/api/admin/emergency-numbers/order` | Super admin | Send every id once, in the order to show them. |
-| `PATCH` | `/api/admin/emergency-numbers/{number_id}` | Super admin | Update Number |
-| `DELETE` | `/api/admin/emergency-numbers/{number_id}` | Super admin | Remove Number |
+| `POST` | `/api/admin/emergency-numbers` | Admin | Add Number |
+| `PUT` | `/api/admin/emergency-numbers/order` | Admin | Send every id once, in the order to show them. |
+| `PATCH` | `/api/admin/emergency-numbers/{number_id}` | Admin | Update Number |
+| `DELETE` | `/api/admin/emergency-numbers/{number_id}` | Admin | Remove Number |
 
 ### `GET /api/weather`
 
@@ -1351,7 +1354,7 @@ A list of `AdvisoryOut`.
 
 ### `POST /api/admin/advisories`
 
-**Who:** Super admin
+**Who:** Admin
 
 Create Advisory
 
@@ -1382,7 +1385,7 @@ Create Advisory
 
 ### `PATCH /api/admin/advisories/{advisory_id}`
 
-**Who:** Super admin
+**Who:** Admin
 
 Update Advisory
 
@@ -1413,7 +1416,7 @@ Update Advisory
 
 ### `DELETE /api/admin/advisories/{advisory_id}`
 
-**Who:** Super admin
+**Who:** Admin
 
 Delete Advisory
 
@@ -1429,7 +1432,7 @@ No body.
 
 ### `POST /api/admin/advisories/{advisory_id}/pin`
 
-**Who:** Super admin
+**Who:** Admin
 
 Safe to call twice.
 
@@ -1456,7 +1459,7 @@ Safe to call twice.
 
 ### `POST /api/admin/advisories/{advisory_id}/unpin`
 
-**Who:** Super admin
+**Who:** Admin
 
 Safe to call twice.
 
@@ -1483,7 +1486,7 @@ Safe to call twice.
 
 ### `GET /api/admin/advisory-sources`
 
-**Who:** Super admin
+**Who:** Admin
 
 The names that count as official. Starts with PAGASA, NDRRMC and Batangas City CDRRMO.
 
@@ -1502,7 +1505,7 @@ A list of `AdvisorySourceOut`.
 
 ### `POST /api/admin/advisory-sources`
 
-**Who:** Super admin
+**Who:** Admin
 
 Add Source
 
@@ -1521,7 +1524,7 @@ Add Source
 
 ### `PATCH /api/admin/advisory-sources/{source_id}`
 
-**Who:** Super admin
+**Who:** Admin
 
 Rename Source
 
@@ -1541,7 +1544,7 @@ Rename Source
 
 ### `DELETE /api/admin/advisory-sources/{source_id}`
 
-**Who:** Super admin
+**Who:** Admin
 
 Advisories from this source stay, but no longer show as official.
 
@@ -1579,7 +1582,7 @@ A list of `EmergencyNumberOut`.
 
 ### `POST /api/admin/emergency-numbers`
 
-**Who:** Super admin
+**Who:** Admin
 
 Add Number
 
@@ -1603,7 +1606,7 @@ Add Number
 
 ### `PUT /api/admin/emergency-numbers/order`
 
-**Who:** Super admin
+**Who:** Admin
 
 Send every id once, in the order to show them.
 
@@ -1627,7 +1630,7 @@ A list of `EmergencyNumberOut`.
 
 ### `PATCH /api/admin/emergency-numbers/{number_id}`
 
-**Who:** Super admin
+**Who:** Admin
 
 Update Number
 
@@ -1652,7 +1655,7 @@ Update Number
 
 ### `DELETE /api/admin/emergency-numbers/{number_id}`
 
-**Who:** Super admin
+**Who:** Admin
 
 Remove Number
 
@@ -1670,6 +1673,45 @@ No body.
 
 ## Shapes used above
 
+
+### AdminListOut
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `server_time` | string (date and time, UTC) | required |  |
+| `refresh_seconds` | integer | required |  |
+| `new_help_count` | integer | required |  |
+| `has_new_help` | boolean | required |  |
+| `latest_report_id` | integer or null | optional |  |
+| `items` | array of AdminReportOut | required |  |
+
+### AdminReportOut
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | integer | required |  |
+| `kind` | one of `help`, `hazard` | required |  |
+| `status` | one of `new`, `being_handled`, `resolved`, `false` | required |  |
+| `is_new_help` | boolean | required |  |
+| `category` | string or null | optional |  |
+| `categories` | array of string | optional | default `[]` |
+| `people` | integer or null | optional |  |
+| `can_move` | one of `yes`, `no`, `unsure` or null | optional |  |
+| `latitude` | number | required |  |
+| `longitude` | number | required |  |
+| `contacts` | array of string | required |  |
+| `notes` | array of string | required |  |
+| `created_at` | string (date and time, UTC) | required |  |
+| `updated_at` | string (date and time, UTC) | required |  |
+| `taken_by` | string or null | optional |  |
+| `closed_by` | string or null | optional |  |
+| `resolution_note` | string or null | optional |  |
+| `false_reason` | string or null | optional |  |
+| `verified` | boolean | required |  |
+| `verified_by` | string or null | optional |  |
+| `hazard_state` | one of `pending`, `unconfirmed`, `verified` or null | optional |  |
+| `phones` | integer | required |  |
+| `report_count` | integer | required |  |
 
 ### AdminStatusOut
 
@@ -1875,7 +1917,7 @@ No body.
 | --- | --- | --- | --- |
 | `id` | integer | required |  |
 | `name` | string | required |  |
-| `role` | one of `responder`, `super_admin` | required |  |
+| `role` | string | required |  |
 | `idle_timeout_minutes` | integer | required |  |
 
 ### MessageOut
@@ -1999,45 +2041,6 @@ No body.
 | --- | --- | --- | --- |
 | `what_was_done` | string | required |  |
 
-### ResponderListOut
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `server_time` | string (date and time, UTC) | required |  |
-| `refresh_seconds` | integer | required |  |
-| `new_help_count` | integer | required |  |
-| `has_new_help` | boolean | required |  |
-| `latest_report_id` | integer or null | optional |  |
-| `items` | array of ResponderReportOut | required |  |
-
-### ResponderReportOut
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `id` | integer | required |  |
-| `kind` | one of `help`, `hazard` | required |  |
-| `status` | one of `new`, `being_handled`, `resolved`, `false` | required |  |
-| `is_new_help` | boolean | required |  |
-| `category` | string or null | optional |  |
-| `categories` | array of string | optional | default `[]` |
-| `people` | integer or null | optional |  |
-| `can_move` | one of `yes`, `no`, `unsure` or null | optional |  |
-| `latitude` | number | required |  |
-| `longitude` | number | required |  |
-| `contacts` | array of string | required |  |
-| `notes` | array of string | required |  |
-| `created_at` | string (date and time, UTC) | required |  |
-| `updated_at` | string (date and time, UTC) | required |  |
-| `taken_by` | string or null | optional |  |
-| `closed_by` | string or null | optional |  |
-| `resolution_note` | string or null | optional |  |
-| `false_reason` | string or null | optional |  |
-| `verified` | boolean | required |  |
-| `verified_by` | string or null | optional |  |
-| `hazard_state` | one of `pending`, `unconfirmed`, `verified` or null | optional |  |
-| `phones` | integer | required |  |
-| `report_count` | integer | required |  |
-
 ### SignInIn
 
 | Field | Type | Required | Notes |
@@ -2096,7 +2099,7 @@ No body.
 | --- | --- | --- | --- |
 | `name` | string | required | max length 100 |
 | `password` | string | required | max length 200 |
-| `role` | one of `responder`, `super_admin` | required |  |
+| `role` | one of `admin`, `responder`, `super_admin` or null | optional | Deprecated and ignored: every account is an Admin. Accepted for one release. |
 
 ### UserOut
 
@@ -2104,7 +2107,7 @@ No body.
 | --- | --- | --- | --- |
 | `id` | integer | required |  |
 | `name` | string | required |  |
-| `role` | one of `responder`, `super_admin` | required |  |
+| `role` | string | required |  |
 | `status` | one of `active`, `locked_by_admin`, `locked_for_wrong_tries` | required |  |
 | `locked_until` | string (date and time, UTC) or null | optional |  |
 | `created_at` | string (date and time, UTC) | required |  |

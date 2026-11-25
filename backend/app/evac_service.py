@@ -79,7 +79,7 @@ def find_duplicate(
     config.DUPLICATE_METERS (the closest one). Removed centers count too (second value True),
     and so do other people's places that are still waiting for approval. Rejected places do not.
     `exclude_key` leaves one center out (the place being checked).
-    A new place is never refused for this: the result becomes the flag a responder sees.
+    A new place is never refused for this: the result becomes the flag an Admin sees.
     """
     wanted = normalize_name(name)
     removed = removed_keys(db)
@@ -186,7 +186,7 @@ def log_action(db: Session, action: str, key: str, ip: str) -> None:
 def create_center(db: Session, payload: EvacCenterIn, phone_hash: Optional[str] = None) -> Facility:
     """
     Insert the user center and its facilities row. It starts as PENDING: only the phone that
-    sent it (`phone_hash`) sees it until a responder or Super admin approves it. The caller commits.
+    sent it (`phone_hash`) sees it until an Admin approves it. The caller commits.
     """
     row = UserEvacuationCenter(
         name=payload.name, center_type=payload.center_type,

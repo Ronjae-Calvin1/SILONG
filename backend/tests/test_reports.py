@@ -46,10 +46,10 @@ def db_session():
     return SessionLocal()
 
 
-def make_user(name, role):
+def make_user(name):
     db = db_session()
     try:
-        return accounts.create_user(db, name, PASSWORD, role, actor="test setup").id
+        return accounts.create_user(db, name, PASSWORD, actor="test setup").id
     finally:
         db.close()
 
@@ -60,10 +60,10 @@ def auth(name):
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
-RESP = make_user("Rey Responder", "responder")
-RESP2 = make_user("Ria Responder", "responder")
-ADMIN = make_user("Admin Ana", "super_admin")
-H_RESP, H_RESP2, H_ADMIN = auth("Rey Responder"), auth("Ria Responder"), auth("Admin Ana")
+ADMIN_B = make_user("Rey Admin")
+ADMIN_C = make_user("Ria Admin")
+ADMIN = make_user("Admin Ana")
+H_ADMIN_B, H_ADMIN_C, H_ADMIN = auth("Rey Admin"), auth("Ria Admin"), auth("Admin Ana")
 
 _phones = iter(range(1, 10_000))
 
@@ -96,8 +96,8 @@ def mine(phone):
     return r.json()
 
 
-def staff_list(headers=H_RESP, **params):
-    r = client.get("/api/responder/reports", headers=headers, params=params)
+def staff_list(headers=H_ADMIN_B, **params):
+    r = client.get("/api/admin/reports", headers=headers, params=params)
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -195,9 +195,9 @@ def test_help_request_is_invisible_to_the_public():
     ]
     for text in public:
         assert secret_contact not in text and secret_note not in text
-    # And the responder list is closed to the public.
-    assert client.get("/api/responder/reports").status_code == 401
-    # The responders do see it, with the exact location and the contact.
+    # And the Admin list is closed to the public.
+    assert client.get("/api/admin/reports").status_code == 401
+    # Admins do see it, with the exact location and the contact.
     items = [i for i in staff_list()["items"] if secret_contact in i["contacts"]]
     assert len(items) == 1 and items[0]["kind"] == "help"
     assert items[0]["latitude"] == HOME[0] and items[0]["longitude"] == HOME[1]
@@ -208,7 +208,7 @@ def test_help_request_is_invisible_to_the_public():
 def _clean_slate_hazards():
     """Close every open hazard so each hazard check starts with no hazards around."""
     for item in staff_list(kind="hazard")["items"]:
-        client.post(f"/api/responder/reports/{item['id']}/resolve", headers=H_RESP, json={"what_was_done": "test clean-up"})
+        client.post(f"/api/admin/reports/{item['id']}/resolve", headers=H_ADMIN_B, json={"what_was_done": "test clean-up"})
     assert nearby(HOME) == []
 
 
@@ -300,39 +300,39 @@ def test_hazard_state_counts_different_phones_not_rows():
     assert report_service.hazard_state([row("a", verified=True)]) == "verified"
 
 
-def test_a_responder_verifies_a_hazard_and_the_public_sees_verified():
+def test_an_admin_verifies_a_hazard_and_the_public_sees_verified():
     _clean_slate_hazards()
     phone = new_phone()
     assert send(phone, "hazard").status_code == 201
     assert nearby(HOME) == []  # one phone, not verified: hidden
     item = staff_list(kind="hazard")["items"][0]
 
-    r = client.post(f"/api/responder/reports/{item['id']}/verify", headers=H_RESP)
+    r = client.post(f"/api/admin/reports/{item['id']}/verify", headers=H_ADMIN_B)
     assert r.status_code == 200 and r.json()["verified"] and r.json()["hazard_state"] == "verified"
-    assert r.json()["verified_by"] == "Rey Responder"
+    assert r.json()["verified_by"] == "Rey Admin"
 
     spots = nearby(HOME)
     assert len(spots) == 1 and spots[0]["status"] == "verified" and spots[0]["label"] == "Verified"
     # A second tap changes nothing and adds no second audit entry.
-    before = audit_actions().count(("Rey Responder", "report.verify", f"report:{item['id']}"))
-    assert client.post(f"/api/responder/reports/{item['id']}/verify", headers=H_RESP).status_code == 200
-    assert audit_actions().count(("Rey Responder", "report.verify", f"report:{item['id']}")) == before == 1
+    before = audit_actions().count(("Rey Admin", "report.verify", f"report:{item['id']}"))
+    assert client.post(f"/api/admin/reports/{item['id']}/verify", headers=H_ADMIN_B).status_code == 200
+    assert audit_actions().count(("Rey Admin", "report.verify", f"report:{item['id']}")) == before == 1
     # A later report joins the verified hazard and stays verified.
     assert send(new_phone(), "hazard").status_code == 201
     assert staff_list(kind="hazard")["items"][0]["report_count"] == 2
     assert nearby(HOME)[0]["status"] == "verified"
-    # A Super admin can verify too (checked on a fresh hazard).
+    # A second Admin can verify too (checked on a fresh hazard).
     far_phone = new_phone()
     send(far_phone, "hazard", where=FAR)
     far_item = next(i for i in staff_list(kind="hazard")["items"] if i["latitude"] == FAR[0])
-    assert client.post(f"/api/responder/reports/{far_item['id']}/verify", headers=H_ADMIN).status_code == 200
+    assert client.post(f"/api/admin/reports/{far_item['id']}/verify", headers=H_ADMIN).status_code == 200
     assert nearby(FAR)[0]["status"] == "verified"
 
 
 def test_only_hazards_can_be_verified():
     phone = new_phone()
     rid = send(phone, "help").json()["id"]
-    assert client.post(f"/api/responder/reports/{rid}/verify", headers=H_RESP).status_code == 422
+    assert client.post(f"/api/admin/reports/{rid}/verify", headers=H_ADMIN_B).status_code == 422
 
 
 def test_a_resolved_hazard_leaves_the_public_view_and_a_new_report_starts_a_new_one():
@@ -342,7 +342,7 @@ def test_a_resolved_hazard_leaves_the_public_view_and_a_new_report_starts_a_new_
         send(p, "hazard")
     assert len(nearby(HOME)) == 1
     item = staff_list(kind="hazard")["items"][0]
-    r = client.post(f"/api/responder/reports/{item['id']}/resolve", headers=H_RESP, json={"what_was_done": "Tree cleared"})
+    r = client.post(f"/api/admin/reports/{item['id']}/resolve", headers=H_ADMIN_B, json={"what_was_done": "Tree cleared"})
     assert r.status_code == 200
     assert nearby(HOME) == []
     # The same phone can report it again later: it is a new hazard, not the closed one.
@@ -351,50 +351,50 @@ def test_a_resolved_hazard_leaves_the_public_view_and_a_new_report_starts_a_new_
     assert nearby(HOME) == []  # one phone again
 
 
-# --------------------------------------------------------------------------- responder actions
+# --------------------------------------------------------------------------- Admin actions
 
 def test_take_resolve_and_the_sender_sees_the_status_change():
     phone = new_phone()
     rid = send(phone, "help", contact="0917 222 3333").json()["id"]
     assert mine(phone)[0]["label"] == "New"
 
-    r = client.post(f"/api/responder/reports/{rid}/take", headers=H_RESP)
-    assert r.status_code == 200 and r.json()["status"] == "being_handled" and r.json()["taken_by"] == "Rey Responder"
+    r = client.post(f"/api/admin/reports/{rid}/take", headers=H_ADMIN_B)
+    assert r.status_code == 200 and r.json()["status"] == "being_handled" and r.json()["taken_by"] == "Rey Admin"
     assert mine(phone)[0]["status"] == "being_handled" and mine(phone)[0]["label"] == "Being handled"
     # Taking it twice is fine for the same person; someone else is told who has it.
-    assert client.post(f"/api/responder/reports/{rid}/take", headers=H_RESP).status_code == 200
-    other = client.post(f"/api/responder/reports/{rid}/take", headers=H_RESP2)
-    assert other.status_code == 409 and "Rey Responder" in other.json()["detail"]
+    assert client.post(f"/api/admin/reports/{rid}/take", headers=H_ADMIN_B).status_code == 200
+    other = client.post(f"/api/admin/reports/{rid}/take", headers=H_ADMIN_C)
+    assert other.status_code == 409 and "Rey Admin" in other.json()["detail"]
 
     # Resolve needs what was done.
-    assert client.post(f"/api/responder/reports/{rid}/resolve", headers=H_RESP, json={}).status_code == 422
-    assert client.post(f"/api/responder/reports/{rid}/resolve", headers=H_RESP, json={"what_was_done": "  "}).status_code == 422
+    assert client.post(f"/api/admin/reports/{rid}/resolve", headers=H_ADMIN_B, json={}).status_code == 422
+    assert client.post(f"/api/admin/reports/{rid}/resolve", headers=H_ADMIN_B, json={"what_was_done": "  "}).status_code == 422
     assert mine(phone)[0]["status"] == "being_handled"
-    r = client.post(f"/api/responder/reports/{rid}/resolve", headers=H_RESP, json={"what_was_done": "Rescue team reached the family"})
+    r = client.post(f"/api/admin/reports/{rid}/resolve", headers=H_ADMIN_B, json={"what_was_done": "Rescue team reached the family"})
     assert r.status_code == 200 and r.json()["status"] == "resolved"
     assert r.json()["resolution_note"] == "Rescue team reached the family"
     assert mine(phone)[0]["status"] == "resolved" and mine(phone)[0]["label"] == "Resolved"
     assert "Rescue team" not in json.dumps(mine(phone))  # the sender never sees the note
     # Closed reports cannot be changed again.
-    assert client.post(f"/api/responder/reports/{rid}/resolve", headers=H_RESP, json={"what_was_done": "again"}).status_code == 409
-    assert client.post(f"/api/responder/reports/{rid}/take", headers=H_RESP).status_code == 409
-    assert client.post("/api/responder/reports/999999/take", headers=H_RESP).status_code == 404
+    assert client.post(f"/api/admin/reports/{rid}/resolve", headers=H_ADMIN_B, json={"what_was_done": "again"}).status_code == 409
+    assert client.post(f"/api/admin/reports/{rid}/take", headers=H_ADMIN_B).status_code == 409
+    assert client.post("/api/admin/reports/999999/take", headers=H_ADMIN_B).status_code == 404
 
     names = [a for a in audit_actions() if a[2] == f"report:{rid}"]
-    assert ("Rey Responder", "report.take", f"report:{rid}") in names
-    assert ("Rey Responder", "report.resolve", f"report:{rid}") in names
+    assert ("Rey Admin", "report.take", f"report:{rid}") in names
+    assert ("Rey Admin", "report.resolve", f"report:{rid}") in names
 
 
 def test_mark_false_needs_a_reason_and_the_sender_sees_resolved():
     phone = new_phone()
     rid = send(phone, "help").json()["id"]
-    assert client.post(f"/api/responder/reports/{rid}/mark-false", headers=H_RESP, json={}).status_code == 422
-    assert client.post(f"/api/responder/reports/{rid}/mark-false", headers=H_RESP, json={"reason": ""}).status_code == 422
-    r = client.post(f"/api/responder/reports/{rid}/mark-false", headers=H_RESP, json={"reason": "Called the number, no emergency"})
+    assert client.post(f"/api/admin/reports/{rid}/mark-false", headers=H_ADMIN_B, json={}).status_code == 422
+    assert client.post(f"/api/admin/reports/{rid}/mark-false", headers=H_ADMIN_B, json={"reason": ""}).status_code == 422
+    r = client.post(f"/api/admin/reports/{rid}/mark-false", headers=H_ADMIN_B, json={"reason": "Called the number, no emergency"})
     assert r.status_code == 200 and r.json()["status"] == "false" and r.json()["false_reason"] == "Called the number, no emergency"
     assert mine(phone)[0]["status"] == "resolved"  # the sender gets one of the three words, never the reason
     assert "no emergency" not in json.dumps(mine(phone))
-    assert ("Rey Responder", "report.mark_false", f"report:{rid}") in audit_actions()
+    assert ("Rey Admin", "report.mark_false", f"report:{rid}") in audit_actions()
 
 
 def test_false_reports_block_a_phone_after_three():
@@ -406,11 +406,11 @@ def test_false_reports_block_a_phone_after_three():
         ids.append(r.json()["id"])
     # One and two false reports: still allowed to send.
     for rid in ids[:2]:
-        assert client.post(f"/api/responder/reports/{rid}/mark-false", headers=H_RESP, json={"reason": "prank call"}).status_code == 200
+        assert client.post(f"/api/admin/reports/{rid}/mark-false", headers=H_ADMIN_B, json={"reason": "prank call"}).status_code == 200
     assert send(bad, "help").status_code == 201  # a 4th report is still allowed (only 2 are false)
     assert not _blocked(bad)
     # The third false report blocks the phone.
-    assert client.post(f"/api/responder/reports/{ids[2]}/mark-false", headers=H_RESP, json={"reason": "prank call again"}).status_code == 200
+    assert client.post(f"/api/admin/reports/{ids[2]}/mark-false", headers=H_ADMIN_B, json={"reason": "prank call again"}).status_code == 200
     assert _blocked(bad)
     for kind in ("help", "hazard"):
         r = send(bad, kind)
@@ -418,7 +418,7 @@ def test_false_reports_block_a_phone_after_three():
     # The blocked phone can still read its own reports; another phone is not affected.
     assert len(mine(bad)) == 4
     assert send(good, "help").status_code == 201
-    assert ("Rey Responder", "report.phone_blocked", f"phone:{report_service.hash_phone_id(bad)[:8]}") in audit_actions()
+    assert ("Rey Admin", "report.phone_blocked", f"phone:{report_service.hash_phone_id(bad)[:8]}") in audit_actions()
     # The audit log never holds the phone ID itself.
     db = db_session()
     try:
@@ -431,7 +431,7 @@ def test_three_false_reports_from_different_phones_do_not_block_anyone():
     phones = [new_phone() for _ in range(3)]
     for p in phones:
         rid = send(p, "help").json()["id"]
-        client.post(f"/api/responder/reports/{rid}/mark-false", headers=H_RESP, json={"reason": "not real"})
+        client.post(f"/api/admin/reports/{rid}/mark-false", headers=H_ADMIN_B, json={"reason": "not real"})
     assert not any(_blocked(p) for p in phones)
     assert all(send(p, "help").status_code == 201 for p in phones)
 
@@ -451,7 +451,7 @@ def test_marking_a_hazard_false_counts_once_for_each_phone_in_it():
         send(p, "hazard")
     item = staff_list(kind="hazard")["items"][0]
     assert item["report_count"] == 3
-    r = client.post(f"/api/responder/reports/{item['id']}/mark-false", headers=H_RESP, json={"reason": "Nothing there"})
+    r = client.post(f"/api/admin/reports/{item['id']}/mark-false", headers=H_ADMIN_B, json={"reason": "Nothing there"})
     assert r.status_code == 200 and r.json()["status"] == "false"
     assert nearby(HOME) == []
     db = db_session()
@@ -462,12 +462,12 @@ def test_marking_a_hazard_false_counts_once_for_each_phone_in_it():
         db.close()
 
 
-# --------------------------------------------------------------------------- responder list
+# --------------------------------------------------------------------------- Admin list
 
-def test_responder_list_flags_new_help_requests():
+def test_admin_list_flags_new_help_requests():
     # Close whatever earlier checks left open, so the counts below are exact.
     for item in staff_list()["items"]:
-        client.post(f"/api/responder/reports/{item['id']}/resolve", headers=H_RESP, json={"what_was_done": "test clean-up"})
+        client.post(f"/api/admin/reports/{item['id']}/resolve", headers=H_ADMIN_B, json={"what_was_done": "test clean-up"})
     empty = staff_list()
     assert empty["has_new_help"] is False and empty["new_help_count"] == 0 and empty["items"] == []
     assert empty["refresh_seconds"] == config.RESPONDER_REFRESH_SECONDS == 10
@@ -482,29 +482,29 @@ def test_responder_list_flags_new_help_requests():
     assert [i["id"] for i in data["items"]] == [h1, h2, hz]
     assert [i["is_new_help"] for i in data["items"]] == [True, True, False]
 
-    client.post(f"/api/responder/reports/{h1}/take", headers=H_RESP)
+    client.post(f"/api/admin/reports/{h1}/take", headers=H_ADMIN_B)
     data = staff_list()
     assert data["new_help_count"] == 1 and data["has_new_help"] is True
     assert next(i for i in data["items"] if i["id"] == h1)["is_new_help"] is False
-    client.post(f"/api/responder/reports/{h2}/take", headers=H_RESP)
+    client.post(f"/api/admin/reports/{h2}/take", headers=H_ADMIN_B)
     assert staff_list()["has_new_help"] is False  # the red alert goes away
     # Filters; closed reports only when asked for.
     assert [i["kind"] for i in staff_list(kind="hazard")["items"]] == ["hazard"]
-    client.post(f"/api/responder/reports/{h1}/resolve", headers=H_RESP, json={"what_was_done": "Done"})
+    client.post(f"/api/admin/reports/{h1}/resolve", headers=H_ADMIN_B, json={"what_was_done": "Done"})
     assert h1 not in [i["id"] for i in staff_list()["items"]]
     assert h1 in [i["id"] for i in staff_list(include_closed=True)["items"]]
 
 
 # --------------------------------------------------------------------------- roles
 
-def test_roles_on_the_report_routes():
+def test_the_report_routes_need_an_admin():
     rid = send(new_phone(), "help").json()["id"]
     routes = [
-        ("get", "/api/responder/reports", None),
-        ("post", f"/api/responder/reports/{rid}/take", None),
-        ("post", f"/api/responder/reports/{rid}/resolve", {"what_was_done": "x done"}),
-        ("post", f"/api/responder/reports/{rid}/mark-false", {"reason": "x reason"}),
-        ("post", f"/api/responder/reports/{rid}/verify", None),
+        ("get", "/api/admin/reports", None),
+        ("post", f"/api/admin/reports/{rid}/take", None),
+        ("post", f"/api/admin/reports/{rid}/resolve", {"what_was_done": "x done"}),
+        ("post", f"/api/admin/reports/{rid}/mark-false", {"reason": "x reason"}),
+        ("post", f"/api/admin/reports/{rid}/verify", None),
     ]
     for method, path, body in routes:
         # No token, a made-up token: 401.
@@ -518,15 +518,15 @@ def test_roles_on_the_report_routes():
     finally:
         db.close()
     # The public phone ID is not a staff sign-in.
-    assert client.get("/api/responder/reports", headers={"X-Phone-Id": new_phone()}).status_code == 401
-    # Responder and Super admin both get through.
-    assert client.get("/api/responder/reports", headers=H_RESP).status_code == 200
-    assert client.get("/api/responder/reports", headers=H_ADMIN).status_code == 200
-    assert client.post(f"/api/responder/reports/{rid}/take", headers=H_ADMIN).status_code == 200
+    assert client.get("/api/admin/reports", headers={"X-Phone-Id": new_phone()}).status_code == 401
+    # Any Admin gets through.
+    assert client.get("/api/admin/reports", headers=H_ADMIN_B).status_code == 200
+    assert client.get("/api/admin/reports", headers=H_ADMIN).status_code == 200
+    assert client.post(f"/api/admin/reports/{rid}/take", headers=H_ADMIN).status_code == 200
     # A locked-out (signed out) token stops working.
-    token = auth("Ria Responder")
+    token = auth("Ria Admin")
     client.post("/api/auth/sign-out", headers=token)
-    assert client.get("/api/responder/reports", headers=token).status_code == 401
+    assert client.get("/api/admin/reports", headers=token).status_code == 401
 
 
 # --------------------------------------------------------------------------- limits
@@ -643,13 +643,13 @@ def test_purge_also_works_for_hazard_groups_and_blocks_survive():
         db.close()
     item = staff_list(kind="hazard")["items"][0]
     assert item["report_count"] == 2 and item["phones"] == 2
-    assert client.post(f"/api/responder/reports/{item['id']}/take", headers=H_RESP).status_code == 200
+    assert client.post(f"/api/admin/reports/{item['id']}/take", headers=H_ADMIN_B).status_code == 200
 
     # A blocked phone stays blocked after its reports are purged.
     bad = new_phone()
     for _ in range(3):
         rid = send(bad, "help").json()["id"]
-        client.post(f"/api/responder/reports/{rid}/mark-false", headers=H_RESP, json={"reason": "prank"})
+        client.post(f"/api/admin/reports/{rid}/mark-false", headers=H_ADMIN_B, json={"reason": "prank"})
     assert _blocked(bad)
     db = db_session()
     try:
@@ -718,7 +718,7 @@ def test_people_and_can_move_are_for_help_requests_only():
     assert send(phone, "help", name="Juan").status_code == 422
 
 
-def test_responders_see_category_people_and_can_move_the_public_does_not():
+def test_admins_see_category_people_and_can_move_the_public_does_not():
     _clean_slate_hazards()
     phone, other = new_phone(), new_phone()
     r = send(phone, "help", category="Need rescue", people=4, can_move="unsure", contact="0917 PRIVATE 1")
@@ -728,7 +728,7 @@ def test_responders_see_category_people_and_can_move_the_public_does_not():
     assert (item["category"], item["people"], item["can_move"]) == ("Need rescue", 4, "unsure")
     assert item["categories"] == ["Need rescue"]
     # The action responses carry the same fields.
-    taken = client.post(f"/api/responder/reports/{rid}/take", headers=H_RESP).json()
+    taken = client.post(f"/api/admin/reports/{rid}/take", headers=H_ADMIN_B).json()
     assert (taken["category"], taken["people"], taken["can_move"]) == ("Need rescue", 4, "unsure")
     # The sender sees their own category, but not the head count or can_move or the contact.
     mine_now = next(m for m in mine(phone) if m["id"] == rid)
@@ -743,8 +743,8 @@ def test_responders_see_category_people_and_can_move_the_public_does_not():
     hz_item = next(i for i in staff_list(kind="hazard")["items"] if i["id"] == hz)
     assert hz_item["category"] == "Landslide" and hz_item["people"] is None and hz_item["can_move"] is None
     # Close what this check opened.
-    client.post(f"/api/responder/reports/{rid}/resolve", headers=H_RESP, json={"what_was_done": "test clean-up"})
-    client.post(f"/api/responder/reports/{hz}/resolve", headers=H_RESP, json={"what_was_done": "test clean-up"})
+    client.post(f"/api/admin/reports/{rid}/resolve", headers=H_ADMIN_B, json={"what_was_done": "test clean-up"})
+    client.post(f"/api/admin/reports/{hz}/resolve", headers=H_ADMIN_B, json={"what_was_done": "test clean-up"})
 
 
 def test_hazards_group_whatever_the_category():
