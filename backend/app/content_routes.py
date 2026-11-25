@@ -12,8 +12,8 @@ Weather, advisories, official sources and emergency numbers (redesign part 4).
     POST   /api/admin/advisory-sources               admin                  body: name
     PATCH  /api/admin/advisory-sources/{id}          admin                  body: name
     DELETE /api/admin/advisory-sources/{id}          admin
-    GET    /api/emergency-numbers                    public                 in the order to show them
-    POST   /api/admin/emergency-numbers              admin                  body: number, name, description
+    GET    /api/emergency-numbers                    public                 in the order to show them (?category= filters)
+    POST   /api/admin/emergency-numbers              admin                  body: number, name, description, category
     PATCH  /api/admin/emergency-numbers/{id}         admin
     DELETE /api/admin/emergency-numbers/{id}         admin
     PUT    /api/admin/emergency-numbers/order        admin                  body: ids (every id, in the new order)
@@ -21,7 +21,7 @@ Weather, advisories, official sources and emergency numbers (redesign part 4).
 Every admin change is written to the audit log with the person's name. Nothing is fetched
 automatically: advisories exist only because an Admin posted them.
 """
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
@@ -121,9 +121,16 @@ def remove_source(source_id: int, request: Request, user: User = Depends(require
 # ---- Emergency numbers ----
 
 @router.get("/api/emergency-numbers", response_model=List[EmergencyNumberOut])
-def list_numbers(db: Session = Depends(get_db)):
-    """In the order to show them. Only 911 until the Batangas City CDRRMO confirms the others."""
-    return [number_out(n) for n in content_service.list_numbers(db)]
+def list_numbers(
+    category: Optional[Literal["medical", "accident", "flood", "violence", "missing_person"]] = Query(
+        None, description="Only the numbers tagged with this category (the hotline sheet filter). Untagged numbers are left out."),
+    db: Session = Depends(get_db),
+):
+    """
+    In the order to show them. Only 911 until the Batangas City CDRRMO confirms the others. Each number has a
+    `category` (medical, accident, flood, violence, missing_person) or null for a general number such as 911.
+    """
+    return [number_out(n) for n in content_service.list_numbers(db, category)]
 
 
 @router.post("/api/admin/emergency-numbers", response_model=EmergencyNumberOut, status_code=201)

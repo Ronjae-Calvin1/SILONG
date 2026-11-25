@@ -34,6 +34,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, Request
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import audit, config
@@ -294,8 +295,8 @@ def nearby_hazards(db: Session, lat: float, lng: float) -> List[dict]:
 
 # ------------------------------------------------------------ what Admins see
 
-def _item(rows: List[Report]) -> dict:
-    """One line of the Admin list: a help request, or a whole hazard group."""
+def _item(rows: List[Report], viewer: Optional[str] = None) -> dict:
+    """One line of the Admin list: a help request, or a whole hazard group. `viewer` is the signed-in Admin's name (for is_mine)."""
     first = rows[0]
     is_hazard = first.kind == HAZARD
     state = hazard_state(rows) if is_hazard else None
@@ -319,6 +320,8 @@ def _item(rows: List[Report]) -> dict:
         contacts=contacts, notes=notes,
         created_at=first.created_at, updated_at=latest.updated_at,
         taken_by=first.taken_by, closed_by=first.closed_by,
+        is_mine=viewer is not None and first.status == BEING_HANDLED and first.taken_by == viewer,
+        distance_m=None,
         resolution_note=first.resolution_note, false_reason=first.false_reason,
         verified=verified is not None, verified_by=verified.verified_by if verified else None,
         hazard_state=state,
@@ -326,21 +329,45 @@ def _item(rows: List[Report]) -> dict:
     )
 
 
-def admin_list(db: Session, include_closed: bool = False, kind: Optional[str] = None) -> dict:
+def admin_list(
+    db: Session, include_closed: bool = False, kind: Optional[str] = None, viewer: Optional[str] = None,
+    mine: bool = False, lat: Optional[float] = None, lng: Optional[float] = None, since: Optional[datetime] = None,
+) -> dict:
     """
-    For the responder screens (poll about every RESPONDER_REFRESH_SECONDS).
+    For the Admin screens (poll about every RESPONDER_REFRESH_SECONDS).
     `new_help_count` / `has_new_help` is the red alert: help requests nobody has
     taken yet. They are counted over ALL open reports, whatever the filters are.
-    """
-    q = db.query(Report)
-    if not include_closed:
-        q = q.filter(Report.status.in_(OPEN))
-    if kind:
-        q = q.filter(Report.kind == kind)
-    rows = q.order_by(Report.id).all()
 
-    items = [_item([r]) for r in rows if r.kind == HELP]
-    items += [_item(g) for g in _group_rows([r for r in rows if r.kind == HAZARD]).values()]
+    mine      only reports this Admin is handling (taken_by is `viewer`); with include_closed also the ones they took and closed.
+    lat, lng  each item gets `distance_m` from that point (the list order stays most-urgent-first).
+    since     only items that changed at or after that time (naive UTC). Closed items that changed are included
+              too, so a polling screen can drop a report another Admin just closed. Use the last `server_time`.
+    """
+    server_time = _now()  # taken BEFORE the query: a change made while it runs is seen by the next poll
+    q = db.query(Report)
+    if since is not None:
+        changed = q.filter(Report.updated_at >= since).all()
+        groups = {r.group_id if r.group_id is not None else r.id for r in changed if r.kind == HAZARD}
+        rows = [r for r in changed if r.kind == HELP]
+        if groups:
+            rows += db.query(Report).filter(Report.kind == HAZARD, Report.group_id.in_(groups)).all()
+        if kind:
+            rows = [r for r in rows if r.kind == kind]
+        rows.sort(key=lambda r: r.id)
+    else:
+        if not include_closed:
+            q = q.filter(Report.status.in_(OPEN))
+        if kind:
+            q = q.filter(Report.kind == kind)
+        rows = q.order_by(Report.id).all()
+
+    items = [_item([r], viewer) for r in rows if r.kind == HELP]
+    items += [_item(g, viewer) for g in _group_rows([r for r in rows if r.kind == HAZARD]).values()]
+    if mine:
+        items = [i for i in items if i["taken_by"] is not None and i["taken_by"] == viewer]
+    if lat is not None and lng is not None:
+        for i in items:
+            i["distance_m"] = round(distance_m(lat, lng, i["latitude"], i["longitude"]))
 
     def order(i: dict):
         rank = 0 if i["is_new_help"] else 1 if i["status"] in OPEN else 2
@@ -351,12 +378,36 @@ def admin_list(db: Session, include_closed: bool = False, kind: Optional[str] = 
     new_help = db.query(Report).filter(Report.kind == HELP, Report.status == NEW).count()
     latest = db.query(Report.id).order_by(Report.id.desc()).first()
     return dict(
-        server_time=_now(),
+        server_time=server_time,
         refresh_seconds=config.RESPONDER_REFRESH_SECONDS,
         new_help_count=new_help,
         has_new_help=new_help > 0,
         latest_report_id=latest[0] if latest else None,
         items=items,
+    )
+
+
+def admin_counts(db: Session, viewer: str) -> dict:
+    """
+    The badge numbers, from a few COUNT queries (no rows are loaded). A hazard is one report for all
+    its reports about the same place. Only open reports count.
+    """
+    def count(status: str, taken_by: Optional[str] = None) -> int:
+        n = 0
+        for kind in (HELP, HAZARD):
+            q = db.query(Report).filter(Report.kind == kind, Report.status == status)
+            if taken_by is not None:
+                q = q.filter(Report.taken_by == taken_by)
+            if kind == HELP:
+                n += q.count()
+            else:  # one per group (a group is always in one state)
+                n += q.with_entities(func.count(func.distinct(func.coalesce(Report.group_id, Report.id)))).scalar() or 0
+        return n
+
+    return dict(
+        new_reports=count(NEW),
+        being_handled=count(BEING_HANDLED),
+        mine=count(BEING_HANDLED, viewer),
     )
 
 
@@ -386,14 +437,35 @@ def take(db: Session, user: User, report_id: int, request: Optional[Request]) ->
     first = rows[0]
     if first.status == BEING_HANDLED:
         if first.taken_by == user.name:  # a second tap: nothing to do
-            return _item(rows)
+            return _item(rows, user.name)
         raise ReportError(409, f"{first.taken_by} is already handling this report.")
     now = _now()
     for r in rows:
         r.status, r.taken_by, r.taken_at, r.updated_at = BEING_HANDLED, user.name, now, now
     audit.record(db, user, "report.take", target=_target(rows), detail={"kind": first.kind}, request=request)
     db.commit()
-    return _item(rows)
+    return _item(rows, user.name)
+
+
+def release(db: Session, user: User, report_id: int, request: Optional[Request]) -> dict:
+    """
+    Give a report you took back: Being handled -> New, nobody assigned. Only the Admin who took it can
+    (409 for anyone else, who can still take it over by asking them). Safe to call twice: a report that is
+    already New is returned as it is. A closed report cannot be released (409).
+    """
+    rows = _load(db, report_id)
+    _require_open(rows)
+    first = rows[0]
+    if first.status == NEW:
+        return _item(rows, user.name)
+    if first.taken_by != user.name:
+        raise ReportError(409, f"{first.taken_by} is handling this report. Only they can release it.")
+    now = _now()
+    for r in rows:
+        r.status, r.taken_by, r.taken_at, r.updated_at = NEW, None, None, now
+    audit.record(db, user, "report.release", target=_target(rows), detail={"kind": first.kind}, request=request)
+    db.commit()
+    return _item(rows, user.name)
 
 
 def resolve(db: Session, user: User, report_id: int, what_was_done: str, request: Optional[Request]) -> dict:
@@ -406,7 +478,7 @@ def resolve(db: Session, user: User, report_id: int, what_was_done: str, request
     audit.record(db, user, "report.resolve", target=_target(rows),
                  detail={"kind": rows[0].kind, "what_was_done": what_was_done}, request=request)
     db.commit()
-    return _item(rows)
+    return _item(rows, user.name)
 
 
 def mark_false(db: Session, user: User, report_id: int, reason: str, request: Optional[Request]) -> dict:
@@ -441,7 +513,7 @@ def mark_false(db: Session, user: User, report_id: int, reason: str, request: Op
             audit.record(db, user, "report.phone_blocked", target=f"phone:{phone[:8]}",
                          detail={"false_reports": strikes, "after_report": rows[0].id}, request=request)
     db.commit()
-    return _item(rows)
+    return _item(rows, user.name)
 
 
 def verify(db: Session, user: User, report_id: int, request: Optional[Request]) -> dict:
@@ -450,13 +522,13 @@ def verify(db: Session, user: User, report_id: int, request: Optional[Request]) 
         raise ReportError(422, "Only hazard reports can be verified.")
     _require_open(rows)
     if all(r.verified_at is not None for r in rows):  # a second tap: nothing to do
-        return _item(rows)
+        return _item(rows, user.name)
     now = _now()
     for r in rows:
         r.verified_by, r.verified_at, r.updated_at = user.name, now, now
     audit.record(db, user, "report.verify", target=_target(rows), detail={"reports": len(rows)}, request=request)
     db.commit()
-    return _item(rows)
+    return _item(rows, user.name)
 
 
 # ------------------------------------------------------------ upgrading an existing database

@@ -13,6 +13,7 @@ Report / BlockedPhone: help requests and hazard reports from the public, and
     the phones blocked after too many false reports (see report_service.py).
 Advisory / AdvisorySource / EmergencyNumber: advisories posted by hand, the list of sources that
     count as official, and the emergency numbers (see content_service.py).
+AppSetting: the contact settings an Admin edits (see settings_service.py).
 CachedResponse: generic key/value cache. Today it holds the last good weather forecast
     (see weather_service.py).
 """
@@ -292,6 +293,23 @@ class EmergencyNumber(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     position = Column(Integer, nullable=False, default=0, index=True)
+    # Added in update 14: what kind of emergency it is for (see config.EMERGENCY_CATEGORIES); empty = not tagged.
+    # Older databases get the column from content_service.upgrade_number_columns.
+    category = Column(String, nullable=True)
+
+
+class AppSetting(Base):
+    """
+    One named setting an Admin can edit: the control-room number and the support email and number
+    (see settings_service.py). A setting that was never set has no row; a cleared one has its row deleted,
+    so "not set" is always the same thing: no row, and the API says null.
+    """
+    __tablename__ = "app_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(String, nullable=False)
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_by = Column(String, nullable=True)  # staff name, kept as text
 
 
 class CachedResponse(Base):

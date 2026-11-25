@@ -5,7 +5,7 @@ Every change is written to the audit log with the person's name (audit.py) and c
 together with the change itself.
 """
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 from fastapi import HTTPException, Request
 from sqlalchemy import inspect
@@ -27,8 +27,8 @@ def prepare_tables(engine=default_engine) -> None:
     """
     Make the two list tables and fill them with their starting rows, ONCE: only when the table
     did not exist yet. So an Admin who removes a source or the 911 row does not get it
-    back on the next start. Call this BEFORE Base.metadata.create_all. No existing table gets a
-    new column in part 4, so there is no column upgrade here.
+    back on the next start. Call this BEFORE Base.metadata.create_all. It also adds the `category`
+    column to an emergency_numbers table made before update 14 (upgrade_number_columns).
     """
     insp = inspect(engine)
     had_sources = insp.has_table(AdvisorySource.__tablename__)
@@ -43,6 +43,25 @@ def prepare_tables(engine=default_engine) -> None:
             for position, (number, name) in enumerate(config.DEFAULT_EMERGENCY_NUMBERS):
                 db.add(EmergencyNumber(number=number, name=name, position=position))
         db.commit()
+    upgrade_number_columns(engine)
+
+
+def upgrade_number_columns(engine) -> List[str]:
+    """
+    Add the `category` column to an emergency_numbers table made before update 14. Keeps every row (old
+    numbers simply have no category). Does nothing on a new or already upgraded database. Returns the
+    columns it added.
+    """
+    from sqlalchemy import text
+    insp = inspect(engine)
+    if not insp.has_table(EmergencyNumber.__tablename__):
+        return []
+    have = {c["name"] for c in insp.get_columns(EmergencyNumber.__tablename__)}
+    added = [name for name in ("category",) if name not in have]
+    with engine.begin() as conn:
+        for name in added:
+            conn.execute(text(f"ALTER TABLE {EmergencyNumber.__tablename__} ADD COLUMN {name} VARCHAR"))
+    return added
 
 
 def _get_or_404(db: Session, model, row_id: int, what: str):
@@ -158,19 +177,24 @@ def delete_advisory(db: Session, user: User, advisory_id: int, request: Request)
 
 # ---------------------------------------------------------------- emergency numbers
 
-def list_numbers(db: Session) -> List[EmergencyNumber]:
-    return db.query(EmergencyNumber).order_by(EmergencyNumber.position, EmergencyNumber.id).all()
+def list_numbers(db: Session, category: Optional[str] = None) -> List[EmergencyNumber]:
+    """In the order to show them. With `category`, only the numbers tagged with it (untagged ones are left out)."""
+    q = db.query(EmergencyNumber)
+    if category:
+        q = q.filter(EmergencyNumber.category == category)
+    return q.order_by(EmergencyNumber.position, EmergencyNumber.id).all()
 
 
 def add_number(db: Session, user: User, payload, request: Request) -> EmergencyNumber:
     last = db.query(EmergencyNumber.position).order_by(EmergencyNumber.position.desc()).first()
     n = EmergencyNumber(
-        number=payload.number, name=payload.name, description=payload.description,
+        number=payload.number, name=payload.name, description=payload.description, category=payload.category,
         position=(last[0] + 1) if last else 0,
     )
     db.add(n)
     db.flush()
-    audit.record(db, user, "emergency_number.add", target=f"number:{n.id} ({n.name})", detail={"number": n.number}, request=request)
+    audit.record(db, user, "emergency_number.add", target=f"number:{n.id} ({n.name})",
+                 detail={"number": n.number, "category": n.category}, request=request)
     db.commit()
     return n
 
@@ -178,7 +202,7 @@ def add_number(db: Session, user: User, payload, request: Request) -> EmergencyN
 def update_number(db: Session, user: User, number_id: int, payload, request: Request) -> EmergencyNumber:
     n = _get_or_404(db, EmergencyNumber, number_id, "emergency number")
     changed, before = [], {}
-    for field in ("number", "name", "description"):
+    for field in ("number", "name", "description", "category"):
         if field in payload.model_fields_set and getattr(n, field) != getattr(payload, field):
             before[field] = getattr(n, field)
             setattr(n, field, getattr(payload, field))

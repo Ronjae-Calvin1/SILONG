@@ -147,7 +147,9 @@ class AdminReportOut(BaseModel):
     notes: List[str]
     created_at: datetime
     updated_at: datetime
-    taken_by: Optional[str] = None
+    taken_by: Optional[str] = None  # the Admin handling it (name), null while New
+    is_mine: bool = False  # Being handled by the signed-in Admin (the "Mine" chip)
+    distance_m: Optional[float] = None  # metres from the lat/lon sent to the list; null otherwise
     closed_by: Optional[str] = None
     resolution_note: Optional[str] = None
     false_reason: Optional[str] = None
@@ -164,6 +166,7 @@ class AdminListOut(BaseModel):
     new_help_count: int  # help requests nobody has taken yet
     has_new_help: bool  # true = show the red "Needs help" alert
     latest_report_id: Optional[int] = None
+    since: Optional[datetime] = None  # echo of the `since` filter, when one was sent
     items: List[AdminReportOut]
 
 
@@ -180,6 +183,7 @@ def admin_item_out(item: dict) -> AdminReportOut:
 def admin_list_out(data: dict) -> AdminListOut:
     data = dict(data)
     data["server_time"] = _utc(data["server_time"])
+    data["since"] = _utc(data.get("since"))
     data["items"] = [admin_item_out(i) for i in data["items"]]
     return AdminListOut(**data)
 
