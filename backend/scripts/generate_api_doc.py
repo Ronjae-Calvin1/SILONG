@@ -81,8 +81,8 @@ body is a list of `{type, loc, msg}`). Show `detail` to the person when it is a 
 
 **3. An Admin takes and resolves a help request**
 
-1. Sign in (flow 1). `GET /api/admin/reports` lists open reports; poll it about every `refresh_seconds`.
-2. `POST /api/admin/reports/{id}/take` (no body). A `409` says someone else is already handling it.
+1. Sign in (flow 1). `GET /api/admin/reports` lists open reports; poll it about every `refresh_seconds`. `status=new|handling|resolved|all` narrows it (`resolved` includes reports marked false).
+2. `POST /api/admin/reports/{id}/take` (no body). If another Admin is handling it you take it over (it is reassigned to you); a `409` only means it is already closed. `POST /api/admin/reports/{id}/release` gives any open report back to New.
 3. `POST /api/admin/reports/{id}/resolve` with `{"what_was_done": "Team sent, family moved to the gym"}`.
 4. Use `mark-false` (`{"reason": "..."}`) instead of `resolve` for a false report.
 

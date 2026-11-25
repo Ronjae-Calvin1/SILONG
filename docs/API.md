@@ -61,8 +61,8 @@ body is a list of `{type, loc, msg}`). Show `detail` to the person when it is a 
 
 **3. An Admin takes and resolves a help request**
 
-1. Sign in (flow 1). `GET /api/admin/reports` lists open reports; poll it about every `refresh_seconds`.
-2. `POST /api/admin/reports/{id}/take` (no body). A `409` says someone else is already handling it.
+1. Sign in (flow 1). `GET /api/admin/reports` lists open reports; poll it about every `refresh_seconds`. `status=new|handling|resolved|all` narrows it (`resolved` includes reports marked false).
+2. `POST /api/admin/reports/{id}/take` (no body). If another Admin is handling it you take it over (it is reassigned to you); a `409` only means it is already closed. `POST /api/admin/reports/{id}/release` gives any open report back to New.
 3. `POST /api/admin/reports/{id}/resolve` with `{"what_was_done": "Team sent, family moved to the gym"}`.
 4. Use `mark-false` (`{"reason": "..."}`) instead of `resolve` for a false report.
 
@@ -414,8 +414,8 @@ Let this phone send reports again. Its count of false reports starts from zero, 
 | `GET` | `/api/reports/mine` | Public (X-Phone-Id required) | This phone's own reports, newest first, with a status: New, Being handled or Resolved. |
 | `GET` | `/api/hazards/nearby` | Public (X-Phone-Id optional) | Hazards within the near-me range (config.NEAR_ME_KM) that are Unconfirmed or Verified, as an approximate spot with a status and no details. The position you send is used for this answer only and is not stored. |
 | `GET` | `/api/admin/reports` | Admin | Poll this about every `refresh_seconds` (10). `has_new_help` is true while any help request is still New: show the red "Needs help" alert. Open reports only, unless include_closed is set. A hazard is one line for all reports about the same place. |
-| `POST` | `/api/admin/reports/{report_id}/take` | Admin | Take it: New -> Being handled. 409 if someone else already has it. Safe to call twice. |
-| `POST` | `/api/admin/reports/{report_id}/release` | Admin | Give back a report you took: Being handled -> New, nobody assigned. 409 if another Admin has it or it is closed. Safe to call twice. |
+| `POST` | `/api/admin/reports/{report_id}/take` | Admin | Take it: New -> Being handled. If another Admin has it, you take it over (it is reassigned to you). 409 only if it is closed. Safe to call twice. |
+| `POST` | `/api/admin/reports/{report_id}/release` | Admin | Give a report back: Being handled -> New, nobody assigned. Any Admin can, also for one another Admin took. 409 only if it is closed. Safe to call twice. |
 | `POST` | `/api/admin/reports/{report_id}/resolve` | Admin | Resolve. Needs `what_was_done`. The sender then sees Resolved. |
 | `POST` | `/api/admin/reports/{report_id}/mark-false` | Admin | Mark false. Needs a `reason`. A phone with 3 false reports is blocked from sending reports. |
 | `POST` | `/api/admin/reports/{report_id}/verify` | Admin | Verify a hazard: the public then sees it as Verified. Hazards only. Safe to call twice. |
@@ -511,13 +511,14 @@ A list of `NearbyHazardOut`.
 
 **Who:** Admin
 
-Poll this about every `refresh_seconds` (10). `has_new_help` is true while any help request is still New: show the red "Needs help" alert. Open reports only, unless include_closed is set. A hazard is one line for all reports about the same place. `mine=true` keeps only the reports you took. Send `latitude` and `longitude` together to get `distance_m` on every item (the order stays most urgent first). For polling, send the last answer's `server_time` as `since`: you get only the items that changed since, and that includes reports that were just resolved or marked false, so you can drop them from your list. `new_help_count`, `has_new_help` and `latest_report_id` always cover everything.
+Poll this about every `refresh_seconds` (10). `has_new_help` is true while any help request is still New: show the red "Needs help" alert. Open reports only, unless include_closed is set. A hazard is one line for all reports about the same place. `status` (new, handling, resolved, all) lists only that status; `resolved` includes reports marked false and `all` includes closed ones. Not given, you get the open reports (or everything with `include_closed`). When `status` is given it decides, and `include_closed` adds nothing. It combines with `mine`, `kind`, `since` and the distance. `mine=true` keeps only the reports you took. Send `latitude` and `longitude` together to get `distance_m` on every item (the order stays most urgent first). For polling, send the last answer's `server_time` as `since`: you get only the items that changed since, and that includes reports that were just resolved or marked false, so you can drop them from your list. `new_help_count`, `has_new_help` and `latest_report_id` always cover everything.
 
 **Request fields**
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `include_closed` | boolean | optional | in query; Also list resolved and false reports |
+| `status` | one of `new`, `handling`, `resolved`, `all` or null | optional | in query; Only this status: new, handling, resolved (closed: resolved and false) or all (open and closed). Not given: open reports |
 | `kind` | one of `help`, `hazard` or null | optional | in query |
 | `mine` | boolean | optional | in query; Only reports you took (the Mine filter) |
 | `latitude` | number or null | optional | in query; With longitude: add distance_m to each item |
@@ -540,7 +541,7 @@ Poll this about every `refresh_seconds` (10). `has_new_help` is true while any h
 
 **Who:** Admin
 
-Take it: New -> Being handled. 409 if someone else already has it. Safe to call twice.
+Take it: New -> Being handled. If another Admin has it, you take it over (it is reassigned to you). 409 only if it is closed. Safe to call twice.
 
 **Request fields**
 
@@ -582,7 +583,7 @@ Take it: New -> Being handled. 409 if someone else already has it. Safe to call 
 
 **Who:** Admin
 
-Give back a report you took: Being handled -> New, nobody assigned. 409 if another Admin has it or it is closed. Safe to call twice.
+Give a report back: Being handled -> New, nobody assigned. Any Admin can, also for one another Admin took. 409 only if it is closed. Safe to call twice.
 
 **Request fields**
 

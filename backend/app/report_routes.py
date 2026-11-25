@@ -4,9 +4,9 @@ Help requests and hazard reports.
     POST /api/reports                          public, X-Phone-Id   send a help request or a hazard
     GET  /api/reports/mine                     public, X-Phone-Id   this phone's own reports and their status
     GET  /api/hazards/nearby                   public               hazards within the near-me range (approximate spot)
-    GET  /api/admin/reports                    admin                list for the Admin screens (poll ~10 s; ?mine, ?latitude&longitude, ?since)
-    POST /api/admin/reports/{id}/take          admin
-    POST /api/admin/reports/{id}/release       admin                give a report you took back to New
+    GET  /api/admin/reports                    admin                list for the Admin screens (poll ~10 s; ?status, ?mine, ?latitude&longitude, ?since)
+    POST /api/admin/reports/{id}/take          admin                also takes over a report another Admin is handling
+    POST /api/admin/reports/{id}/release       admin                give any open report back to New (yours or another Admin's)
     POST /api/admin/reports/{id}/resolve       admin                body: what_was_done
     POST /api/admin/reports/{id}/mark-false    admin                body: reason
     POST /api/admin/reports/{id}/verify        admin                hazards only
@@ -137,6 +137,8 @@ def nearby_hazards(
 @router.get("/api/admin/reports", response_model=AdminListOut)
 def admin_reports(
     include_closed: bool = Query(False, description="Also list resolved and false reports"),
+    status: Optional[Literal["new", "handling", "resolved", "all"]] = Query(
+        None, description="Only this status: new, handling, resolved (closed: resolved and false) or all (open and closed). Not given: open reports"),
     kind: Optional[Literal["help", "hazard"]] = Query(None),
     mine: bool = Query(False, description="Only reports you took (the Mine filter)"),
     latitude: Optional[float] = Query(None, ge=-90, le=90, description="With longitude: add distance_m to each item"),
@@ -151,6 +153,10 @@ def admin_reports(
     only, unless include_closed is set. A hazard is one line for all reports
     about the same place.
 
+    `status` (new, handling, resolved, all) lists only that status; `resolved` includes reports marked false and `all`
+    includes closed ones. Not given, you get the open reports (or everything with `include_closed`). When `status` is
+    given it decides, and `include_closed` adds nothing. It combines with `mine`, `kind`, `since` and the distance.
+
     `mine=true` keeps only the reports you took. Send `latitude` and `longitude` together to get
     `distance_m` on every item (the order stays most urgent first). For polling, send the last answer's
     `server_time` as `since`: you get only the items that changed since, and that includes reports that were
@@ -163,7 +169,7 @@ def admin_reports(
         since = since.astimezone(timezone.utc).replace(tzinfo=None)  # stored times are naive UTC
     data = report_service.admin_list(
         db, include_closed=include_closed, kind=kind, viewer=user.name, mine=mine,
-        lat=latitude, lng=longitude, since=since,
+        lat=latitude, lng=longitude, since=since, status=status,
     )
     data["since"] = since
     return admin_list_out(data)
@@ -171,13 +177,13 @@ def admin_reports(
 
 @router.post("/api/admin/reports/{report_id}/take", response_model=AdminReportOut)
 def take_report(report_id: int, request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    """Take it: New -> Being handled. 409 if someone else already has it. Safe to call twice."""
+    """Take it: New -> Being handled. If another Admin has it, you take it over (it is reassigned to you). 409 only if it is closed. Safe to call twice."""
     return admin_item_out(report_service.take(db, user, report_id, request))
 
 
 @router.post("/api/admin/reports/{report_id}/release", response_model=AdminReportOut)
 def release_report(report_id: int, request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    """Give back a report you took: Being handled -> New, nobody assigned. 409 if another Admin has it or it is closed. Safe to call twice."""
+    """Give a report back: Being handled -> New, nobody assigned. Any Admin can, also for one another Admin took. 409 only if it is closed. Safe to call twice."""
     return admin_item_out(report_service.release(db, user, report_id, request))
 
 

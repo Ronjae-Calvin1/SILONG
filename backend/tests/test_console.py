@@ -120,7 +120,6 @@ def test_taken_reports_show_the_admins_name_and_the_mine_filter_and_flag():
 def test_release_gives_the_report_back_to_new_and_is_audited():
     rid = send("help")
     assert act(HA, rid, "take").status_code == 200
-    assert act(HB, rid, "release").status_code == 409  # not yours
     item = act(HA, rid, "release").json()
     assert item["status"] == "new" and item["taken_by"] is None and item["is_new_help"] is True and item["is_mine"] is False
     assert listing(HA)["has_new_help"] is True
@@ -130,6 +129,7 @@ def test_release_gives_the_report_back_to_new_and_is_audited():
     assert act(HB, rid, "resolve", what_was_done="Helped on site").status_code == 200
     assert act(HB, rid, "release").status_code == 409  # closed
     assert act(HB, 999_999, "release").status_code == 404
+    assert act(HB, 999_999, "take").status_code == 404
 
 
 def test_release_works_for_a_hazard_group():
@@ -145,6 +145,166 @@ def test_release_works_for_a_hazard_group():
     finally:
         db.close()
     assert act(HA, a, "mark-false", reason="test hazard").status_code == 200
+
+
+# ---------------------------------------------------------------- 1b. takeover and release by another Admin
+
+def audit_detail(action, rid):
+    db = SessionLocal()
+    try:
+        rows = db.query(AuditLog).filter(AuditLog.action == action, AuditLog.target == f"report:{rid}").order_by(AuditLog.id).all()
+        return [(a.actor_name, json.loads(a.detail)) for a in rows]
+    finally:
+        db.close()
+
+
+def test_a_second_admin_can_take_over_a_report_and_the_audit_says_from_whom():
+    rid = send("help")
+    assert act(HA, rid, "take").status_code == 200
+    assert act(HA, rid, "take").status_code == 200  # same Admin again: a no-op, nothing logged
+    assert len(audit_detail("report.take", rid)) == 1
+    r = act(HB, rid, "take")
+    assert r.status_code == 200, r.text
+    item = r.json()
+    assert item["status"] == "being_handled" and item["taken_by"] == "Ben Admin" and item["is_mine"] is True
+    assert next(i for i in listing(HA)["items"] if i["id"] == rid)["is_mine"] is False  # Ana's own list: no longer hers
+    assert rid in [i["id"] for i in listing(HB, mine=True)["items"]]
+    assert rid not in [i["id"] for i in listing(HA, mine=True)["items"]]
+    entries = audit_detail("report.take", rid)
+    assert entries == [("Ana Admin", {"kind": "help"}), ("Ben Admin", {"kind": "help", "taken_over_from": "Ana Admin"})]
+    assert act(HB, rid, "take").status_code == 200  # Ben's second tap: still one takeover entry
+    assert len(audit_detail("report.take", rid)) == 2
+    # Any Admin can still close it afterwards.
+    assert act(HA, rid, "mark-false", reason="test report").status_code == 200  # any Admin can close it
+
+
+def test_a_second_admin_can_take_over_a_whole_hazard_group():
+    a = send("hazard")
+    b = send("hazard", where=(HOME[0] + 0.0003, HOME[1]))
+    assert act(HA, a, "take").status_code == 200
+    item = act(HB, b, "take").json()
+    assert item["taken_by"] == "Ben Admin" and item["report_count"] == 2
+    db = SessionLocal()
+    try:
+        rows = db.query(Report).filter(Report.group_id == a).all()
+        assert len(rows) == 2 and all(r.status == "being_handled" and r.taken_by == "Ben Admin" for r in rows)
+    finally:
+        db.close()
+    assert audit_detail("report.take", a)[-1] == ("Ben Admin", {"kind": "hazard", "taken_over_from": "Ana Admin"})
+    assert act(HA, a, "mark-false", reason="test hazard").status_code == 200
+
+
+def test_a_second_admin_can_release_a_report_and_the_audit_says_who_had_it():
+    rid = send("help")
+    assert act(HA, rid, "take").status_code == 200
+    item = act(HB, rid, "release").json()
+    assert item["status"] == "new" and item["taken_by"] is None and item["is_new_help"] is True
+    assert listing(HA)["has_new_help"] is True
+    assert audit_detail("report.release", rid) == [("Ben Admin", {"kind": "help", "released_by": "Ben Admin", "was_handled_by": "Ana Admin"})]
+    assert act(HB, rid, "release").status_code == 200  # already New: no-op, nothing logged
+    assert len(audit_detail("report.release", rid)) == 1
+    # Releasing your own report says so too.
+    assert act(HA, rid, "take").status_code == 200
+    assert act(HA, rid, "release").status_code == 200
+    assert audit_detail("report.release", rid)[-1] == ("Ana Admin", {"kind": "help", "released_by": "Ana Admin", "was_handled_by": "Ana Admin"})
+    assert act(HA, rid, "mark-false", reason="test report").status_code == 200
+
+
+def test_closed_reports_still_cannot_be_taken_or_released():
+    for how in ("resolve", "mark-false"):
+        rid = send("help")
+        assert act(HA, rid, "take").status_code == 200
+        assert (act(HA, rid, "resolve", what_was_done="Helped on site") if how == "resolve" else act(HA, rid, "mark-false", reason="test report")).status_code == 200
+        for who in (HA, HB):
+            assert act(who, rid, "take").status_code == 409
+            assert act(who, rid, "release").status_code == 409
+    assert act(NO_AUTH, rid, "take").status_code == 401
+    assert act(NO_AUTH, rid, "release").status_code == 401
+
+
+def test_handled_today_follows_a_takeover_and_a_release_by_another_admin():
+    make_user("Eli Admin")
+    make_user("Fay Admin")
+    HE, HF = auth("Eli Admin"), auth("Fay Admin")
+    kept, taken_over, released = send("help"), send("help"), send("help")
+    for rid in (kept, taken_over, released):
+        assert act(HE, rid, "take").status_code == 200
+    assert client.get("/api/admin/me/activity", headers=HE).json()["handled_today"] == 3
+    assert act(HF, taken_over, "take").status_code == 200  # Fay took it over from Eli
+    assert act(HF, released, "release").status_code == 200  # Fay gave it back
+    assert client.get("/api/admin/me/activity", headers=HE).json()["handled_today"] == 1
+    assert client.get("/api/admin/me/activity", headers=HF).json()["handled_today"] == 1  # the takeover; the release is not handling
+    for rid in (kept, taken_over, released):
+        act(HA, rid, "mark-false", reason="test report")
+
+
+# ---------------------------------------------------------------- 1c. status filter
+
+def ids(data):
+    return [i["id"] for i in data["items"]]
+
+
+def test_the_status_filter_alone():
+    n, h, res, fls = send("help"), send("help"), send("help"), send("help")
+    assert act(HA, h, "take").status_code == 200
+    assert act(HA, res, "take").status_code == 200
+    assert act(HA, res, "resolve", what_was_done="Helped on site").status_code == 200
+    assert act(HB, fls, "mark-false", reason="test report").status_code == 200
+    mine_ids = {n, h, res, fls}
+    new_ids = set(ids(listing(status="new"))) & mine_ids
+    assert new_ids == {n}
+    assert all(i["status"] == "new" for i in listing(status="new")["items"])
+    assert set(ids(listing(status="handling"))) & mine_ids == {h}
+    assert all(i["status"] == "being_handled" for i in listing(status="handling")["items"])
+    resolved = listing(status="resolved")
+    assert set(ids(resolved)) & mine_ids == {res, fls}  # closed: resolved and marked false
+    assert {i["status"] for i in resolved["items"]} <= {"resolved", "false"}
+    assert set(ids(listing(status="all"))) & mine_ids == mine_ids  # open and closed together
+    # No status: the open reports, as before; include_closed still adds the closed ones.
+    assert set(ids(listing())) & mine_ids == {n, h}
+    assert set(ids(listing(include_closed=True))) & mine_ids == mine_ids
+    # When status is given, include_closed adds nothing.
+    assert ids(listing(status="new", include_closed=True)) == ids(listing(status="new"))
+    assert ids(listing(status="resolved", include_closed=False)) == ids(resolved)
+    # The red alert and the latest id still cover everything, whatever the filter is.
+    assert listing(status="resolved")["new_help_count"] == listing()["new_help_count"]
+    assert listing(status="resolved")["latest_report_id"] == listing()["latest_report_id"]
+    assert client.get("/api/admin/reports", headers=HA, params={"status": "open"}).status_code == 422
+    assert client.get("/api/admin/reports", headers=NO_AUTH, params={"status": "new"}).status_code == 401
+    for rid in (n, h):
+        act(HA, rid, "mark-false", reason="test report")
+
+
+def test_the_status_filter_combines_with_mine_kind_since_and_distance():
+    a_h, a_n, b_h = send("help", where=NEAR), send("help", where=FAR), send("help", where=NEAR)
+    haz = send("hazard", where=(HOME[0] + 0.02, HOME[1] + 0.02))
+    assert act(HA, a_h, "take").status_code == 200
+    assert act(HB, b_h, "take").status_code == 200
+    assert act(HA, haz, "take").status_code == 200
+    handling_mine = ids(listing(HA, status="handling", mine=True))
+    assert a_h in handling_mine and haz in handling_mine and b_h not in handling_mine and a_n not in handling_mine
+    assert b_h in ids(listing(HA, status="handling")) and b_h in ids(listing(HB, status="handling", mine=True))
+    assert ids(listing(HA, status="new", mine=True)) == []  # mine are always being handled
+    assert haz not in ids(listing(HA, status="handling", mine=True, kind="help")) and a_h in ids(listing(HA, status="handling", mine=True, kind="help"))
+    # Closed ones of mine: status=resolved with mine.
+    assert act(HA, a_h, "resolve", what_was_done="Helped on site").status_code == 200
+    assert a_h in ids(listing(HA, status="resolved", mine=True))
+    assert b_h not in ids(listing(HA, status="resolved", mine=True))
+    assert a_h not in ids(listing(HA, status="handling", mine=True))
+    # Distance: still added, and only the filtered items are listed.
+    far_new = listing(HA, status="new", latitude=HOME[0], longitude=HOME[1])
+    assert a_n in ids(far_new) and all(i["status"] == "new" and i["distance_m"] is not None for i in far_new["items"])
+    # since: only what changed, narrowed to the status (a closed item is not in a "handling" poll).
+    snapshot = listing(HA)["server_time"]
+    assert act(HB, b_h, "release").status_code == 200  # back to New: changed
+    assert act(HA, haz, "resolve", what_was_done="Cleared").status_code == 200
+    changed_new = ids(listing(HA, status="new", since=snapshot))
+    assert b_h in changed_new and haz not in changed_new
+    assert haz in ids(listing(HA, status="resolved", since=snapshot))
+    assert ids(listing(HA, status="handling", since=snapshot)) == []
+    assert ids(listing(HA, status="resolved", mine=True, since=snapshot)) == [haz]
+    for rid in (a_n, b_h):
+        act(HA, rid, "mark-false", reason="test report")
 
 
 # ---------------------------------------------------------------- 7. distance and since

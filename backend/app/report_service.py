@@ -46,6 +46,15 @@ HELP, HAZARD = "help", "hazard"
 NEW, BEING_HANDLED, RESOLVED, FALSE = "new", "being_handled", "resolved", "false"
 OPEN = (NEW, BEING_HANDLED)
 
+# The `status` filter of the Admin list. "resolved" is every closed report (resolved and marked false), the same
+# grouping the sender sees (PUBLIC_STATUS) and what include_closed already lists; "all" is open and closed together.
+STATUS_FILTER = {
+    "new": (NEW,),
+    "handling": (BEING_HANDLED,),
+    "resolved": (RESOLVED, FALSE),
+    "all": (NEW, BEING_HANDLED, RESOLVED, FALSE),
+}
+
 # What the SENDER sees. A report marked false shows as Resolved: the sender
 # gets the three words from the design, and never the reason.
 PUBLIC_STATUS = {NEW: "new", BEING_HANDLED: "being_handled", RESOLVED: "resolved", FALSE: "resolved"}
@@ -332,6 +341,7 @@ def _item(rows: List[Report], viewer: Optional[str] = None) -> dict:
 def admin_list(
     db: Session, include_closed: bool = False, kind: Optional[str] = None, viewer: Optional[str] = None,
     mine: bool = False, lat: Optional[float] = None, lng: Optional[float] = None, since: Optional[datetime] = None,
+    status: Optional[str] = None,
 ) -> dict:
     """
     For the Admin screens (poll about every RESPONDER_REFRESH_SECONDS).
@@ -342,7 +352,11 @@ def admin_list(
     lat, lng  each item gets `distance_m` from that point (the list order stays most-urgent-first).
     since     only items that changed at or after that time (naive UTC). Closed items that changed are included
               too, so a polling screen can drop a report another Admin just closed. Use the last `server_time`.
+    status    new, handling, resolved (closed: resolved and marked false) or all (open and closed). Not given: open
+              reports only, or everything with include_closed, as before. When given it decides which statuses are
+              listed and include_closed has no further say. It combines with mine, kind, since and distance.
     """
+    wanted = STATUS_FILTER[status] if status is not None else None
     server_time = _now()  # taken BEFORE the query: a change made while it runs is seen by the next poll
     q = db.query(Report)
     if since is not None:
@@ -355,7 +369,9 @@ def admin_list(
             rows = [r for r in rows if r.kind == kind]
         rows.sort(key=lambda r: r.id)
     else:
-        if not include_closed:
+        if wanted is not None:
+            q = q.filter(Report.status.in_(wanted))
+        elif not include_closed:
             q = q.filter(Report.status.in_(OPEN))
         if kind:
             q = q.filter(Report.kind == kind)
@@ -363,6 +379,8 @@ def admin_list(
 
     items = [_item([r], viewer) for r in rows if r.kind == HELP]
     items += [_item(g, viewer) for g in _group_rows([r for r in rows if r.kind == HAZARD]).values()]
+    if wanted is not None:  # also narrows the `since` list (a group is always in one state)
+        items = [i for i in items if i["status"] in wanted]
     if mine:
         items = [i for i in items if i["taken_by"] is not None and i["taken_by"] == viewer]
     if lat is not None and lng is not None:
@@ -432,25 +450,34 @@ def _target(rows: List[Report]) -> str:
 
 
 def take(db: Session, user: User, report_id: int, request: Optional[Request]) -> dict:
+    """
+    Take it: New -> Being handled, assigned to the caller. If another Admin is handling it, the caller takes it
+    over (reassigned, and the audit detail says `taken_over_from`), so a report is never stuck on an Admin who
+    went offline. A second tap by the same Admin does nothing. Only a closed report is refused (409).
+    """
     rows = _load(db, report_id)
     _require_open(rows)
     first = rows[0]
+    previous = None
     if first.status == BEING_HANDLED:
         if first.taken_by == user.name:  # a second tap: nothing to do
             return _item(rows, user.name)
-        raise ReportError(409, f"{first.taken_by} is already handling this report.")
+        previous = first.taken_by
     now = _now()
     for r in rows:
         r.status, r.taken_by, r.taken_at, r.updated_at = BEING_HANDLED, user.name, now, now
-    audit.record(db, user, "report.take", target=_target(rows), detail={"kind": first.kind}, request=request)
+    detail = {"kind": first.kind}
+    if previous is not None:
+        detail["taken_over_from"] = previous
+    audit.record(db, user, "report.take", target=_target(rows), detail=detail, request=request)
     db.commit()
     return _item(rows, user.name)
 
 
 def release(db: Session, user: User, report_id: int, request: Optional[Request]) -> dict:
     """
-    Give a report you took back: Being handled -> New, nobody assigned. Only the Admin who took it can
-    (409 for anyone else, who can still take it over by asking them). Safe to call twice: a report that is
+    Give a report back: Being handled -> New, nobody assigned. Any Admin can, also for a report another Admin
+    took (the audit detail has `released_by` and `was_handled_by`). Safe to call twice: a report that is
     already New is returned as it is. A closed report cannot be released (409).
     """
     rows = _load(db, report_id)
@@ -458,12 +485,14 @@ def release(db: Session, user: User, report_id: int, request: Optional[Request])
     first = rows[0]
     if first.status == NEW:
         return _item(rows, user.name)
-    if first.taken_by != user.name:
-        raise ReportError(409, f"{first.taken_by} is handling this report. Only they can release it.")
+    previous = first.taken_by
     now = _now()
     for r in rows:
         r.status, r.taken_by, r.taken_at, r.updated_at = NEW, None, None, now
-    audit.record(db, user, "report.release", target=_target(rows), detail={"kind": first.kind}, request=request)
+    audit.record(
+        db, user, "report.release", target=_target(rows),
+        detail={"kind": first.kind, "released_by": user.name, "was_handled_by": previous}, request=request,
+    )
     db.commit()
     return _item(rows, user.name)
 

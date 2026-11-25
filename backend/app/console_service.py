@@ -46,13 +46,17 @@ def my_activity(db: Session, user: User, limit: int) -> dict:
     mine = db.query(AuditLog).filter(AuditLog.actor_id == user.id, ~AuditLog.action.like("auth.%"))
     items = mine.order_by(AuditLog.id.desc()).limit(limit).all()
 
-    # A report counts once however many times it was touched. A take that was released again does not count.
+    # A report counts once however many times it was touched. A take that was released again does not count, and
+    # neither does one that another Admin took over or released (their entries are read for the same reports).
     state: Dict[str, bool] = {}  # target -> counts as handled
-    for row in mine.filter(AuditLog.created_at >= start, AuditLog.action.in_((_TAKE, _RELEASE) + _CLOSERS)).order_by(AuditLog.id).all():
-        if row.target is None:
-            continue
-        if row.action == _RELEASE:
-            state[row.target] = False
-        else:
-            state[row.target] = True
+    handling = (AuditLog.created_at >= start, AuditLog.action.in_((_TAKE, _RELEASE) + _CLOSERS))
+    targets = [t for (t,) in mine.filter(*handling).with_entities(AuditLog.target).distinct() if t]
+    if targets:
+        for row in db.query(AuditLog).filter(*handling, AuditLog.target.in_(targets)).order_by(AuditLog.id).all():
+            if row.action == _RELEASE:
+                state[row.target] = False
+            elif row.actor_id == user.id:
+                state[row.target] = True
+            elif row.action == _TAKE:  # somebody else took it over from me
+                state[row.target] = False
     return dict(server_time=now, handled_today=sum(1 for v in state.values() if v), today_starts_at=start, items=items)
