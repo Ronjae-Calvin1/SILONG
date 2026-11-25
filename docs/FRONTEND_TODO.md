@@ -291,11 +291,11 @@ Route `/admin` exists in `App.tsx`. Replace the placeholder `AdminSignInPage`.
 
 Reports list:
 
-- [ ] `GET /api/admin/reports` (query `include_closed`, `kind`). Poll every `refresh_seconds` from the answer (10), not a fixed number.
+- [ ] `GET /api/admin/reports` (query `status` = new, handling, resolved or all; `include_closed`, `kind`). Poll every `refresh_seconds` from the answer (10), not a fixed number.
 - [ ] Red "Needs help" alert while `has_new_help` is true. `new_help_count` and `latest_report_id` are in the answer.
 - [ ] Item fields: `id`, `kind`, `status` (`new`, `being_handled`, `resolved`, `false`), `is_new_help`, `category`, `categories`, `people`, `can_move`, `latitude`, `longitude`, `contacts`, `notes`, `created_at`, `updated_at`, `taken_by`, `closed_by`, `resolution_note`, `false_reason`, `verified`, `verified_by`, `hazard_state` (`pending`, `unconfirmed`, `verified`), `phones`, `report_count`.
 - [ ] A hazard is one line for all reports about the same place (within 100 m). Show `report_count`, `phones`, every `categories` value, all `contacts` and `notes`.
-- [ ] Take: `POST /api/admin/reports/{report_id}/take`, no body. 409 means someone else has it. Safe to call twice.
+- [ ] Take: `POST /api/admin/reports/{report_id}/take`, no body. If another Admin has it you take it over (it is reassigned to you); 409 only means it is closed. Safe to call twice. Release (`.../release`) works for any Admin on any open report.
 - [ ] Call: a `tel:` link from `contacts`. No endpoint.
 - [ ] Navigate: a link with `latitude` and `longitude`. No endpoint. Which maps app is not decided. (check)
 - [ ] Resolve: `POST /api/admin/reports/{report_id}/resolve` with `what_was_done` (3 to 500 characters). Ask the responder what was done first.

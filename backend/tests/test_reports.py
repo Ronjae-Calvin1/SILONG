@@ -361,10 +361,11 @@ def test_take_resolve_and_the_sender_sees_the_status_change():
     r = client.post(f"/api/admin/reports/{rid}/take", headers=H_ADMIN_B)
     assert r.status_code == 200 and r.json()["status"] == "being_handled" and r.json()["taken_by"] == "Rey Admin"
     assert mine(phone)[0]["status"] == "being_handled" and mine(phone)[0]["label"] == "Being handled"
-    # Taking it twice is fine for the same person; someone else is told who has it.
+    # Taking it twice is fine for the same person; another Admin takes it over (see test_console.py).
     assert client.post(f"/api/admin/reports/{rid}/take", headers=H_ADMIN_B).status_code == 200
     other = client.post(f"/api/admin/reports/{rid}/take", headers=H_ADMIN_C)
-    assert other.status_code == 409 and "Rey Admin" in other.json()["detail"]
+    assert other.status_code == 200 and other.json()["taken_by"] != "Rey Admin"
+    assert client.post(f"/api/admin/reports/{rid}/take", headers=H_ADMIN_B).json()["taken_by"] == "Rey Admin"  # and back
 
     # Resolve needs what was done.
     assert client.post(f"/api/admin/reports/{rid}/resolve", headers=H_ADMIN_B, json={}).status_code == 422

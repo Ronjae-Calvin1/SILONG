@@ -2,6 +2,27 @@
 
 Short log of what changed in each update, newest first.
 
+## Update 15 — Takeover and the status filter (backend only)
+Stops a report from getting stuck on an Admin who went offline, and adds the status filter the console design asks for. No path or
+answer shape changed; the only new thing in an answer is the audit detail below.
+- **Takeover.** `POST /api/admin/reports/{id}/take`: any Admin can take a report another Admin is handling; it is reassigned to the
+  caller (a whole hazard group moves together). The audit entry `report.take` has `taken_over_from` (the previous Admin's name) in its
+  detail. A second tap by the same Admin is still a no-op and logs nothing.
+- **Release by anyone.** `POST /api/admin/reports/{id}/release`: any Admin can give an open report back to New, also one another Admin
+  took. The audit entry `report.release` has `released_by` and `was_handled_by` in its detail. Already New: no-op, nothing logged.
+- **Still 409:** only a closed report (resolved or marked false), for both take and release. The old "X is already handling this
+  report" and "only they can release it" errors are gone.
+- **Status filter.** `GET /api/admin/reports?status=new|handling|resolved|all` (anything else is 422). **`resolved` means every
+  closed report, resolved and marked false**, the same grouping the sender sees and what `include_closed` already lists; **`all` is open
+  and closed together**. Not given: open reports only, or everything with `include_closed`, exactly as before. When `status` is given it
+  decides the statuses and `include_closed` adds nothing. It combines with `mine`, `kind`, `since` (only changed items, narrowed to the
+  status) and `latitude`/`longitude`. `new_help_count`, `has_new_help` and `latest_report_id` still cover everything.
+- **`handled_today`** (`GET /api/admin/me/activity`) now drops a report another Admin took over from you or released, so it is
+  counted for the Admin who has it.
+- Tests: new takeover, release, closed-409, audit detail, hazard group, `handled_today` and status-filter checks in `tests/test_console.py`;
+  two old checks that expected the 409 for another Admin were changed. `docs/API.md` regenerated.
+- Not done: no frontend, CSS or chatbot changes.
+
 ## Update 14 — Admin console gaps (backend only)
 Filled the gaps between the admin console design (the 38-page mockup and its notes) and the API. Everything below is additive:
 no path, method or answer shape that existed changed, and every public answer is the same plus, at most, new optional fields.

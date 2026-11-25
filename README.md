@@ -489,8 +489,8 @@ data gives the phone a new one. Only its SHA-256 hash is stored.
 | POST | `/api/reports` | Public (`X-Phone-Id`) | Send a report (fields above). 201 (200 if this phone already reported this hazard) |
 | GET | `/api/reports/mine` | Public (`X-Phone-Id`) | This phone's own reports, newest first: its own location, its `category` and a status. No contact, no people, no handler, no reason |
 | GET | `/api/hazards/nearby` | Public | `latitude`, `longitude` in the query. Unconfirmed or Verified hazards within the near-me range: an approximate spot, a status and the `category`, nothing else |
-| GET | `/api/admin/reports` | Admin | The list for the Admin screens (poll about every 10 seconds). `include_closed`, `kind` filters |
-| POST | `/api/admin/reports/{id}/take` | Admin | New to Being handled. 409 if another person already has it |
+| GET | `/api/admin/reports` | Admin | The list for the Admin screens (poll about every 10 seconds). `status` (new, handling, resolved, all), `include_closed`, `kind`, `mine`, `since` filters |
+| POST | `/api/admin/reports/{id}/take` | Admin | New to Being handled. Another Admin's report is taken over (reassigned to you); 409 only if it is closed |
 | POST | `/api/admin/reports/{id}/resolve` | Admin | Needs `what_was_done` |
 | POST | `/api/admin/reports/{id}/mark-false` | Admin | Needs a `reason` |
 | POST | `/api/admin/reports/{id}/verify` | Admin | Hazards only. The public then sees it as Verified |
