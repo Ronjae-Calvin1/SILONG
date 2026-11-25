@@ -27,7 +27,7 @@ class ReportIn(BaseModel):
     category: str  # required: what the hazard or need is (1 to 40 characters), e.g. "Flooded road", "Trapped"
     latitude: float = Field(allow_inf_nan=False)
     longitude: float = Field(allow_inf_nan=False)
-    contact: Optional[str] = None  # required for a help request, optional for a hazard; responders and Super admins only
+    contact: Optional[str] = None  # required for a help request, optional for a hazard; Admins only
     note: Optional[str] = None  # optional, short
     people: Optional[StrictInt] = Field(default=None, ge=1, le=config.REPORT_PEOPLE_MAX)  # help requests only
     can_move: Optional[Literal["yes", "no", "unsure"]] = None  # help requests only
@@ -53,7 +53,7 @@ class ReportIn(BaseModel):
     @model_validator(mode="after")
     def _kind_rules(self):
         if self.kind == "help" and not self.contact:
-            raise ValueError("A help request needs a contact (a phone number the responders can call).")
+            raise ValueError("A help request needs a contact (a phone number the Admins can call).")
         if self.kind == "hazard":
             if self.people is not None:
                 raise ValueError("people can only be sent with a help request, not with a hazard report.")
@@ -131,8 +131,8 @@ class MarkFalseIn(BaseModel):
         return v
 
 
-class ResponderReportOut(BaseModel):
-    """One line of the responder list: a help request, or a hazard (all reports about the same place)."""
+class AdminReportOut(BaseModel):
+    """One line of the Admin list: a help request, or a hazard (all reports about the same place)."""
     id: int  # use this id in the action endpoints
     kind: Literal["help", "hazard"]
     status: Literal["new", "being_handled", "resolved", "false"]
@@ -158,13 +158,13 @@ class ResponderReportOut(BaseModel):
     report_count: int
 
 
-class ResponderListOut(BaseModel):
+class AdminListOut(BaseModel):
     server_time: datetime
     refresh_seconds: int  # poll about this often
     new_help_count: int  # help requests nobody has taken yet
     has_new_help: bool  # true = show the red "Needs help" alert
     latest_report_id: Optional[int] = None
-    items: List[ResponderReportOut]
+    items: List[AdminReportOut]
 
 
 def _out_dt(d: dict, *names: str) -> dict:
@@ -173,15 +173,15 @@ def _out_dt(d: dict, *names: str) -> dict:
     return d
 
 
-def responder_item_out(item: dict) -> ResponderReportOut:
-    return ResponderReportOut(**_out_dt(dict(item), "created_at", "updated_at"))
+def admin_item_out(item: dict) -> AdminReportOut:
+    return AdminReportOut(**_out_dt(dict(item), "created_at", "updated_at"))
 
 
-def responder_list_out(data: dict) -> ResponderListOut:
+def admin_list_out(data: dict) -> AdminListOut:
     data = dict(data)
     data["server_time"] = _utc(data["server_time"])
-    data["items"] = [responder_item_out(i) for i in data["items"]]
-    return ResponderListOut(**data)
+    data["items"] = [admin_item_out(i) for i in data["items"]]
+    return AdminListOut(**data)
 
 
 def my_report_out(d: dict) -> MyReportOut:

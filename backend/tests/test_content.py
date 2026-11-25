@@ -46,10 +46,10 @@ client = TestClient(app)
 PASSWORD = "correct horse 1"
 
 
-def make_user(name, role):
+def make_user(name):
     db = SessionLocal()
     try:
-        return accounts.create_user(db, name, PASSWORD, role, actor="test setup").id
+        return accounts.create_user(db, name, PASSWORD, actor="test setup").id
     finally:
         db.close()
 
@@ -61,9 +61,9 @@ def auth(name):
 
 
 ADMIN_NAME = "Cara Content Admin"
-make_user(ADMIN_NAME, "super_admin")
-make_user("Rey Content Responder", "responder")
-H_ADMIN, H_RESP = auth(ADMIN_NAME), auth("Rey Content Responder")
+make_user(ADMIN_NAME)
+make_user("Rey Content Admin")
+H_ADMIN, H_ADMIN_B = auth(ADMIN_NAME), auth("Rey Content Admin")
 NO_AUTH = {}
 
 
@@ -230,12 +230,10 @@ def test_a_day_with_a_missing_number_is_left_out_not_invented():
 
 # ---------------------------------------------------------------- permissions
 
-def test_only_a_super_admin_can_change_advisories_sources_and_numbers():
+def test_every_admin_can_change_advisories_sources_and_numbers_and_the_public_cannot():
     adv = new_advisory(title="Permission check advisory")["id"]
     num = client.post("/api/admin/emergency-numbers", json={"number": "8888", "name": "Permission check"}, headers=H_ADMIN).json()["id"]
     src = client.post("/api/admin/advisory-sources", json={"name": "Permission Check Agency"}, headers=H_ADMIN).json()["id"]
-    before = table_counts()
-    audit_before = len(audit_actions())
     calls = [
         ("post", "/api/admin/advisories", ADV),
         ("patch", f"/api/admin/advisories/{adv}", {"title": "Changed"}),
@@ -251,14 +249,26 @@ def test_only_a_super_admin_can_change_advisories_sources_and_numbers():
         ("put", "/api/admin/emergency-numbers/order", {"ids": [num]}),
         ("delete", f"/api/admin/emergency-numbers/{num}", None),
     ]
+    def call(method, path, body, headers):
+        return client.request(method.upper(), path, json=body, headers=headers) if body is not None else client.request(method.upper(), path, headers=headers)
+
+    # The public (no sign-in, or a made-up token) is refused with a 401 and nothing changes.
+    before, audit_before = table_counts(), len(audit_actions())
     for method, path, body in calls:
-        for who, headers, status in (("the public", NO_AUTH, 401), ("a responder", H_RESP, 403)):
-            r = client.request(method.upper(), path, json=body, headers=headers) if body is not None else client.request(method.upper(), path, headers=headers)
-            assert r.status_code == status, f"{who} {method} {path}: {r.status_code} {r.text}"
-    assert table_counts() == before  # nothing changed
-    assert len(audit_actions()) == audit_before  # and nothing was logged as done
-    # The Super admin passes the same checks.
-    assert client.patch(f"/api/admin/advisories/{adv}", json={"title": "Changed by admin"}, headers=H_ADMIN).status_code == 200
+        for headers in (NO_AUTH, {"Authorization": "Bearer not-a-real-token"}):
+            r = call(method, path, body, headers)
+            assert r.status_code == 401, f"{method} {path}: {r.status_code} {r.text}"
+    assert table_counts() == before and len(audit_actions()) == audit_before
+
+    # Every Admin passes the same checks (nothing is locked by role), here the second Admin.
+    audit_before = len(audit_actions())
+    for method, path, body in calls:
+        if path.endswith("/order"):  # the order must list every number
+            body = {"ids": [n["id"] for n in client.get("/api/emergency-numbers").json()]}
+        r = call(method, path, body, H_ADMIN_B)
+        assert r.status_code in (200, 201, 204), f"{method} {path}: {r.status_code} {r.text}"
+    done = [a for a in audit_actions()[audit_before:] if a[1] == "Rey Content Admin"]
+    assert len(done) >= len(calls) - 1  # each write is logged under that Admin's name (the one read is not)
 
 
 # ---------------------------------------------------------------- advisories
@@ -292,7 +302,7 @@ def test_only_listed_sources_are_official_and_the_list_is_editable():
     assert by_id[off]["is_official"] is True and by_id[other]["is_official"] is False
     only = [x["id"] for x in client.get("/api/advisories?official=true").json()]
     assert off in only and other not in only
-    # a Super admin adds the page to the list: it counts now, also for the old advisory
+    # an Admin adds the page to the list: it counts now, also for the old advisory
     s = client.post("/api/admin/advisory-sources", json={"name": "Batangas News Page"}, headers=H_ADMIN)
     assert s.status_code == 201
     assert client.post("/api/admin/advisory-sources", json={"name": "batangas   news page"}, headers=H_ADMIN).status_code == 409
@@ -325,7 +335,7 @@ def test_advisory_fields_are_checked_with_plain_messages():
 
 # ---------------------------------------------------------------- emergency numbers
 
-def test_emergency_numbers_start_with_911_only_and_a_super_admin_edits_them():
+def test_emergency_numbers_start_with_911_only_and_an_admin_edits_them():
     start = client.get("/api/emergency-numbers").json()
     assert [(n["number"], n["name"]) for n in start][:1] == [("911", "National Emergency")]
     assert not any(n["number"] in ("143", "(043) 723-0165") for n in start)  # nothing unconfirmed was copied in
@@ -367,7 +377,7 @@ def test_every_admin_action_is_in_the_audit_log_with_the_persons_name():
     client.put("/api/admin/emergency-numbers/order", json={"ids": list(reversed(ids))}, headers=H_ADMIN)
     client.delete(f"/api/admin/emergency-numbers/{num}", headers=H_ADMIN)
 
-    mine = {action for action, name, role, target in audit_actions() if name == ADMIN_NAME and role == "super_admin"}
+    mine = {action for action, name, role, target in audit_actions() if name == ADMIN_NAME and role == "admin"}
     wanted = {
         "advisory.create", "advisory.update", "advisory.pin", "advisory.unpin", "advisory.delete",
         "advisory_source.add", "advisory_source.update", "advisory_source.remove",
@@ -634,7 +644,7 @@ def test_an_older_database_still_starts_gets_the_new_tables_and_keeps_its_data()
     assert out["sources"] == ["Batangas City CDRRMO", "NDRRMC", "PAGASA"]
     assert out["old_cache"] == 1 and out["users"] == 1 and out["old_audit"] == 1  # nothing old was lost
 
-    # The starting rows are made once: what a Super admin removed does not come back on the next start.
+    # The starting rows are made once: what an Admin removed does not come back on the next start.
     out2 = json.loads(_run(OLD_DB_START, old_db).strip().splitlines()[-1])
     assert out2["numbers"] == [] and out2["sources"] == ["Batangas City CDRRMO", "PAGASA"]
     assert out2["old_cache"] == 1 and out2["users"] == 1

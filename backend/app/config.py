@@ -87,14 +87,14 @@ DUPLICATE_METERS = 30
 MAX_CAPACITY_LIMIT = int(_number("MAX_CAPACITY_LIMIT", 50_000))
 
 # Adding a place has one allowance per IP and one per phone ID. (Removing and
-# restoring are staff actions now: signed in and audited, so they are not limited here.)
+# restoring are Admin actions now: signed in and audited, so they are not limited here.)
 MANAGE_MAX_ACTIONS = int(_number("MANAGE_MAX_ACTIONS", 10))
 MANAGE_WINDOW_SECONDS = int(_number("MANAGE_WINDOW_SECONDS", 600))
 
 # ---- Places: approval and removal (redesign part 3) ----
-# A center removed by a responder or Super admin is hidden for everyone and kept this many
+# A center removed by an Admin is hidden for everyone and kept this many
 # days, then deleted together with its status history (see place_service.purge_removed_centers).
-# A Super admin can delete one sooner. Places a responder rejected are deleted after the same time.
+# An Admin can delete one sooner. Places an Admin rejected are deleted after the same time.
 REMOVED_CENTERS_KEEP_DAYS = int(_number("REMOVED_CENTERS_KEEP_DAYS", 30))
 
 # One phone can have at most this many added places waiting for approval at the same time.
@@ -105,12 +105,12 @@ PENDING_PLACES_PER_PHONE = int(_number("PENDING_PLACES_PER_PHONE", 5))
 # made on each start (hashes still hide the IP; they just stop matching old ones).
 IP_HASH_SALT = os.getenv("IP_HASH_SALT") or os.urandom(16).hex()
 
-# ---- Staff accounts (Responder, Super admin) ----
-# Staff sessions end after this many minutes without any request.
+# ---- Admin accounts ----
+# Admin sessions end (the name STAFF_IDLE_MINUTES is kept so existing .env files keep working) after this many minutes without any request.
 STAFF_IDLE_MINUTES = int(_number("STAFF_IDLE_MINUTES", 30))
 # This many wrong passwords in a row lock the account...
 SIGNIN_MAX_WRONG_TRIES = int(_number("SIGNIN_MAX_WRONG_TRIES", 5))
-# ...for this many minutes. A Super admin can unlock it sooner.
+# ...for this many minutes. An Admin can unlock it sooner.
 SIGNIN_LOCK_MINUTES = int(_number("SIGNIN_LOCK_MINUTES", 15))
 
 # Per-IP limit on sign-in attempts of any account (slows guessing across many
@@ -118,7 +118,7 @@ SIGNIN_LOCK_MINUTES = int(_number("SIGNIN_LOCK_MINUTES", 15))
 SIGNIN_IP_MAX_ATTEMPTS = int(_number("SIGNIN_IP_MAX_ATTEMPTS", 20))
 SIGNIN_IP_WINDOW_SECONDS = int(_number("SIGNIN_IP_WINDOW_SECONDS", 600))
 
-# Shortest password a Super admin can give a new account (a typo guard, not a policy).
+# Shortest password an Admin can give a new account (a typo guard, not a policy).
 MIN_PASSWORD_LENGTH = int(_number("MIN_PASSWORD_LENGTH", 8))
 
 # ---- Help requests and hazard reports (redesign part 2) ----
@@ -126,7 +126,7 @@ MIN_PASSWORD_LENGTH = int(_number("MIN_PASSWORD_LENGTH", 8))
 REPORTS_KEEP_DAYS = int(_number("REPORTS_KEEP_DAYS", 30))
 
 # A hazard shows to the public as "Unconfirmed" once this many DIFFERENT phones
-# reported it. A responder or Super admin can verify it sooner.
+# reported it. An Admin can verify it sooner.
 HAZARD_UNCONFIRMED_PHONES = int(_number("HAZARD_UNCONFIRMED_PHONES", 3))
 
 # After this many reports marked false from one phone, that phone cannot send reports.
@@ -135,7 +135,8 @@ FALSE_REPORTS_BEFORE_BLOCK = int(_number("FALSE_REPORTS_BEFORE_BLOCK", 3))
 # "Near me" range for hazard reports, in kilometres.
 NEAR_ME_KM = _number("NEAR_ME_KM", 1)
 
-# The responder screens poll about this often (seconds). Sent to the screen with every list.
+# The Admin screens poll about this often (seconds). Sent to the screen with every list.
+# (The name RESPONDER_REFRESH_SECONDS is kept so existing .env files keep working.)
 RESPONDER_REFRESH_SECONDS = int(_number("RESPONDER_REFRESH_SECONDS", 10))
 
 # Hazard reports closer than this (metres) to an open hazard are the same hazard.
@@ -175,7 +176,7 @@ WEATHER_API_URL = os.getenv("WEATHER_API_URL", "https://api.open-meteo.com/v1/fo
 
 # ---- Advisories and emergency numbers (redesign part 4) ----
 # Only these sources count as "official" on first start. After that the list lives in the
-# database (table advisory_sources) and a Super admin edits it; changing this tuple later
+# database (table advisory_sources) and an Admin edits it; changing this tuple later
 # changes nothing on a database that already has a list.
 DEFAULT_OFFICIAL_SOURCES = ("PAGASA", "NDRRMC", "Batangas City CDRRMO")
 ADVISORY_TITLE_MAX = 120
@@ -204,7 +205,7 @@ WEATHER_RETRY_SECONDS = _number("WEATHER_RETRY_SECONDS", 30)
 
 # ---- Operations (redesign part 5) ----
 # A phone blocked after too many false reports is unblocked automatically after this many days.
-# 0 (the default) means a block never expires; a Super admin can still unblock a phone by hand.
+# 0 (the default) means a block never expires; an Admin can still unblock a phone by hand.
 BLOCK_EXPIRES_DAYS = int(_number("BLOCK_EXPIRES_DAYS", 0))
 
 # While the server runs, one background task purges old reports, removed centers, rejected places,

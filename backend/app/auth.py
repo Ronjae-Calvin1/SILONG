@@ -1,20 +1,18 @@
 """
-The server-side role check. Use these as FastAPI dependencies on admin routes:
+The server-side sign-in check. There is ONE role, Admin, so there is one dependency to use on every
+admin route:
 
-    from .auth import require_responder, require_super_admin
+    from .auth import require_admin
 
-    @router.get("/api/something")                       # any staff (responder or Super admin)
-    def something(user: User = Depends(require_responder)): ...
+    @router.get("/api/admin/something")
+    def something(user: User = Depends(require_admin)): ...
 
-    @router.get("/api/admin/something")                 # Super admin only
-    def something(user: User = Depends(require_super_admin)): ...
+For a PUBLIC route where a signed-in Admin counts as an official (a status update), use
+`optional_staff`: it gives the Admin or None and never raises.
 
-For a PUBLIC route where a signed-in staff member counts as an official (a status update), use
-`optional_staff`: it gives the user or None and never raises.
-
-No token -> 401. Expired (idle) or unknown token -> 401. Right sign-in but the
-role is too low -> 403. The check happens on the server, whatever the screens show.
-A Super admin passes every check a responder passes.
+No token -> 401. Expired (idle) or unknown token -> 401. A live sign-in whose account is locked or
+gone -> 403. Nothing is locked by role: every Admin passes every check. The check happens on the
+server, whatever the screens show.
 """
 from typing import Optional
 
@@ -37,36 +35,28 @@ def bearer_token(authorization: Optional[str] = Header(default=None)) -> Optiona
 
 
 def current_user(token: Optional[str] = Depends(bearer_token), db: Session = Depends(get_db)) -> User:
-    """Any signed-in staff member. Also moves their idle timer forward."""
+    """Any signed-in account. Also moves their idle timer forward."""
     return accounts.user_for_token(db, token)
+
+
+def require_admin(user: User = Depends(current_user)) -> User:
+    """The one check for admin routes: a signed-in Admin (401 without a good sign-in, 403 for a locked or removed account)."""
+    if user.role != accounts.ADMIN:
+        raise HTTPException(status_code=403, detail="You do not have permission to do this.")
+    return user
 
 
 def optional_staff(token: Optional[str] = Depends(bearer_token), db: Session = Depends(get_db)) -> Optional[User]:
     """
-    For PUBLIC routes where a signed-in responder or Super admin counts as an official (a status
-    update). No token, or a token that is wrong or too old, means "not signed in": None, never a 401,
-    so the person is simply treated as a user. A good token moves the idle timer forward, like
-    current_user does.
+    For PUBLIC routes where a signed-in Admin counts as an official (a status update). No token, or a
+    token that is wrong, too old or belongs to a locked account, means "not signed in": None, never a
+    401 or 403, so the person is simply treated as a user. A good token moves the idle timer forward,
+    like current_user does.
     """
     if not token:
         return None
     try:
-        return accounts.user_for_token(db, token)
+        user = accounts.user_for_token(db, token)
     except HTTPException:
         return None
-
-
-def require_role(minimum: str):
-    """A dependency that lets through the given role and every role above it."""
-    needed = accounts.ROLE_RANK[minimum]
-
-    def check(user: User = Depends(current_user)) -> User:
-        if accounts.ROLE_RANK.get(user.role, 0) < needed:
-            raise HTTPException(status_code=403, detail="You do not have permission to do this.")
-        return user
-
-    return check
-
-
-require_responder = require_role(accounts.RESPONDER)
-require_super_admin = require_role(accounts.SUPER_ADMIN)
+    return user if user.role == accounts.ADMIN else None

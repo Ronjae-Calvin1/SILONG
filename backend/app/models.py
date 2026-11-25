@@ -7,7 +7,7 @@ StatusUpdate: one capacity/availability report for a facility. Rows are never
     says who it came from (a user or an official) and whether it is a normal report,
     an override or a capacity correction. Rows go only when their facility is deleted
     for good (see place_service.py).
-User / AuthSession / AuditLog: staff accounts (Responder, Super admin), their
+User / AuthSession / AuditLog: Admin accounts, their
     sign-in sessions, and the trail of admin actions (see accounts.py, audit.py).
 Report / BlockedPhone: help requests and hazard reports from the public, and
     the phones blocked after too many false reports (see report_service.py).
@@ -47,7 +47,7 @@ class UserEvacuationCenter(Base):
     same as for OSM and manual centers.
 
     A place a user adds starts as "pending": only the phone that sent it (phone_hash)
-    sees it until a responder or Super admin approves it ("approved") or rejects it
+    sees it until an Admin approves it ("approved") or rejects it
     ("rejected"). Rows made before approval existed are "approved". Removing a center
     is recorded in FacilityRemoval; the row is deleted only by the purge (place_service.py).
     """
@@ -115,7 +115,7 @@ class ActionLog(Base):
 
 class User(Base):
     """
-    A staff account. The public has no account. Passwords are stored hashed
+    An Admin account. The public has no account. Passwords are stored hashed
     only (see security.py). Times are naive UTC, like the other tables.
     """
     __tablename__ = "users"
@@ -124,10 +124,10 @@ class User(Base):
     name = Column(String, nullable=False)  # as typed, shown in screens and the audit log
     name_key = Column(String, unique=True, index=True, nullable=False)  # lower case, one space between words: sign-in key
     password_hash = Column(String, nullable=False)
-    role = Column(String, nullable=False)  # "responder" | "super_admin"
+    role = Column(String, nullable=False)  # always "admin" (older databases are migrated on startup)
     failed_attempts = Column(Integer, nullable=False, default=0)  # wrong passwords in a row
     locked_until = Column(DateTime, nullable=True)  # automatic lock after too many wrong tries
-    is_locked = Column(Boolean, nullable=False, default=False)  # lock set by a Super admin, stays until unlocked
+    is_locked = Column(Boolean, nullable=False, default=False)  # lock set by an Admin, stays until unlocked
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     created_by = Column(String, nullable=True)  # name of the creator, kept as text
     last_sign_in_at = Column(DateTime, nullable=True)
@@ -170,7 +170,7 @@ class AuditLog(Base):
 class Report(Base):
     """
     One report from a phone: kind "help" (I need help) or "hazard". No photo and
-    no name. Exact location and contact are for responders only. The phone ID
+    no name. Exact location and contact are for Admins only. The phone ID
     and the IP are stored hashed only. Times are naive UTC.
 
     Hazard reports about the same place share a group_id (the id of the first
@@ -219,7 +219,7 @@ class BlockedPhone(Base):
 
 class ForgivenPhone(Base):
     """
-    A phone that was unblocked (by a Super admin, or because its block expired). Only the false
+    A phone that was unblocked (by an Admin, or because its block expired). Only the false
     reports closed AFTER `since` count toward a new block, so an unblocked phone starts fresh
     instead of being blocked again by its next single false report. Hashed ID only.
     """
@@ -256,7 +256,7 @@ class StatusUpdate(Base):
 
 class Advisory(Base):
     """
-    An advisory a Super admin posted by hand. Nothing is fetched automatically. `source` is
+    An advisory an Admin posted by hand. Nothing is fetched automatically. `source` is
     plain text; it counts as official when it matches a name in advisory_sources (compared
     without case and extra spaces), so editing that list changes the badge on old advisories too.
     """
@@ -275,7 +275,7 @@ class Advisory(Base):
 
 
 class AdvisorySource(Base):
-    """A source that counts as official. A Super admin edits the list. Starts with config.DEFAULT_OFFICIAL_SOURCES."""
+    """A source that counts as official. An Admin edits the list. Starts with config.DEFAULT_OFFICIAL_SOURCES."""
     __tablename__ = "advisory_sources"
 
     id = Column(Integer, primary_key=True)

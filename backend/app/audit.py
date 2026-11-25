@@ -7,7 +7,7 @@ Later parts call it from their admin routes, like this:
     audit.record(db, user, "report.resolve", target="report:12", detail={"note": "Sent a team"}, request=request)
     db.commit()
 
-- `user` is the signed-in staff member from the role check (auth.require_role).
+- `user` is the signed-in Admin from the check (auth.require_admin).
 - `action` is "<thing>.<verb>", for example "user.create" or "place.approve".
 - It only adds the row to the session and does NOT commit. Commit once, together
   with the change itself, so an action and its log entry are saved together or not

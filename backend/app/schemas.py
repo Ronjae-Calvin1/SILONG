@@ -112,7 +112,7 @@ class StatusOut(BaseModel):
     note: Optional[str] = None
     updated_at: datetime  # UTC
     is_outdated: bool  # computed on the server, see config.OUTDATED_AFTER
-    # Who this update came from (part 3). "official" = a signed-in responder or Super admin.
+    # Who this update came from (part 3). "official" = a signed-in Admin.
     source: str = "user"  # "user" | "official"
     source_label: str = "Reported by a user"  # "Reported by a user" | "Confirmed by official"
     # Only set on the response to a new report, when the server changed what was
@@ -137,7 +137,7 @@ class FacilityOut(BaseModel):
     source: str = ""  # "osm" | "manual" | "user"
     center_type: Optional[str] = None  # "permanent" | "temporary"; only for user-added centers
     # "approved" for every public place. "pending" only for a place this phone added that no
-    # responder has approved yet (nobody else gets it in a list).
+    # Admin has approved yet (nobody else gets it in a list).
     approval_status: str = "approved"
     # Latest status update, or null if nobody has reported yet ("No status yet").
     status: Optional[StatusOut] = None
@@ -214,7 +214,7 @@ class EvacCenterIn(BaseModel):
 
 class PlaceEditIn(BaseModel):
     """
-    What a responder sends to correct an added evacuation center (PATCH). Send only the fields to
+    What an Admin sends to correct an added evacuation center (PATCH). Send only the fields to
     change. Same limits as EvacCenterIn. An empty text (or null) clears address, barangay, contact
     or note; the name cannot be cleared. Location, type and capacity are not edited here.
     """
@@ -301,7 +301,7 @@ class DuplicateOut(BaseModel):
 
 
 class PlaceAdminOut(BaseModel):
-    """An added place as a responder or Super admin sees it (exact contact, who reviewed it)."""
+    """An added place as an Admin sees it (exact contact, who reviewed it)."""
     id: int
     key: str
     name: str
@@ -327,7 +327,7 @@ class PlaceAdminOut(BaseModel):
 
 class StatusOverrideIn(StatusIn):
     """
-    A responder or Super admin replaces the latest status. Same fields and rules as a user report
+    An Admin replaces the latest status. Same fields and rules as a user report
     (including the capacity rule), plus an optional reason that goes to the audit log.
     """
     reason: Optional[str] = None
@@ -339,7 +339,7 @@ class StatusOverrideIn(StatusIn):
 
 
 class CapacityCorrectionIn(BaseModel):
-    """A responder or Super admin corrects the maximum capacity of an evacuation center."""
+    """An Admin corrects the maximum capacity of an evacuation center."""
     model_config = ConfigDict(extra="forbid")
 
     max_capacity: Capacity

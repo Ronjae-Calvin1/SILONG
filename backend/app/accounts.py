@@ -1,14 +1,15 @@
 """
-Staff accounts: create, sign in, sessions, lock / unlock / remove.
+Admin accounts: create, sign in, sessions, lock / unlock / remove.
 
-Roles (docs/REDESIGN.md): "responder" and "super_admin". The public has no
-account. A Super admin can do everything a responder can, so role checks use a
-rank (see ROLE_RANK) and "responder" means "responder or above".
+There is ONE role, "admin" (ADMIN_CONSOLE.md). Every Admin can do everything; nothing is locked by
+role. The public has no account. Databases made before the single-role change hold accounts with
+the old roles "responder" and "super_admin": migrate_roles() turns them into "admin" on startup.
 
 Errors are raised as AccountError (an HTTPException with a plain-language
 message), so routes and the setup script can both use these functions.
 Functions here commit their own changes unless the docstring says otherwise.
 """
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple, Union
@@ -17,14 +18,17 @@ from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
 from . import audit, config
+from .database import SessionLocal
 from .models import AuthSession, User
 from .rate_limit import password_change_limiter
 from .security import DUMMY_HASH, hash_password, hash_token, new_token, verify_password
 
-RESPONDER = "responder"
-SUPER_ADMIN = "super_admin"
-ROLES = (RESPONDER, SUPER_ADMIN)
-ROLE_RANK = {RESPONDER: 1, SUPER_ADMIN: 2}
+log = logging.getLogger("silong.accounts")
+
+ADMIN = "admin"
+# Roles of the older two-role design. Only the startup migration and the (ignored) legacy `role`
+# field of account creation know them; nothing is checked against them any more.
+LEGACY_ROLES = ("responder", "super_admin")
 
 NAME_MIN, NAME_MAX = 2, 50
 PASSWORD_MAX = 200  # keeps one sign-in from being a heavy request
@@ -59,39 +63,74 @@ def check_password_length(password: str) -> None:
 # ---------------------------------------------------------------- create
 
 def create_user(
-    db: Session, name: str, password: str, role: str,
+    db: Session, name: str, password: str,
     actor: Union[User, str], request: Optional[Request] = None, extra_detail: Optional[dict] = None,
 ) -> User:
-    """Adds the account (hashed password) and its audit entry in one commit. `actor` is the creator (a User, or a name for scripts)."""
+    """Adds an Admin account (hashed password) and its audit entry in one commit. `actor` is the creator (a User, or a name for scripts)."""
     clean = re.sub(r"\s+", " ", name).strip()
     if not (NAME_MIN <= len(clean) <= NAME_MAX):
         raise AccountError(422, f"The name must be {NAME_MIN} to {NAME_MAX} characters.")
-    if role not in ROLES:
-        raise AccountError(422, "The role must be responder or super_admin.")
     check_password_length(password)
     key = normalize_name(clean)
     if db.query(User).filter(User.name_key == key).first():
         raise AccountError(409, "An account with that name already exists.")
 
     created_by = actor.name if isinstance(actor, User) else actor
-    user = User(name=clean, name_key=key, password_hash=hash_password(password), role=role, created_by=created_by)
+    user = User(name=clean, name_key=key, password_hash=hash_password(password), role=ADMIN, created_by=created_by)
     db.add(user)
     db.flush()  # gives the new account its id for the log entry
-    audit.record(db, actor, "user.create", target=f"user:{user.id} ({user.name})", detail={"role": role, **(extra_detail or {})}, request=request)
+    audit.record(db, actor, "user.create", target=f"user:{user.id} ({user.name})", detail={"role": ADMIN, **(extra_detail or {})}, request=request)
     db.commit()
     db.refresh(user)
     return user
 
 
-def has_super_admin(db: Session) -> bool:
-    return db.query(User).filter(User.role == SUPER_ADMIN).first() is not None
+def has_admin(db: Session) -> bool:
+    return db.query(User).filter(User.role == ADMIN).first() is not None
 
 
-def create_first_super_admin(db: Session, name: str, password: str) -> User:
-    """Used by scripts/create_super_admin.py. Refuses when a Super admin already exists."""
-    if has_super_admin(db):
-        raise AccountError(409, "A Super admin already exists. Sign in and create more accounts from the app.")
-    return create_user(db, name, password, SUPER_ADMIN, actor="setup script", extra_detail={"first_super_admin": True})
+def create_first_admin(db: Session, name: str, password: str) -> User:
+    """Used by scripts/create_admin.py. Refuses when an Admin already exists."""
+    if has_admin(db):
+        raise AccountError(409, "An Admin already exists. Sign in and create more accounts from the app.")
+    return create_user(db, name, password, actor="setup script", extra_detail={"first_admin": True})
+
+
+def active_admin_count(db: Session, excluding: Optional[User] = None) -> int:
+    """How many Admins are not locked by an Admin (a temporary wrong-tries lock still counts: it runs out by itself)."""
+    q = db.query(User).filter(User.role == ADMIN, User.is_locked.is_(False))
+    if excluding is not None:
+        q = q.filter(User.id != excluding.id)
+    return q.count()
+
+
+# ---------------------------------------------------------------- one-role migration
+
+def migrate_roles(db: Session) -> int:
+    """
+    Turns every account with an old role ("responder" or "super_admin") into an Admin. Safe to run
+    again: once nothing has an old role it does nothing (and writes nothing). Each change is logged
+    to the audit log as "(system)" with the old role, and the total goes to the server log.
+    Returns how many accounts it changed. Commits.
+    """
+    rows = db.query(User).filter(User.role.in_(LEGACY_ROLES)).order_by(User.id).all()
+    for user in rows:
+        audit.record(db, None, "user.role_migrated", target=f"user:{user.id} ({user.name})",
+                     detail={"from": user.role, "to": ADMIN})
+        user.role = ADMIN
+    if rows:
+        db.commit()
+        log.info("Role migration: %s account(s) are Admins now (they had the old responder or super_admin role).", len(rows))
+    return len(rows)
+
+
+def migrate_roles_on_startup() -> int:
+    """Runs migrate_roles with its own session. Called by main.py after the tables exist."""
+    db = SessionLocal()
+    try:
+        return migrate_roles(db)
+    finally:
+        db.close()
 
 
 # ---------------------------------------------------------------- sign in / out
@@ -109,7 +148,7 @@ def sign_in(db: Session, name: str, password: str, request: Optional[Request] = 
 
     now = _now()
     if user.is_locked:
-        raise AccountError(423, "This account is locked. Ask a Super admin to unlock it.")
+        raise AccountError(423, "This account is locked. Ask another Admin to unlock it.")
     if user.locked_until is not None:
         if user.locked_until > now:
             raise AccountError(423, f"Too many wrong tries. This account is locked. Try again in about {_minutes_left(user.locked_until, now)} minute(s).")
@@ -149,8 +188,13 @@ def _drop_idle_sessions(db: Session, now: datetime) -> None:
 
 def user_for_token(db: Session, token: Optional[str]) -> User:
     """
-    The signed-in user for a token, or a 401. Each good request moves the idle
-    timer forward; a session unused for STAFF_IDLE_MINUTES is deleted.
+    The signed-in user for a token. Each good request moves the idle timer forward; a session
+    unused for STAFF_IDLE_MINUTES is deleted.
+
+    No token, an unknown token or an idle session -> 401. A session that is still alive but whose
+    account is locked or no longer exists -> 403 (and the session is deleted, so the next try is a
+    401). Locking or removing an account through the API already ends its sessions, so the 403 is
+    the backstop for a lock or removal made another way.
     """
     if not token:
         raise AccountError(401, "Please sign in.", {"WWW-Authenticate": "Bearer"})
@@ -164,9 +208,10 @@ def user_for_token(db: Session, token: Optional[str]) -> User:
         raise AccountError(401, f"You were signed out after {config.STAFF_IDLE_MINUTES} minutes without use. Please sign in again.", {"WWW-Authenticate": "Bearer"})
     user = db.get(User, session.user_id)
     if user is None or user.is_locked:
+        locked = user is not None
         db.delete(session)
         db.commit()
-        raise AccountError(401, "Your sign-in is no longer valid. Please sign in again.", {"WWW-Authenticate": "Bearer"})
+        raise AccountError(403, "This account is locked. Ask another Admin to unlock it." if locked else "This account no longer exists.")
     session.last_used_at = now
     db.commit()
     return user
@@ -190,7 +235,7 @@ def end_sessions(db: Session, user_id: int) -> None:
     db.query(AuthSession).filter(AuthSession.user_id == user_id).delete(synchronize_session=False)
 
 
-# ---------------------------------------------------------------- Super admin actions
+# ---------------------------------------------------------------- account actions (any Admin)
 
 def get_user_or_404(db: Session, user_id: int) -> User:
     user = db.get(User, user_id)
@@ -200,11 +245,13 @@ def get_user_or_404(db: Session, user_id: int) -> User:
 
 
 def lock_user(db: Session, actor: User, target: User, request: Optional[Request] = None) -> bool:
-    """Locks until a Super admin unlocks it and signs the person out. False if it was already locked."""
+    """Locks until an Admin unlocks it and signs the person out. False if it was already locked."""
     if target.id == actor.id:
         raise AccountError(409, "You cannot lock your own account.")
     if target.is_locked:
         return False
+    if active_admin_count(db, excluding=target) == 0:
+        raise AccountError(409, "You cannot lock the last active Admin.")
     target.is_locked = True
     end_sessions(db, target.id)
     audit.record(db, actor, "user.lock", target=f"user:{target.id} ({target.name})", request=request)
@@ -213,7 +260,7 @@ def lock_user(db: Session, actor: User, target: User, request: Optional[Request]
 
 
 def unlock_user(db: Session, actor: User, target: User, request: Optional[Request] = None) -> None:
-    """Clears both kinds of lock (by a Super admin, and the automatic one) and the wrong-try count."""
+    """Clears both kinds of lock (by an Admin, and the automatic one) and the wrong-try count."""
     target.is_locked = False
     target.locked_until = None
     target.failed_attempts = 0
@@ -225,6 +272,8 @@ def remove_user(db: Session, actor: User, target: User, request: Optional[Reques
     """Deletes the account and its sessions. Its audit entries stay, with the name as text."""
     if target.id == actor.id:
         raise AccountError(409, "You cannot remove your own account.")
+    if not target.is_locked and active_admin_count(db, excluding=target) == 0:
+        raise AccountError(409, "You cannot remove the last active Admin.")
     end_sessions(db, target.id)
     audit.record(db, actor, "user.remove", target=f"user:{target.id} ({target.name})", detail={"role": target.role}, request=request)
     db.delete(target)
@@ -269,8 +318,8 @@ def change_password(
 
 def reset_password(db: Session, actor: User, target: User, new_password: str, request: Optional[Request] = None) -> int:
     """
-    A Super admin sets a new password for someone else. Ends ALL of that person's sessions and clears
-    their wrong-try count and the automatic lock. A lock a Super admin set (is_locked) stays: it is a
+    An Admin sets a new password for someone else. Ends ALL of that person's sessions and clears
+    their wrong-try count and the automatic lock. A lock an Admin set (is_locked) stays: it is a
     separate decision, undone with unlock. Returns how many sessions it ended.
     """
     if target.id == actor.id:

@@ -50,10 +50,10 @@ def db_session():
     return SessionLocal()
 
 
-def make_user(name, role):
+def make_user(name):
     db = db_session()
     try:
-        return accounts.create_user(db, name, PASSWORD, role, actor="test setup").id
+        return accounts.create_user(db, name, PASSWORD, actor="test setup").id
     finally:
         db.close()
 
@@ -64,9 +64,9 @@ def auth(name):
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
-make_user("Pia Places Responder", "responder")
-make_user("Pat Places Admin", "super_admin")
-H_RESP, H_ADMIN = auth("Pia Places Responder"), auth("Pat Places Admin")
+make_user("Pia Places Admin")
+make_user("Pat Places Admin")
+H_ADMIN_B, H_ADMIN = auth("Pia Places Admin"), auth("Pat Places Admin")
 NO_AUTH = {}
 
 _phones = iter(range(1, 100_000))
@@ -114,11 +114,11 @@ def listing(phone=None):
 
 
 def approved_place(name, where=None, capacity=100):
-    """A public place: added by a fresh phone and approved by the responder. Returns its id."""
+    """A public place: added by a fresh phone and approved by an Admin. Returns its id."""
     r = add_place(new_phone(), name, where, max_capacity=capacity)
     assert r.status_code == 201, r.text
     fid = r.json()["id"]
-    assert client.post(f"/api/responder/places/{fid}/approve", headers=H_RESP).status_code == 200
+    assert client.post(f"/api/admin/places/{fid}/approve", headers=H_ADMIN_B).status_code == 200
     return fid
 
 
@@ -177,7 +177,7 @@ def test_added_place_starts_pending_and_only_its_sender_sees_it():
     assert fid not in listing(other)  # another phone
     assert fid not in listing(None)  # no phone ID at all
     # staff do not get it in the public list either (they review it in the queue)
-    assert fid not in {f["id"] for f in client.get("/api/facilities", headers=H_RESP).json()}
+    assert fid not in {f["id"] for f in client.get("/api/facilities", headers=H_ADMIN_B).json()}
 
 
 def test_pending_place_cannot_be_read_or_updated_by_others():
@@ -198,7 +198,7 @@ def test_adding_without_a_phone_id_still_works_but_the_sender_cannot_see_it_agai
     assert r.status_code == 201 and r.json()["approval_status"] == "pending"
     assert r.json()["id"] not in listing(None)
     # staff still find it in the queue
-    ids = [p["id"] for p in client.get("/api/responder/places", headers=H_RESP).json()]
+    ids = [p["id"] for p in client.get("/api/admin/places", headers=H_ADMIN_B).json()]
     assert r.json()["id"] in ids
 
 
@@ -212,7 +212,7 @@ def test_possible_duplicate_is_flagged_for_the_admin_not_refused():
     original = approved_place("Duplicate Court", spot)
     r = add_place(new_phone(), "duplicate  court!", (spot[0] + 0.0001, spot[1]))  # ~11 m away, same name once tidied
     assert r.status_code == 201, r.text
-    queue = {p["id"]: p for p in client.get("/api/responder/places", headers=H_RESP).json()}
+    queue = {p["id"]: p for p in client.get("/api/admin/places", headers=H_ADMIN_B).json()}
     dup = queue[r.json()["id"]]["possible_duplicate"]
     assert dup["id"] == original and dup["approval_status"] == "approved" and dup["removed"] is False
     assert 0 < dup["distance_m"] <= config.DUPLICATE_METERS
@@ -221,17 +221,17 @@ def test_possible_duplicate_is_flagged_for_the_admin_not_refused():
     # a different name or more than 30 m away is not flagged
     far = add_place(new_phone(), "Duplicate Court", (spot[0] + 0.001, spot[1])).json()["id"]  # ~110 m
     other = add_place(new_phone(), "Another Court", (spot[0], spot[1] + 0.0001)).json()["id"]
-    queue = {p["id"]: p for p in client.get("/api/responder/places", headers=H_RESP).json()}
+    queue = {p["id"]: p for p in client.get("/api/admin/places", headers=H_ADMIN_B).json()}
     assert queue[far]["possible_duplicate"] is None and queue[other]["possible_duplicate"] is None
 
 
 def test_a_duplicate_of_a_removed_center_is_flagged_as_removed():
     spot = new_spot()
     original = approved_place("Removed Twin Hall", spot)
-    assert client.delete(f"/api/evacuation-centers/{original}", headers=H_RESP).status_code == 200
+    assert client.delete(f"/api/evacuation-centers/{original}", headers=H_ADMIN_B).status_code == 200
     r = add_place(new_phone(), "Removed Twin Hall", spot)
     assert r.status_code == 201
-    dup = {p["id"]: p for p in client.get("/api/responder/places", headers=H_RESP).json()}[r.json()["id"]]["possible_duplicate"]
+    dup = {p["id"]: p for p in client.get("/api/admin/places", headers=H_ADMIN_B).json()}[r.json()["id"]]["possible_duplicate"]
     assert dup["id"] == original and dup["removed"] is True
 
 
@@ -254,43 +254,43 @@ def test_approve_makes_it_public_and_is_audited():
     fid = add_place(mine, "Approve Me Gym").json()["id"]
     assert fid not in listing(other)
 
-    r = client.post(f"/api/responder/places/{fid}/approve", headers=H_RESP)
+    r = client.post(f"/api/admin/places/{fid}/approve", headers=H_ADMIN_B)
     assert r.status_code == 200, r.text
-    assert r.json()["approval_status"] == "approved" and r.json()["reviewed_by"] == "Pia Places Responder"
+    assert r.json()["approval_status"] == "approved" and r.json()["reviewed_by"] == "Pia Places Admin"
     assert fid in listing(other) and listing(other)[fid]["approval_status"] == "approved"
     assert fid in listing(None)
     assert report(fid, "open", headers={"X-Phone-Id": other}).status_code == 201  # anybody can report on it now
 
-    again = client.post(f"/api/responder/places/{fid}/approve", headers=H_RESP)  # a second tap
+    again = client.post(f"/api/admin/places/{fid}/approve", headers=H_ADMIN_B)  # a second tap
     assert again.status_code == 200 and "already" in again.json()["message"]
     approvals = [a for a in audit_rows("place.approve") if a[2].startswith(f"place:{fid} ")]
-    assert len(approvals) == 1 and approvals[0][0] == "Pia Places Responder"
-    assert fid not in [p["id"] for p in client.get("/api/responder/places", headers=H_RESP).json()]  # left the queue
+    assert len(approvals) == 1 and approvals[0][0] == "Pia Places Admin"
+    assert fid not in [p["id"] for p in client.get("/api/admin/places", headers=H_ADMIN_B).json()]  # left the queue
 
 
 def test_reject_hides_it_from_everyone_and_keeps_the_reason_in_the_audit_log():
     mine = new_phone()
     fid = add_place(mine, "Reject Me Gym").json()["id"]
-    r = client.post(f"/api/responder/places/{fid}/reject", headers=H_ADMIN, json={"reason": "Not a real place"})
+    r = client.post(f"/api/admin/places/{fid}/reject", headers=H_ADMIN, json={"reason": "Not a real place"})
     assert r.status_code == 200 and r.json()["approval_status"] == "rejected"
     assert r.json()["reject_reason"] == "Not a real place"
     for headers in ({"X-Phone-Id": mine}, {}):  # not even its sender
         assert fid not in {f["id"]: f for f in client.get("/api/facilities", headers=headers).json()}
     assert report(fid, "open", headers={"X-Phone-Id": mine}).status_code == 404
-    assert fid in [p["id"] for p in client.get("/api/responder/places?status=rejected", headers=H_RESP).json()]
-    assert fid not in [p["id"] for p in client.get("/api/responder/places", headers=H_RESP).json()]
+    assert fid in [p["id"] for p in client.get("/api/admin/places?status=rejected", headers=H_ADMIN_B).json()]
+    assert fid not in [p["id"] for p in client.get("/api/admin/places", headers=H_ADMIN_B).json()]
     rows = [a for a in audit_rows("place.reject") if a[2].startswith(f"place:{fid} ")]
     assert rows and rows[0][0] == "Pat Places Admin" and rows[0][3]["reason"] == "Not a real place"
     # no body at all is fine too (the reason is optional)
     other = add_place(new_phone(), "Reject Me Too").json()["id"]
-    assert client.post(f"/api/responder/places/{other}/reject", headers=H_RESP).status_code == 200
+    assert client.post(f"/api/admin/places/{other}/reject", headers=H_ADMIN_B).status_code == 200
     # a rejection can be undone by approving
-    assert client.post(f"/api/responder/places/{fid}/approve", headers=H_RESP).json()["approval_status"] == "approved"
+    assert client.post(f"/api/admin/places/{fid}/approve", headers=H_ADMIN_B).json()["approval_status"] == "approved"
 
 
 def test_a_place_already_on_the_map_cannot_be_rejected_only_removed():
     fid = approved_place("Already Public Gym")
-    r = client.post(f"/api/responder/places/{fid}/reject", headers=H_RESP)
+    r = client.post(f"/api/admin/places/{fid}/reject", headers=H_ADMIN_B)
     assert r.status_code == 409 and "Remove" in r.json()["detail"]
 
 
@@ -304,23 +304,23 @@ def test_a_user_cannot_remove_restore_approve_or_list_for_everyone():
         assert client.delete(f"/api/evacuation-centers/{fid}", headers=headers).status_code == 401
         assert client.post(f"/api/evacuation-centers/{fid}/restore", headers=headers).status_code == 401
         assert client.get("/api/evacuation-centers/removed", headers=headers).status_code == 401
-        assert client.get("/api/responder/places", headers=headers).status_code == 401
-        assert client.post(f"/api/responder/places/{pending}/approve", headers=headers).status_code == 401
-        assert client.post(f"/api/responder/places/{pending}/reject", headers=headers).status_code == 401
+        assert client.get("/api/admin/places", headers=headers).status_code == 401
+        assert client.post(f"/api/admin/places/{pending}/approve", headers=headers).status_code == 401
+        assert client.post(f"/api/admin/places/{pending}/reject", headers=headers).status_code == 401
         assert client.delete(f"/api/admin/places/{fid}", headers=headers).status_code == 401
-        assert client.post(f"/api/responder/facilities/{fid}/status-override", headers=headers, json={"status": "full"}).status_code == 401
-        assert client.post(f"/api/responder/facilities/{fid}/capacity-correction", headers=headers, json={"max_capacity": 5}).status_code == 401
-        assert client.get(f"/api/responder/facilities/{fid}/status-history", headers=headers).status_code == 401
+        assert client.post(f"/api/admin/facilities/{fid}/status-override", headers=headers, json={"status": "full"}).status_code == 401
+        assert client.post(f"/api/admin/facilities/{fid}/capacity-correction", headers=headers, json={"max_capacity": 5}).status_code == 401
+        assert client.get(f"/api/admin/facilities/{fid}/status-history", headers=headers).status_code == 401
     assert fid in listing(None)  # nothing was removed
     assert pending not in listing(None)
 
 
-def test_only_a_super_admin_can_delete_for_good():
-    fid = approved_place("Responder Cannot Delete Gym")
-    client.delete(f"/api/evacuation-centers/{fid}", headers=H_RESP)
-    r = client.delete(f"/api/admin/places/{fid}", headers=H_RESP)
-    assert r.status_code == 403
-    assert count_rows(fid, key_of(fid))["facility"] == 1  # still there
+def test_any_admin_can_delete_for_good():
+    fid = approved_place("Any Admin Can Delete Gym")
+    client.delete(f"/api/evacuation-centers/{fid}", headers=H_ADMIN_B)
+    assert count_rows(fid, key_of(fid))["facility"] == 1  # removed, still kept
+    assert client.delete(f"/api/admin/places/{fid}", headers=H_ADMIN_B).status_code == 200  # nothing is locked by role
+    assert count_rows(fid, key_of(fid))["facility"] == 0
 
 
 # ---------------------------------------------------------------- remove and restore
@@ -330,38 +330,38 @@ def test_admin_removal_hides_it_for_everyone_and_restore_brings_it_back():
     report(fid, "almost_full", people_inside=60)
     assert fid in listing(new_phone())
 
-    r = client.delete(f"/api/evacuation-centers/{fid}", headers=H_RESP)
+    r = client.delete(f"/api/evacuation-centers/{fid}", headers=H_ADMIN_B)
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["removed_by"] == "Pia Places Responder" and body["days_left"] == config.REMOVED_CENTERS_KEEP_DAYS
+    assert body["removed_by"] == "Pia Places Admin" and body["days_left"] == config.REMOVED_CENTERS_KEEP_DAYS
     assert body["delete_after"] > body["removed_at"] and "restored" in body["message"]
     assert fid not in listing(None) and fid not in listing(new_phone())
     assert report(fid, "open").status_code == 404  # hidden means hidden
 
-    again = client.delete(f"/api/evacuation-centers/{fid}", headers=H_RESP)  # a second tap
+    again = client.delete(f"/api/evacuation-centers/{fid}", headers=H_ADMIN_B)  # a second tap
     assert again.status_code == 200 and "already" in again.json()["message"]
 
-    removed = client.get("/api/evacuation-centers/removed", headers=H_RESP).json()
+    removed = client.get("/api/evacuation-centers/removed", headers=H_ADMIN_B).json()
     assert fid in [x["id"] for x in removed]
 
     back = client.post(f"/api/evacuation-centers/{fid}/restore", headers=H_ADMIN)
     assert back.status_code == 200 and back.json()["id"] == fid
     assert fid in listing(None)
     assert listing(None)[fid]["status"]["status"] == "almost_full"  # its history came back with it
-    assert fid not in [x["id"] for x in client.get("/api/evacuation-centers/removed", headers=H_RESP).json()]
+    assert fid not in [x["id"] for x in client.get("/api/evacuation-centers/removed", headers=H_ADMIN_B).json()]
     assert client.post(f"/api/evacuation-centers/{fid}/restore", headers=H_ADMIN).status_code == 200  # not removed: nothing to do
 
-    mine = [a for a in audit_rows() if a[2] and a[2].startswith(f"place:{fid} ") and a[1] in ("place.remove", "place.restore")]
-    assert [(a[0], a[1]) for a in mine] == [("Pia Places Responder", "place.remove"), ("Pat Places Admin", "place.restore")]
+    mine = [a for a in audit_rows() if a[2] and a[2] == f"place:{fid} (Remove And Restore Gym)" and a[1] in ("place.remove", "place.restore")]  # by name too: a deleted place frees its id
+    assert [(a[0], a[1]) for a in mine] == [("Pia Places Admin", "place.remove"), ("Pat Places Admin", "place.restore")]
 
 
 def test_hospitals_and_unapproved_places_cannot_be_removed():
     hospital = next(f for f in listing(None).values() if f["type"] == "hospital")
-    assert client.delete(f"/api/evacuation-centers/{hospital['id']}", headers=H_RESP).status_code == 422
+    assert client.delete(f"/api/evacuation-centers/{hospital['id']}", headers=H_ADMIN_B).status_code == 422
     pending = add_place(new_phone(), "Pending Not Removable").json()["id"]
-    r = client.delete(f"/api/evacuation-centers/{pending}", headers=H_RESP)
+    r = client.delete(f"/api/evacuation-centers/{pending}", headers=H_ADMIN_B)
     assert r.status_code == 409 and "Reject" in r.json()["detail"]
-    assert client.delete("/api/evacuation-centers/99999999", headers=H_RESP).status_code == 404
+    assert client.delete("/api/evacuation-centers/99999999", headers=H_ADMIN_B).status_code == 404
 
 
 # ---------------------------------------------------------------- the 30-day purge
@@ -381,7 +381,7 @@ def test_purge_deletes_a_center_removed_over_30_days_ago_with_its_history():
     key = key_of(fid)
     report(fid, "open", people_inside=10)
     report(fid, "full", people_inside=100)
-    client.delete(f"/api/evacuation-centers/{fid}", headers=H_RESP)
+    client.delete(f"/api/evacuation-centers/{fid}", headers=H_ADMIN_B)
     before = count_rows(fid, key)
     assert before["status"] == 2 and before["removal"] == 1 and before["action_log"] == 1 and before["user_row"] == 1
 
@@ -394,18 +394,18 @@ def test_purge_deletes_a_center_removed_over_30_days_ago_with_its_history():
     finally:
         db.close()
     assert count_rows(fid, key) == {"facility": 0, "status": 0, "removal": 0, "action_log": 0, "user_row": 0}
-    assert fid not in [x["id"] for x in client.get("/api/evacuation-centers/removed", headers=H_RESP).json()]
+    assert fid not in [x["id"] for x in client.get("/api/evacuation-centers/removed", headers=H_ADMIN_B).json()]
     purge = [a for a in audit_rows("place.purge") if any(p["key"] == key for p in a[3]["places"])]
     assert len(purge) == 1 and purge[0][0] == "(system)" and purge[0][3]["older_than_days"] == 30
 
 
 def test_purge_keeps_restored_centers_and_pending_places_and_deletes_old_rejected_ones():
     restored = approved_place("Restored Stays Gym")
-    client.delete(f"/api/evacuation-centers/{restored}", headers=H_RESP)
-    client.post(f"/api/evacuation-centers/{restored}/restore", headers=H_RESP)
+    client.delete(f"/api/evacuation-centers/{restored}", headers=H_ADMIN_B)
+    client.post(f"/api/evacuation-centers/{restored}/restore", headers=H_ADMIN_B)
     pending = add_place(new_phone(), "Pending Stays Gym").json()["id"]
     rejected = add_place(new_phone(), "Rejected Goes Gym").json()["id"]
-    client.post(f"/api/responder/places/{rejected}/reject", headers=H_RESP)
+    client.post(f"/api/admin/places/{rejected}/reject", headers=H_ADMIN_B)
 
     db = db_session()
     try:
@@ -426,7 +426,7 @@ def test_a_center_from_a_data_file_stays_deleted_after_the_purge_and_a_restart()
     try:
         main_mod.sync_facilities()
         fid = next(f["id"] for f in listing(None).values() if f["key"] == "osm:way/999001")
-        client.delete(f"/api/evacuation-centers/{fid}", headers=H_RESP)
+        client.delete(f"/api/evacuation-centers/{fid}", headers=H_ADMIN_B)
         db = db_session()
         try:
             place_service.purge_removed_centers(db, now=evac_service._now() + timedelta(days=31))
@@ -444,23 +444,22 @@ def test_a_center_from_a_data_file_stays_deleted_after_the_purge_and_a_restart()
         main_mod.load_facilities = original
 
 
-def test_a_super_admin_can_delete_a_removed_center_sooner_and_only_that():
+def test_an_admin_can_delete_a_removed_center_sooner_and_only_that():
     fid = approved_place("Delete Sooner Gym")
     key = key_of(fid)
     report(fid, "open")
     # not removed yet: refused
     r = client.delete(f"/api/admin/places/{fid}", headers=H_ADMIN)
     assert r.status_code == 409 and "Remove it first" in r.json()["detail"]
-    client.delete(f"/api/evacuation-centers/{fid}", headers=H_RESP)
-    assert client.delete(f"/api/admin/places/{fid}", headers=H_RESP).status_code == 403  # a responder cannot
-    assert count_rows(fid, key)["facility"] == 1
+    client.delete(f"/api/evacuation-centers/{fid}", headers=H_ADMIN_B)
+    assert count_rows(fid, key)["facility"] == 1  # removed, not deleted yet
     assert client.delete(f"/api/admin/places/{fid}", headers=H_ADMIN).status_code == 200
     assert count_rows(fid, key) == {"facility": 0, "status": 0, "removal": 0, "action_log": 0, "user_row": 0}
     rows = [a for a in audit_rows("place.delete") if a[2].startswith(f"place:{fid} ")]
     assert rows and rows[0][0] == "Pat Places Admin"
     # a rejected place can be deleted sooner too
     rejected = add_place(new_phone(), "Delete Rejected Sooner").json()["id"]
-    client.post(f"/api/responder/places/{rejected}/reject", headers=H_RESP)
+    client.post(f"/api/admin/places/{rejected}/reject", headers=H_ADMIN_B)
     assert client.delete(f"/api/admin/places/{rejected}", headers=H_ADMIN).status_code == 200
     # a pending place is neither
     pending = add_place(new_phone(), "Delete Pending Refused").json()["id"]
@@ -478,7 +477,7 @@ def test_the_purge_runs_from_the_script_and_on_startup():
     db_path = Path(_tmp) / "test.db"
     # one for the script ...
     a = approved_place("Script Purge Gym")
-    client.delete(f"/api/evacuation-centers/{a}", headers=H_RESP)
+    client.delete(f"/api/evacuation-centers/{a}", headers=H_ADMIN_B)
     backdate_removal(a, 31)
     env = dict(os.environ, DATABASE_URL=f"sqlite:///{db_path}")
     out = subprocess.run([sys.executable, "scripts/purge_removed_centers.py"], capture_output=True, text=True, cwd=BACKEND, env=env)
@@ -487,7 +486,7 @@ def test_the_purge_runs_from_the_script_and_on_startup():
     assert count_rows(a, key_of(a))["facility"] == 0
     # ... and one for the start of the server
     b = approved_place("Startup Purge Gym")
-    client.delete(f"/api/evacuation-centers/{b}", headers=H_RESP)
+    client.delete(f"/api/evacuation-centers/{b}", headers=H_ADMIN_B)
     backdate_removal(b, 31)
     out = _run_python("from app.main import app", db_path)
     assert "Deleted 1 removed or rejected place(s)" in out, out
@@ -506,7 +505,7 @@ def test_status_from_a_user_and_from_an_official_are_told_apart():
     s = listing(None)[fid]["status"]
     assert s["source"] == "user" and s["source_label"] == "Reported by a user"
 
-    for headers, who in ((H_RESP, "Pia Places Responder"), (H_ADMIN, "Pat Places Admin")):
+    for headers, who in ((H_ADMIN_B, "Pia Places Admin"), (H_ADMIN, "Pat Places Admin")):
         r = report(fid, "almost_full", headers=headers, people_inside=80)
         assert r.status_code == 201, r.text
         assert r.json()["source"] == "official" and r.json()["source_label"] == "Confirmed by official"
@@ -519,10 +518,10 @@ def test_status_from_a_user_and_from_an_official_are_told_apart():
         finally:
             db.close()
     assert report(fid, "full").json()["source"] == "user"  # a user after the official: user again
-    assert [a[0] for a in audit_rows("status.update") if a[2].startswith(f"facility:{fid} ")] == ["Pia Places Responder", "Pat Places Admin"]
+    assert [a[0] for a in audit_rows("status.update") if a[2].startswith(f"facility:{fid} ")] == ["Pia Places Admin", "Pat Places Admin"]
     # hospitals and clinics too
     clinic = next(f for f in listing(None).values() if f["type"] == "clinic")
-    r = report(clinic["id"], "busy", headers=H_RESP)
+    r = report(clinic["id"], "busy", headers=H_ADMIN_B)
     assert r.status_code == 201 and r.json()["source_label"] == "Confirmed by official"
 
 
@@ -539,8 +538,8 @@ def test_staff_are_not_held_back_by_the_per_place_cooldown_but_users_are():
     try:
         assert report(fid, "open").status_code == 201
         assert report(fid, "full").status_code == 429
-        assert report(fid, "open", headers=H_RESP).status_code == 201
-        assert report(fid, "full", headers=H_RESP).status_code == 201
+        assert report(fid, "open", headers=H_ADMIN_B).status_code == 201
+        assert report(fid, "full", headers=H_ADMIN_B).status_code == 201
     finally:
         config.STATUS_COOLDOWN_SECONDS = old
 
@@ -549,7 +548,7 @@ def test_users_can_only_send_status_data_never_name_address_or_phone():
     fid = approved_place("Only Status Gym")
     for extra in ({"name": "Hacked"}, {"address": "Somewhere"}, {"contact": "0917 000 0000"}, {"latitude": 1.0}, {"source": "official"}, {"kind": "override"}):
         assert report(fid, "open", **extra).status_code == 422, extra
-    assert report(fid, "open", headers=H_RESP, source="official").status_code == 422  # not even staff
+    assert report(fid, "open", headers=H_ADMIN_B, source="official").status_code == 422  # not even staff
     f = listing(None)[fid]
     assert f["name"] == "Only Status Gym"
 
@@ -559,7 +558,7 @@ def test_users_can_only_send_status_data_never_name_address_or_phone():
 def test_override_is_added_to_the_history_nothing_is_erased_and_the_name_is_recorded():
     fid = approved_place("Override Gym")
     report(fid, "open", people_inside=10)
-    r = client.post(f"/api/responder/facilities/{fid}/status-override", headers=H_RESP,
+    r = client.post(f"/api/admin/facilities/{fid}/status-override", headers=H_ADMIN_B,
                     json={"status": "full", "people_inside": 100, "note": "Counted at the gate", "reason": "A user said open by mistake"})
     assert r.status_code == 201, r.text
     assert r.json()["status"] == "full" and r.json()["source"] == "official" and r.json()["source_label"] == "Confirmed by official"
@@ -567,15 +566,15 @@ def test_override_is_added_to_the_history_nothing_is_erased_and_the_name_is_reco
     assert s["status"] == "full" and s["source"] == "official" and s["note"] == "Counted at the gate"
     assert listing(None)[fid]["people_inside"] == 100
 
-    history = client.get(f"/api/responder/facilities/{fid}/status-history", headers=H_RESP).json()
+    history = client.get(f"/api/admin/facilities/{fid}/status-history", headers=H_ADMIN_B).json()
     assert [(h["kind"], h["status"], h["source"], h["changed_by"]) for h in history] == [
-        ("override", "full", "official", "Pia Places Responder"),
+        ("override", "full", "official", "Pia Places Admin"),
         ("report", "open", "user", None),
     ]
     public = client.get(f"/api/facilities/{fid}/status/history").json()
     assert [h["status"] for h in public] == ["full", "open"]  # the replaced status is still there
     rows = [a for a in audit_rows("status.override") if a[2].startswith(f"facility:{fid} ")]
-    assert len(rows) == 1 and rows[0][0] == "Pia Places Responder"
+    assert len(rows) == 1 and rows[0][0] == "Pia Places Admin"
     assert rows[0][3]["from_status"] == "open" and rows[0][3]["to_status"] == "full" and rows[0][3]["reason"] == "A user said open by mistake"
 
     # a user can still report after an override: it is the newest, nothing is locked
@@ -585,22 +584,22 @@ def test_override_is_added_to_the_history_nothing_is_erased_and_the_name_is_reco
 
 def test_override_follows_the_same_rules_as_a_report():
     fid = approved_place("Override Rules Gym", capacity=50)
-    ov = lambda body: client.post(f"/api/responder/facilities/{fid}/status-override", headers=H_RESP, json=body)  # noqa: E731
+    ov = lambda body: client.post(f"/api/admin/facilities/{fid}/status-override", headers=H_ADMIN_B, json=body)  # noqa: E731
     assert ov({"status": "busy"}).status_code == 422  # not a status of an evacuation center
     assert ov({"status": "open", "people_inside": 500}).status_code == 422  # typo guard
     assert ov({"status": "open", "name": "Hacked"}).status_code == 422
     r = ov({"status": "open", "people_inside": 50})  # at capacity: saved as full, and it says so
     assert r.status_code == 201 and r.json()["status"] == "full" and "full" in r.json()["message"]
     clinic = next(f for f in listing(None).values() if f["type"] == "clinic")
-    assert client.post(f"/api/responder/facilities/{clinic['id']}/status-override", headers=H_ADMIN, json={"status": "closed"}).status_code == 201
+    assert client.post(f"/api/admin/facilities/{clinic['id']}/status-override", headers=H_ADMIN, json={"status": "closed"}).status_code == 201
     pending = add_place(new_phone(), "Override Pending Gym").json()["id"]
-    assert client.post(f"/api/responder/facilities/{pending}/status-override", headers=H_RESP, json={"status": "open"}).status_code == 404
+    assert client.post(f"/api/admin/facilities/{pending}/status-override", headers=H_ADMIN_B, json={"status": "open"}).status_code == 404
 
 
 def test_capacity_correction_is_a_history_row_that_does_not_make_an_old_status_look_fresh():
     fid = approved_place("Capacity Gym", capacity=100)
     first = report(fid, "open", people_inside=20).json()
-    r = client.post(f"/api/responder/facilities/{fid}/capacity-correction", headers=H_RESP,
+    r = client.post(f"/api/admin/facilities/{fid}/capacity-correction", headers=H_ADMIN_B,
                     json={"max_capacity": 150, "reason": "Gym was measured again"})
     assert r.status_code == 200, r.text
     f = listing(None)[fid]
@@ -608,8 +607,8 @@ def test_capacity_correction_is_a_history_row_that_does_not_make_an_old_status_l
     assert f["status"]["id"] == first["id"] and f["status"]["source"] == "user"  # still the same status, same time
     assert f["status"]["updated_at"] == first["updated_at"]
 
-    history = client.get(f"/api/responder/facilities/{fid}/status-history", headers=H_RESP).json()
-    assert (history[0]["kind"], history[0]["max_capacity"], history[0]["changed_by"], history[0]["source"]) == ("capacity", 150, "Pia Places Responder", "official")
+    history = client.get(f"/api/admin/facilities/{fid}/status-history", headers=H_ADMIN_B).json()
+    assert (history[0]["kind"], history[0]["max_capacity"], history[0]["changed_by"], history[0]["source"]) == ("capacity", 150, "Pia Places Admin", "official")
     assert len(history) == 2 and history[1]["id"] == first["id"]  # nothing erased
     assert [h["id"] for h in client.get(f"/api/facilities/{fid}/status/history").json()] == [first["id"]]  # not a status for the public
     db = db_session()
@@ -618,11 +617,11 @@ def test_capacity_correction_is_a_history_row_that_does_not_make_an_old_status_l
     finally:
         db.close()
     rows = [a for a in audit_rows("capacity.correct") if a[2].startswith(f"facility:{fid} ")]
-    assert len(rows) == 1 and rows[0][3] == {"from": 100, "to": 150, "reason": "Gym was measured again"} and rows[0][0] == "Pia Places Responder"
+    assert len(rows) == 1 and rows[0][3] == {"from": 100, "to": 150, "reason": "Gym was measured again"} and rows[0][0] == "Pia Places Admin"
 
     # asking for the same number again changes nothing
-    client.post(f"/api/responder/facilities/{fid}/capacity-correction", headers=H_RESP, json={"max_capacity": 150})
-    assert len(client.get(f"/api/responder/facilities/{fid}/status-history", headers=H_RESP).json()) == 2
+    client.post(f"/api/admin/facilities/{fid}/capacity-correction", headers=H_ADMIN_B, json={"max_capacity": 150})
+    assert len(client.get(f"/api/admin/facilities/{fid}/status-history", headers=H_ADMIN_B).json()) == 2
 
 
 def test_a_user_report_cannot_undo_an_official_capacity_but_an_official_can_change_it():
@@ -630,7 +629,7 @@ def test_a_user_report_cannot_undo_an_official_capacity_but_an_official_can_chan
     # before any official number, users can change the capacity as before
     assert report(fid, "open", people_inside=10, max_capacity=120).json()["max_capacity"] == 120
     report(fid, "open", people_inside=10)
-    client.post(f"/api/responder/facilities/{fid}/capacity-correction", headers=H_ADMIN, json={"max_capacity": 150})
+    client.post(f"/api/admin/facilities/{fid}/capacity-correction", headers=H_ADMIN, json={"max_capacity": 150})
 
     r = report(fid, "open", people_inside=30, max_capacity=80)  # the form always sends the number it started with
     assert r.status_code == 201 and r.json()["max_capacity"] == 150 and "set by an official" in r.json()["message"]
@@ -640,16 +639,16 @@ def test_a_user_report_cannot_undo_an_official_capacity_but_an_official_can_chan
     assert report(fid, "open", people_inside=40).json()["max_capacity"] == 150  # left out: carried over
     assert listing(None)[fid]["max_capacity"] == 150
 
-    assert client.post(f"/api/responder/facilities/{fid}/capacity-correction", headers=H_RESP, json={"max_capacity": 200}).status_code == 200
+    assert client.post(f"/api/admin/facilities/{fid}/capacity-correction", headers=H_ADMIN_B, json={"max_capacity": 200}).status_code == 200
     assert listing(None)[fid]["max_capacity"] == 200
     # an official report with its own number sets it too
-    assert report(fid, "open", headers=H_RESP, people_inside=5, max_capacity=180).json()["max_capacity"] == 180
+    assert report(fid, "open", headers=H_ADMIN_B, people_inside=5, max_capacity=180).json()["max_capacity"] == 180
     assert report(fid, "open", max_capacity=10).json()["max_capacity"] == 180
 
 
 def test_capacity_correction_refuses_what_makes_no_sense():
     fid = approved_place("Capacity Refuse Gym", capacity=100)
-    fix = lambda fid_, body: client.post(f"/api/responder/facilities/{fid_}/capacity-correction", headers=H_RESP, json=body)  # noqa: E731
+    fix = lambda fid_, body: client.post(f"/api/admin/facilities/{fid_}/capacity-correction", headers=H_ADMIN_B, json=body)  # noqa: E731
     r = fix(fid, {"max_capacity": 150})  # no status yet to sit on
     assert r.status_code == 422 and "no status yet" in r.json()["detail"]
     report(fid, "open", people_inside=90)

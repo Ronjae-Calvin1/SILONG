@@ -8,9 +8,8 @@ gives short, clear answers.
 
 - No accounts for the public. Anyone can use the map, report, and ask the
   chatbot right away, with no sign-up and no login.
-- Staff accounts: **Responders** and **Super admins** sign in. There is no
-  public sign-up. Responders use a phone or a computer; Super admins use a
-  computer. The accounts, sign in, roles and audit log work on the server
+- Admin accounts: **Admins** sign in (one role; every Admin can do everything). There is no
+  public sign-up. The accounts, sign in, roles and audit log work on the server
   (backend only so far; the sign-in screens are not built yet).
 - Mobile first, but online only. There is no offline mode and the site is not
   meant to be installed on the home screen.
@@ -32,18 +31,18 @@ Frontend developer: start with [`docs/FRONTEND_TODO.md`](docs/FRONTEND_TODO.md),
 | Function | What it does | Status |
 | --- | --- | --- |
 | Map | Shows hospitals, clinics and evacuation centers. All pins show automatically. Tap a pin for the name, address and a tap-to-call number. | Working |
-| Capacity and availability | Tap a pin to see whether a place is open, busy or full and when that was last updated. Evacuation centers also show a capacity bar ("85 / 100 people", "15 spaces left"). Anyone can update it, with no login. Each update says who it came from: "Reported by a user" or "Confirmed by official" (a signed-in responder or Super admin). | Working on the server (`source` and `source_label` in `/api/facilities`). Planned: showing the label in the screens |
-| Evacuation center manager | A place a user adds waits for a responder or Super admin to approve it, and only its sender sees it until then. "Hide on this phone" only affects that phone. Removing a center for everyone is an admin action; it is kept 30 days (restorable), then deleted with its history. Only a Super admin can delete one sooner. | Working on the server (add, approve, reject, remove, restore, 30-day purge, permanent delete). The frontend still has no screen to approve places or to send the phone ID with an added place (see below) |
+| Capacity and availability | Tap a pin to see whether a place is open, busy or full and when that was last updated. Evacuation centers also show a capacity bar ("85 / 100 people", "15 spaces left"). Anyone can update it, with no login. Each update says who it came from: "Reported by a user" or "Confirmed by official" (a signed-in Admin). | Working on the server (`source` and `source_label` in `/api/facilities`). Planned: showing the label in the screens |
+| Evacuation center manager | A place a user adds waits for an Admin to approve it, and only its sender sees it until then. "Hide on this phone" only affects that phone. Removing a center for everyone is an admin action; it is kept 30 days (restorable), then deleted with its history. Only an Admin can delete one sooner. | Working on the server (add, approve, reject, remove, restore, 30-day purge, permanent delete). The frontend still has no screen to approve places or to send the phone ID with an added place (see below) |
 | Weather forecast | Current weather and a 5-day forecast for Batangas City from Open-Meteo, cached for 10 minutes. If Open-Meteo cannot be reached, the last good forecast is shown with the time it was received. | Working on the server (`GET /api/weather`). The screen still shows "not connected" |
-| Emergency contacts | Red phone button that opens numbers to call with one tap. A Super admin edits the numbers; only 911 is filled in until the Batangas City CDRRMO confirms the others. | Working on the server (`GET /api/emergency-numbers`, Super admin edit endpoints). The screen still has its own fixed list (911 and 143) |
-| Early warning alerts | Bottom panel with weather, official warnings and updates. Advisories are posted by hand by a Super admin and can be pinned; only sources on the official list count as official. Nothing is fetched automatically. | Working on the server (`GET /api/advisories`, Super admin endpoints). The screen still shows "not connected" and sample data |
+| Emergency contacts | Red phone button that opens numbers to call with one tap. An Admin edits the numbers; only 911 is filled in until the Batangas City CDRRMO confirms the others. | Working on the server (`GET /api/emergency-numbers`, Admin edit endpoints). The screen still has its own fixed list (911 and 143) |
+| Early warning alerts | Bottom panel with weather, official warnings and updates. Advisories are posted by hand by an Admin and can be pinned; only sources on the official list count as official. Nothing is fetched automatically. | Working on the server (`GET /api/advisories`, Admin endpoints). The screen still shows "not connected" and sample data |
 | Incident report | Report an incident with a location from GPS or a point on the map. | Form works, saved on the phone only, not sent to a server |
 | AI chatbot | One question in, one short answer out, from a checked guide only. No follow-ups and no live place status. Every answer ends with "AI-generated. Follow official advisories first." | **Placeholder, AI not connected.** `POST /api/chat` works and gives a fixed answer (Silo is not available yet, call 911, follow official advisories). No AI, no key, no cost. The checked guide and its editor are not built |
-| Help requests and hazard reports (replaces the incident report form) | "I need help" goes to responders only and is never shown on the map. A hazard report shows to nearby people as an approximate spot, "Unconfirmed" after 3 reports from 3 phones, "Verified" once an admin checks it. | Working (backend only, no screens yet). The old incident form above still saves on the phone only |
-| Responder side | Reports list, map, places and a resolve step. Phone and computer layouts. | The endpoints work on the server: reports (list, take, resolve, mark false, verify), places (approve, reject, remove, restore) and status corrections (override, capacity). Planned: the screens |
-| Staff accounts and sign in | Responder and Super admin accounts, sign in and out, lock after 5 wrong tries, sign out after 30 minutes idle, role checks on the server. | Working (backend only, no screens yet) |
-| Audit log | Every admin action is recorded with the person's name. A Super admin reads it. | Working (backend only, no screens yet) |
-| Super admin side | Everything a responder does, plus advisories, emergency numbers, the chatbot guide, accounts, the audit log and permanent delete. Computer only. | Accounts, audit log, permanent delete, advisories and emergency numbers work on the server. Planned: the screens and the chatbot guide |
+| Help requests and hazard reports (replaces the incident report form) | "I need help" goes to Admins only and is never shown on the map. A hazard report shows to nearby people as an approximate spot, "Unconfirmed" after 3 reports from 3 phones, "Verified" once an admin checks it. | Working (backend only, no screens yet). The old incident form above still saves on the phone only |
+| Admin side | Reports list, map, places and a resolve step. Phone and computer layouts. | The endpoints work on the server: reports (list, take, resolve, mark false, verify), places (approve, reject, remove, restore) and status corrections (override, capacity). Planned: the screens |
+| Admin accounts and sign in | Admin accounts (one role), sign in and out, lock after 5 wrong tries, sign out after 30 minutes idle, role checks on the server. | Working (backend only, no screens yet) |
+| Audit log | Every admin action is recorded with the person's name. An Admin reads it. | Working (backend only, no screens yet) |
+| Admin side (content and accounts) | Everything above, plus advisories, emergency numbers, the chatbot guide, accounts, the audit log and permanent delete. Computer only. | Accounts, audit log, permanent delete, advisories and emergency numbers work on the server. Planned: the screens and the chatbot guide |
 | FAQs, support and "My reports and places" | Menu pages. | Planned (designed, not built) |
 
 Status is based on the code in this repository. Anything marked "Not built
@@ -225,7 +224,7 @@ The current data file has no evacuation centers. Add one in the app (see
 
 **Who reported it, and corrections by staff:** every status update records its
 source. A normal update is `"source": "user"` (`"Reported by a user"`). When a
-signed-in responder or Super admin sends the same update with their token
+signed-in Admin sends the same update with their token
 (`Authorization: Bearer ...`), it is `"source": "official"` (`"Confirmed by
 official"`) with their name kept on the row, and it is not slowed down by the
 per-place cooldown. Both fields are inside `status` in `GET /api/facilities`
@@ -237,9 +236,9 @@ and none of them erases anything; each adds a row to the status history):
 
 | Action | Endpoint | Who |
 | --- | --- | --- |
-| Override the latest status | `POST /api/responder/facilities/{id}/status-override` | Responder, Super admin |
-| Correct the maximum capacity | `POST /api/responder/facilities/{id}/capacity-correction` | Responder, Super admin |
-| Full history with staff names | `GET /api/responder/facilities/{id}/status-history` | Responder, Super admin |
+| Override the latest status | `POST /api/admin/facilities/{id}/status-override` | Admin |
+| Correct the maximum capacity | `POST /api/admin/facilities/{id}/capacity-correction` | Admin |
+| Full history with staff names | `GET /api/admin/facilities/{id}/status-history` | Admin |
 
 An override takes the same fields as a user report (and the same "at capacity
 means full" rule) plus an optional `reason`. A capacity correction needs a status
@@ -271,7 +270,7 @@ their own table, so re-fetching the file never removes them.
    reports use, stored hashed). Nobody else gets it in `/api/facilities`, and nobody
    else can read or update it by guessing its number. It shows "No status yet" and
    "Capacity: N people" until someone reports.
-4. A responder or Super admin approves it (everybody sees it from then on) or
+4. An Admin approves it (everybody sees it from then on) or
    rejects it (nobody but staff sees it). Staff see a list of pending places with
    the exact details.
 
@@ -286,23 +285,23 @@ waits (409), and one phone can have at most 5 places waiting
 it and it never hides a center for anybody else. Hospitals and clinics cannot be
 hidden. Nothing a user does can remove a center for everyone.
 
-**Remove for everyone (responder or Super admin):** an approved evacuation center
+**Remove for everyone (Admin):** an approved evacuation center
 is hidden from the map for all users. Its data and status history are kept for
 **30 days** (`REMOVED_CENTERS_KEEP_DAYS` in `config.py`, or the environment
-variable of the same name). A responder or Super admin can restore it until then.
+variable of the same name). An Admin can restore it until then.
 After 30 days it is **deleted together with its history** by the purge (below).
-Only a Super admin can delete one sooner. Hospitals and clinics cannot be removed.
+Only an Admin can delete one sooner. Hospitals and clinics cannot be removed.
 
 | Action | Endpoint | Who |
 | --- | --- | --- |
 | Add (starts pending) | `POST /api/evacuation-centers` | Anyone (header `X-Phone-Id`, optional) |
-| List places waiting for approval | `GET /api/responder/places` (`?status=rejected` for rejected ones) | Responder, Super admin |
-| Approve | `POST /api/responder/places/{id}/approve` | Responder, Super admin |
-| Reject (optional `reason`) | `POST /api/responder/places/{id}/reject` | Responder, Super admin |
-| Remove for everyone | `DELETE /api/evacuation-centers/{id}` | Responder, Super admin |
-| List removed centers (with the day each is deleted) | `GET /api/evacuation-centers/removed` | Responder, Super admin |
-| Restore | `POST /api/evacuation-centers/{id}/restore` | Responder, Super admin |
-| Delete for good, now (a removed center or a rejected place) | `DELETE /api/admin/places/{id}` | Super admin |
+| List places waiting for approval | `GET /api/admin/places` (`?status=rejected` for rejected ones) | Admin |
+| Approve | `POST /api/admin/places/{id}/approve` | Admin |
+| Reject (optional `reason`) | `POST /api/admin/places/{id}/reject` | Admin |
+| Remove for everyone | `DELETE /api/evacuation-centers/{id}` | Admin |
+| List removed centers (with the day each is deleted) | `GET /api/evacuation-centers/removed` | Admin |
+| Restore | `POST /api/evacuation-centers/{id}/restore` | Admin |
+| Delete for good, now (a removed center or a rejected place) | `DELETE /api/admin/places/{id}` | Admin |
 
 Every approve, reject, remove, restore and delete is written to the audit log with
 the person's name. Adding is written to `action_log` with a hashed IP address
@@ -336,38 +335,45 @@ older status updates become user reports, nothing is lost.
 
 1. Add a center with capacity 100. You see it, with a dashed blue ring once the
    screens show `approval_status`; open the map from another browser and you do not.
-2. As a responder, `GET /api/responder/places`, then approve it. Now everybody sees it.
+2. As an Admin, `GET /api/admin/places`, then approve it. Now everybody sees it.
 3. Update status: **Almost full**, people inside 85. Orange pin, orange bar,
    "85 / 100 people", "15 spaces left".
 4. Update status: **Open**, people inside 100. The page shows the "saved as
    full" message; the pin and bar turn red and the status is **Full**.
-5. As a responder, remove it, restart the backend, refresh: it stays hidden.
+5. As an Admin, remove it, restart the backend, refresh: it stays hidden.
    `GET /api/evacuation-centers/removed` lists it with `days_left`; restore it.
 
-## Staff accounts and roles
+## Admin accounts
 
-Two roles. A **Super admin** can do everything a **responder** can, plus manage
-accounts and read the audit log. The public has no account, and there is no
-public sign-up. Permissions are checked on the server (`backend/app/auth.py`),
-not only hidden in the screens.
+One role: **Admin** (`ADMIN_CONSOLE.md` is the source of truth). Every Admin can do
+everything: reports, places, status overrides, accounts, the audit log, blocked phones,
+advisories, official sources, emergency numbers and permanent delete. Nothing is locked
+by role. The public has no account, and there is no public sign-up. Sign-in is checked on
+the server (`backend/app/auth.py`, `require_admin`), not only hidden in the screens.
 
-**Create the first Super admin** (once, from the backend folder):
+**Upgrading an existing database.** Accounts made with the old roles (`responder`,
+`super_admin`) become Admins when the backend starts. It is idempotent (a second start
+changes nothing), never wipes anything, writes one audit entry per account
+(`user.role_migrated`, by `(system)`, with the old role) and a line in the server log.
+Older audit entries keep the role they had at the time.
+
+**Create the first Admin** (once, from the backend folder):
 
 ```
 cd backend
-py scripts/create_super_admin.py
+py scripts/create_admin.py
 ```
 
 It asks for a name and a password (not shown while you type, at least 8
-characters). It refuses to run when a Super admin already exists. The Super
-admin then signs in and creates the other accounts. The script uses the same
+characters). It refuses to run when an Admin already exists. That Admin
+then signs in and creates the other accounts. The script uses the same
 database as the backend (`typhoon.db` in the folder you run it from).
 
 **How sign in works.** `POST /api/auth/sign-in` with a name and password returns
 a `token`. Send it on every later request as `Authorization: Bearer <token>`.
 The name is not case sensitive. Wrong name and wrong password give the same
 message. After **5 wrong tries in a row** the account is locked for **15
-minutes** (even the right password is refused until then, unless a Super admin
+minutes** (even the right password is refused until then, unless an Admin
 unlocks it). A session ends after **30 minutes without use**; each request
 moves the timer forward.
 
@@ -376,17 +382,18 @@ moves the timer forward.
 | POST | `/api/auth/sign-in` | Anyone with an account | Sign in, returns the token |
 | POST | `/api/auth/sign-out` | Signed in | End this sign-in (safe to call twice) |
 | POST | `/api/auth/change-password` | Signed in | Change your own password (`current_password`, `new_password`); your other sign-ins end |
-| GET | `/api/me` | Responder, Super admin | Who is signed in and their role |
-| GET | `/api/admin/users` | Super admin | List accounts and whether they are locked |
-| POST | `/api/admin/users` | Super admin | Create an account (`name`, `password`, `role`) |
-| POST | `/api/admin/users/{id}/lock` | Super admin | Lock until unlocked; signs the person out |
-| POST | `/api/admin/users/{id}/unlock` | Super admin | Unlock (also clears a wrong-tries lock) |
-| POST | `/api/admin/users/{id}/reset-password` | Super admin | Set a new password for someone (`new_password`); they are signed out everywhere |
-| DELETE | `/api/admin/users/{id}` | Super admin | Remove the account (its audit entries stay) |
-| GET | `/api/admin/audit-log` | Super admin | Newest first. `limit`, `offset`, `before_id`, `action`, `actor` (exact name), `person` (part of a name), `from`, `to` (dates, `YYYY-MM-DD`, UTC). The number of matches is in the `X-Total-Count` header |
+| GET | `/api/me` | Admin | Who is signed in and their role |
+| GET | `/api/admin/users` | Admin | List accounts and whether they are locked |
+| POST | `/api/admin/users` | Admin | Create an Admin account (`name`, `password`). A `role` is still accepted for one release and ignored: every account is an Admin |
+| POST | `/api/admin/users/{id}/lock` | Admin | Lock until unlocked; signs the person out |
+| POST | `/api/admin/users/{id}/unlock` | Admin | Unlock (also clears a wrong-tries lock) |
+| POST | `/api/admin/users/{id}/reset-password` | Admin | Set a new password for someone (`new_password`); they are signed out everywhere |
+| DELETE | `/api/admin/users/{id}` | Admin | Remove the account (its audit entries stay) |
+| GET | `/api/admin/audit-log` | Admin | Newest first. `limit`, `offset`, `before_id`, `action`, `actor` (exact name), `person` (part of a name), `from`, `to` (dates, `YYYY-MM-DD`, UTC). The number of matches is in the `X-Total-Count` header |
 
-No token or an expired one gives 401. A signed-in responder on a Super admin
-route gets 403. You cannot lock or remove your own account. The existing map,
+No token, an unknown one or an expired one gives 401. A sign-in that is still alive but whose
+account is locked or gone gives 403. You cannot lock or remove your own account, and the
+last active Admin cannot be locked or removed (409). The existing map,
 status and evacuation center endpoints still need no sign-in; they get their
 role checks in the later parts.
 
@@ -423,18 +430,18 @@ py tests/test_accounts.py
 ```
 
 It uses its own temporary database. It checks lockout and unlock, the idle
-timeout, a responder blocked from Super admin routes, no token blocked, and the
-audit entries.
+timeout, 401 without a sign-in and 403 for a locked or removed account on every Admin route, the
+role migration, and the audit entries.
 
 **Passwords.** Anyone signed in can change their own password
 (`POST /api/auth/change-password`): a wrong current password is refused with a 403 and
 counts toward a limit per person (5 in 10 minutes) and per IP (20 in 10 minutes), then
 the answer is 429. A new password follows the same rules as account creation and must
 differ from the current one. Your other sign-ins end; the one you used stays. **A
-forgotten password no longer means recreating the account:** a Super admin sets a new one
+forgotten password no longer means recreating the account:** an Admin sets a new one
 with `POST /api/admin/users/{id}/reset-password`, tells the person, and the person is
-signed out everywhere, with their wrong-try count and automatic lock cleared. A lock a
-Super admin set by hand stays until unlocked. A Super admin cannot reset their own password
+signed out everywhere, with their wrong-try count and automatic lock cleared. A lock an
+Admin set by hand stays until unlocked. An Admin cannot reset their own password
 that way (use change-password). Both actions are audited; passwords are never logged or
 sent back.
 
@@ -444,9 +451,9 @@ sent back.
 
 Two kinds of report, sent without an account. There are **no photos and no name
 field**. A report has a `category`, a location and a short optional `note`; a
-help request also has a required `contact` (a phone number the responders can
+help request also has a required `contact` (a phone number the Admins can
 call) and optional `people` and `can_move`. The exact location and the contact are
-visible only to responders and Super admins (`backend/app/report_service.py`).
+visible only to Admins (`backend/app/report_service.py`).
 
 | Field | Help request | Hazard |
 | --- | --- | --- |
@@ -463,13 +470,13 @@ frontend sends its type as `kind`, its text as `details`, `people` and `canMove`
 the API names them `category`, `note`, `people` and `can_move`, and its own `kind`
 is the form's help / hazard mode.
 
-- **"I need help"** (`"kind": "help"`) goes to responders only and is never
+- **"I need help"** (`"kind": "help"`) goes to Admins only and is never
   public. The sender sees only their own reports and a status: **New**, **Being
   handled** or **Resolved**.
 - **Hazard** (`"kind": "hazard"`): people within **1 km** see an approximate spot
   with no details. It shows as **Unconfirmed** once **3 different phones**
-  reported it, and as **Verified** once a responder or Super admin verifies it.
-  Before either, a hazard is visible only to responders and to the phones that
+  reported it, and as **Verified** once an Admin verifies it.
+  Before either, a hazard is visible only to Admins and to the phones that
   sent it.
 
 **Phone ID.** The browser makes a random value (16 to 64 letters, digits, `-` or
@@ -482,18 +489,18 @@ data gives the phone a new one. Only its SHA-256 hash is stored.
 | POST | `/api/reports` | Public (`X-Phone-Id`) | Send a report (fields above). 201 (200 if this phone already reported this hazard) |
 | GET | `/api/reports/mine` | Public (`X-Phone-Id`) | This phone's own reports, newest first: its own location, its `category` and a status. No contact, no people, no handler, no reason |
 | GET | `/api/hazards/nearby` | Public | `latitude`, `longitude` in the query. Unconfirmed or Verified hazards within the near-me range: an approximate spot, a status and the `category`, nothing else |
-| GET | `/api/responder/reports` | Responder, Super admin | The list for the responder screens (poll about every 10 seconds). `include_closed`, `kind` filters |
-| POST | `/api/responder/reports/{id}/take` | Responder, Super admin | New to Being handled. 409 if another person already has it |
-| POST | `/api/responder/reports/{id}/resolve` | Responder, Super admin | Needs `what_was_done` |
-| POST | `/api/responder/reports/{id}/mark-false` | Responder, Super admin | Needs a `reason` |
-| POST | `/api/responder/reports/{id}/verify` | Responder, Super admin | Hazards only. The public then sees it as Verified |
+| GET | `/api/admin/reports` | Admin | The list for the Admin screens (poll about every 10 seconds). `include_closed`, `kind` filters |
+| POST | `/api/admin/reports/{id}/take` | Admin | New to Being handled. 409 if another person already has it |
+| POST | `/api/admin/reports/{id}/resolve` | Admin | Needs `what_was_done` |
+| POST | `/api/admin/reports/{id}/mark-false` | Admin | Needs a `reason` |
+| POST | `/api/admin/reports/{id}/verify` | Admin | Hazards only. The public then sees it as Verified |
 
-Responder endpoints use the sign-in token from the accounts section
+Admin endpoints use the sign-in token from the accounts section
 (`Authorization: Bearer <token>`). No token gives 401. Take, resolve, mark false
 and verify are each written to the audit log with the person's name
 (`report.take`, `report.resolve`, `report.mark_false`, `report.verify`).
 
-**Responder list.** Each call returns `refresh_seconds` (10), `new_help_count`
+**Admin list.** Each call returns `refresh_seconds` (10), `new_help_count`
 and `has_new_help` (true while any help request is still New: show the red
 "Needs help" alert), `latest_report_id`, and `items`. Help requests nobody has
 taken come first, longest waiting first. An item has the exact `latitude` and
@@ -505,7 +512,7 @@ hazard), `people` and `can_move` (help requests only, empty on hazards),
 
 **How hazards are grouped.** A hazard report within **100 m** of the first report
 of an open hazard counts as the same hazard, whatever its category. The public and
-the responder item show the category of the first report. One phone counts once per hazard
+the Admin item show the category of the first report. One phone counts once per hazard
 (sending it again returns the earlier report). Take, resolve, mark false and
 verify on a hazard apply to all its reports. A resolved or false hazard is closed:
 a new report at that place starts a new hazard.
@@ -587,8 +594,8 @@ an existing `reports` table automatically when the server starts (and when
 `scripts/purge_reports.py` runs). Reports sent before that keep working and show
 an empty category.
 
-**Not built yet:** the report screens and the responder screens (the frontend
-still has the old incident form), and a way for a Super admin to lift a phone
+**Not built yet:** the report screens and the Admin screens (the frontend
+still has the old incident form), and a way for an Admin to lift a phone
 block.
 
 ## Weather, advisories, emergency numbers and the chatbot placeholder
@@ -600,22 +607,22 @@ sample or "not connected" states and are not changed here.
 | --- | --- | --- |
 | `GET /api/weather` | public | Batangas City forecast |
 | `GET /api/advisories` | public | Advisories, pinned first then newest. `?official=true` for official sources only (the Warnings tab), `?limit=` |
-| `POST /api/admin/advisories` | Super admin | Create: `title`, `details`, `organization`, `source_url`, `pinned` |
-| `PATCH /api/admin/advisories/{id}` | Super admin | Change any of `title`, `details`, `organization`, `source_url` |
-| `POST /api/admin/advisories/{id}/pin` and `/unpin` | Super admin | Pin or unpin (safe to call twice) |
-| `DELETE /api/admin/advisories/{id}` | Super admin | Delete |
-| `GET /api/admin/advisory-sources` | Super admin | The names that count as official |
-| `POST /api/admin/advisory-sources` | Super admin | Add a name: `name` |
-| `PATCH /api/admin/advisory-sources/{id}` | Super admin | Rename |
-| `DELETE /api/admin/advisory-sources/{id}` | Super admin | Remove (its advisories stay, no longer official) |
+| `POST /api/admin/advisories` | Admin | Create: `title`, `details`, `organization`, `source_url`, `pinned` |
+| `PATCH /api/admin/advisories/{id}` | Admin | Change any of `title`, `details`, `organization`, `source_url` |
+| `POST /api/admin/advisories/{id}/pin` and `/unpin` | Admin | Pin or unpin (safe to call twice) |
+| `DELETE /api/admin/advisories/{id}` | Admin | Delete |
+| `GET /api/admin/advisory-sources` | Admin | The names that count as official |
+| `POST /api/admin/advisory-sources` | Admin | Add a name: `name` |
+| `PATCH /api/admin/advisory-sources/{id}` | Admin | Rename |
+| `DELETE /api/admin/advisory-sources/{id}` | Admin | Remove (its advisories stay, no longer official) |
 | `GET /api/emergency-numbers` | public | In the order to show them |
-| `POST /api/admin/emergency-numbers` | Super admin | Add: `number`, `name`, `description` |
-| `PATCH /api/admin/emergency-numbers/{id}` | Super admin | Change any of them (`"description": null` clears it) |
-| `PUT /api/admin/emergency-numbers/order` | Super admin | `{ "ids": [...] }`: every id once, in the new order |
-| `DELETE /api/admin/emergency-numbers/{id}` | Super admin | Remove |
+| `POST /api/admin/emergency-numbers` | Admin | Add: `number`, `name`, `description` |
+| `PATCH /api/admin/emergency-numbers/{id}` | Admin | Change any of them (`"description": null` clears it) |
+| `PUT /api/admin/emergency-numbers/order` | Admin | `{ "ids": [...] }`: every id once, in the new order |
+| `DELETE /api/admin/emergency-numbers/{id}` | Admin | Remove |
 | `POST /api/chat` | public | `{ "question": "..." }` gives `{ "answer": "...", "topic": null }` |
 
-No token gives 401. A responder gives 403 on every `/api/admin/...` route above.
+No token gives 401. Any signed-in Admin can use every `/api/admin/...` route above.
 Every admin change is written to the audit log with the person's name
 (`advisory.*`, `advisory_source.*`, `emergency_number.*`).
 
@@ -630,7 +637,7 @@ always `null`: there is no reliable source yet, and the screen says to check PAG
 
 **Advisories.** Posted by hand only. The source list starts with PAGASA, NDRRMC and
 Batangas City CDRRMO (table `advisory_sources`, filled once when the table is made;
-a Super admin edits it). An advisory is official when its `organization` matches a
+an Admin edits it). An advisory is official when its `organization` matches a
 name on the list, ignoring case and extra spaces, so editing the list changes the
 badge on older advisories too. `source_url` is required and must be an http or https
 link (the Updates tab needs a link to the original on every card).
@@ -673,7 +680,7 @@ environment overrides): `CHAT_PROVIDER` (`placeholder`), `CHAT_MAX_QUESTION_LENG
 **Older databases.** The new tables (`advisories`, `advisory_sources`,
 `emergency_numbers`) are created on the next start. No existing table gets a new
 column in part 4. The starting rows (the three official sources, 911) are made only
-when their table is first created, so something a Super admin removed does not come
+when their table is first created, so something an Admin removed does not come
 back. The weather copy uses the existing `cached_responses` table.
 
 **Run the checks** (needs `pip install -r requirements-dev.txt` once):
@@ -685,7 +692,7 @@ py tests/test_content.py
 
 It uses its own temporary database and never calls Open-Meteo (the network call is
 replaced). It checks the last-good-forecast fallback and the plain error, that only
-a Super admin can change advisories, sources and numbers, that public reads work and
+an Admin can change advisories, sources and numbers, that public reads work and
 pinned comes first, the chat shape and ending line, that the chat code makes no
 network call, the fallback from an unbuilt provider, the length limit, the rate limit,
 that nothing about the asker is stored, the audit entries, and an older database.
@@ -700,18 +707,18 @@ All four test files: `py tests/run_all.py`.
 to `backend/.env` to change one. `DATABASE_URL` can be set there too.
 
 **Blocked phones.** A phone is blocked from sending reports after 3 false reports. Before, a block
-could never be undone. Now a Super admin can:
+could never be undone. Now an Admin can:
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
-| GET | `/api/admin/blocked-phones` | Super admin | List `id`, `blocked_at`, `false_reports`, `expires_at`. Never the phone ID or its hash |
-| POST | `/api/admin/blocked-phones/{id}/unblock` | Super admin | Let that phone send reports again (audited) |
+| GET | `/api/admin/blocked-phones` | Admin | List `id`, `blocked_at`, `false_reports`, `expires_at`. Never the phone ID or its hash |
+| POST | `/api/admin/blocked-phones/{id}/unblock` | Admin | Let that phone send reports again (audited) |
 
 An unblocked phone starts with a fresh false-report count (a table `forgiven_phones` remembers
 the date, hashed ID only). `BLOCK_EXPIRES_DAYS` (default **0 = never**) ends a block by itself
 after that many days.
 
-**Correct place details.** `PATCH /api/responder/places/{id}` (responder, Super admin) changes the
+**Correct place details.** `PATCH /api/admin/places/{id}` (Admin) changes the
 `name`, `address`, `barangay`, `contact` or `note` of an evacuation center that was **added through
 the app**. Same limits as adding; send only the fields to change; an empty text clears a field except
 the name. A new name that matches another center within 30 m is refused (409). The audit entry
@@ -729,7 +736,7 @@ several server processes each runs its own copy (safe).
 
 **Demo data.** `py scripts/seed_demo.py --db demo.db` fills a **separate** database with clearly marked
 DEMO help requests, hazards (one with 3 phones, one verified), approved and pending places, and
-advisories (one pinned). Add `--with-demo-staff` to also make a demo responder and a demo Super admin;
+advisories (one pinned). Add `--with-demo-staff` to also make two demo Admins ("Demo Admin" and "Demo Admin 2");
 the script prints their passwords once. It prints which database it uses and **refuses the real
 `typhoon.db`** (or any non-SQLite database) unless you add `--force`. Running it twice adds nothing.
 Start the backend on it with `DATABASE_URL=sqlite:///./demo.db` (or in `backend/.env`).
@@ -794,7 +801,7 @@ Press `Ctrl+C` in each terminal. On Windows, it may ask
 ```
 SILONG/
 ├── backend/
-│   ├── scripts/                # create_super_admin.py, seed_demo.py (DEMO data), generate_api_doc.py (docs/API.md), purge scripts, fetch/backdate helpers
+│   ├── scripts/                # create_admin.py, seed_demo.py (DEMO data), generate_api_doc.py (docs/API.md), purge scripts, fetch/backdate helpers
 │   ├── .env.example            # Optional backend settings; copy to backend/.env (read automatically, ignored by Git)
 │   ├── tests/                  # test_accounts.py, test_reports.py, test_places.py, test_content.py, test_ops.py, run_all.py (runs them all)
 │   └── app/
@@ -816,14 +823,14 @@ SILONG/
 │       ├── account_routes.py   # Sign in/out, /api/me, accounts, audit log endpoints
 │       ├── account_schemas.py  # Request/response shapes for the above
 │       ├── accounts.py         # Create, sign in, sessions, lock/unlock/remove
-│       ├── auth.py             # Role check for admin routes (require_responder, require_super_admin, optional_staff)
+│       ├── auth.py             # Role check for admin routes (require_admin, optional_staff)
 │       ├── audit.py            # audit.record(...) helper for admin actions
 │       ├── security.py         # Password hashing, token hashing
-│       ├── report_routes.py    # Send a report, my reports, nearby hazards, responder list and actions
+│       ├── report_routes.py    # Send a report, my reports, nearby hazards, Admin list and actions
 │       ├── report_schemas.py   # Request/response shapes for reports
 │       ├── report_service.py   # Report rules: hazard groups, approximate spot, false reports, purge
 │       ├── status_service.py   # Latest status / history, source of an update, capacity rule (automatic "Full")
-│       ├── ops_routes.py       # Blocked phones: list and unblock (Super admin)
+│       ├── ops_routes.py       # Blocked phones: list and unblock (Admin)
 │       ├── maintenance.py      # Scheduled cleanup task (every PURGE_INTERVAL_MINUTES)
 │       ├── database.py         # SQLite connection
 │       └── weather_service.py  # Open-Meteo forecast, cache, last good forecast
@@ -852,7 +859,7 @@ Based on the project documentation:
 - Connect the screens to the part 4 endpoints (the backend is ready): the weather and
   alerts panel (`/api/weather`, `/api/advisories`), the emergency numbers panel
   (`/api/emergency-numbers`, which has only 911 until the Batangas City CDRRMO
-  confirms the others), and the Super admin screens to post advisories and edit
+  confirms the others), and the Admin screens to post advisories and edit
   numbers.
 - Connect the frontend to the places rules (backend is ready): send the `X-Phone-Id`
   header with `/api/facilities`, the status update and the add-place call (a pending

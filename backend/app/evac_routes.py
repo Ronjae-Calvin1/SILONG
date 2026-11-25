@@ -2,14 +2,14 @@
 Evacuation center manager endpoints.
 
     POST   /api/evacuation-centers                public, X-Phone-Id (optional)   add a place: it starts as PENDING
-    GET    /api/evacuation-centers/removed        responder, super_admin          centers removed for everyone
-    DELETE /api/evacuation-centers/{id}           responder, super_admin          remove a center for everyone
-    POST   /api/evacuation-centers/{id}/restore   responder, super_admin          bring a removed center back
+    GET    /api/evacuation-centers/removed        admin                          centers removed for everyone
+    DELETE /api/evacuation-centers/{id}           admin                          remove a center for everyone
+    POST   /api/evacuation-centers/{id}/restore   admin                          bring a removed center back
 
 Approving, rejecting and deleting for good are in place_routes.py.
 
 Adding is the only public action here. The place is visible only to the phone that sent it (the
-hashed X-Phone-Id, handled like in the reports) until a responder or Super admin approves it.
+hashed X-Phone-Id, handled like in the reports) until an Admin approves it.
 Removing is a staff action and affects everybody; "Hide on this phone" is done in the browser and
 never reaches the server. Nothing here deletes a row: the purge does that after
 config.REMOVED_CENTERS_KEEP_DAYS days (place_service.py).
@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from . import config, evac_service, place_service
-from .auth import require_responder
+from .auth import require_admin
 from .database import get_db
 from .models import User
 from .rate_limit import manage_limiter
@@ -56,23 +56,23 @@ def add_center(
 ):
     """
     Add an evacuation center. Field rules live in schemas.EvacCenterIn. The place starts as
-    PENDING ("approval_status": "pending"): you see it, nobody else does, until a responder or
-    Super admin approves it. Send the X-Phone-Id header (the same one the reports use), or you will
+    PENDING ("approval_status": "pending"): you see it, nobody else does, until an Admin
+    approves it. Send the X-Phone-Id header (the same one the reports use), or you will
     not see it again after a reload. A possible duplicate (same name within 30 m) does not stop
-    the place: it is flagged for the responder who reviews it.
+    the place: it is flagged for the Admin who reviews it.
     """
     if phone:
         if evac_service.pending_duplicate_of_phone(db, phone, payload.name, payload.latitude, payload.longitude):
             raise HTTPException(
                 status_code=409,
-                detail="You already added this place. It is waiting for approval by a responder.",
+                detail="You already added this place. It is waiting for approval by an Admin.",
             )
         if evac_service.pending_count_of_phone(db, phone) >= config.PENDING_PLACES_PER_PHONE:
             raise HTTPException(
                 status_code=429,
                 detail=(
                     f"You already have {config.PENDING_PLACES_PER_PHONE} places waiting for approval. "
-                    "Please wait until a responder has looked at them."
+                    "Please wait until an Admin has looked at them."
                 ),
             )
     # Limit after validation and the checks above, so a mistake does not use up the allowance.
@@ -86,7 +86,7 @@ def add_center(
 
 
 @router.get("/removed", response_model=List[RemovalOut])
-def list_removed(user: User = Depends(require_responder), db: Session = Depends(get_db)):
+def list_removed(user: User = Depends(require_admin), db: Session = Depends(get_db)):
     """Centers that are removed right now, newest first, each with the day it will be deleted for good."""
     return place_service.list_removed(db)
 
@@ -94,7 +94,7 @@ def list_removed(user: User = Depends(require_responder), db: Session = Depends(
 @router.delete("/{facility_id}", response_model=RemovalOut)
 def remove_center(
     facility_id: int, request: Request,
-    user: User = Depends(require_responder), db: Session = Depends(get_db),
+    user: User = Depends(require_admin), db: Session = Depends(get_db),
 ):
     """Remove a center for everyone. Its data and status history are kept (30 days) so it can be restored."""
     return place_service.remove(db, user, facility_id, request)
@@ -103,7 +103,7 @@ def remove_center(
 @router.post("/{facility_id}/restore", response_model=FacilityOut)
 def restore_center(
     facility_id: int, request: Request,
-    user: User = Depends(require_responder), db: Session = Depends(get_db),
+    user: User = Depends(require_admin), db: Session = Depends(get_db),
 ):
     """Bring a removed center back on the map."""
     facility = place_service.restore(db, user, facility_id, request)

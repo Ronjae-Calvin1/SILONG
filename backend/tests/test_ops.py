@@ -58,10 +58,10 @@ def db_session():
     return SessionLocal()
 
 
-def make_user(name, role, password=PASSWORD):
+def make_user(name, password=PASSWORD):
     db = db_session()
     try:
-        return accounts.create_user(db, name, password, role, actor="test setup").id
+        return accounts.create_user(db, name, password, actor="test setup").id
     finally:
         db.close()
 
@@ -80,16 +80,16 @@ def phone_headers(n):
     return {"X-Phone-Id": f"opsphone-{n:04d}-abcdefghij"}
 
 
-ADMIN_ID = make_user("Opsy Admin", "super_admin")
-RESP_ID = make_user("Opsy Responder", "responder")
+ADMIN_ID = make_user("Opsy Admin")
+ADMIN_B_ID = make_user("Opsy Second Admin")
 
 
 def admin():
     return auth("Opsy Admin")
 
 
-def responder():
-    return auth("Opsy Responder")
+def second_admin():
+    return auth("Opsy Second Admin")
 
 
 def audit_rows(action=None):
@@ -144,7 +144,7 @@ def test_backend_env_is_ignored_by_git():
 # ------------------------------------------------------------------ 2. passwords
 
 def test_change_password_wrong_current_is_refused_and_limited():
-    make_user("Opsy Wrong", "responder")
+    make_user("Opsy Wrong")
     password_change_limiter.reset()
     h = auth("Opsy Wrong")
     old = config.PASSWORD_CHANGE_MAX_WRONG
@@ -164,7 +164,7 @@ def test_change_password_wrong_current_is_refused_and_limited():
 
 def test_change_password_per_ip_limit_covers_many_people():
     for n in (1, 2):
-        make_user(f"Opsy Ipguess {n}", "responder")
+        make_user(f"Opsy Ipguess {n}")
     password_change_limiter.reset()
     old = config.PASSWORD_CHANGE_IP_MAX_WRONG
     config.PASSWORD_CHANGE_IP_MAX_WRONG = 2
@@ -180,7 +180,7 @@ def test_change_password_per_ip_limit_covers_many_people():
 
 
 def test_change_password_success_ends_only_the_other_sessions():
-    make_user("Opsy Changer", "responder")
+    make_user("Opsy Changer")
     password_change_limiter.reset()
     h_here, h_other = auth("Opsy Changer"), auth("Opsy Changer")
     r = client.post("/api/auth/change-password", headers=h_here, json={"current_password": PASSWORD, "new_password": NEW_PASSWORD})
@@ -196,7 +196,7 @@ def test_change_password_success_ends_only_the_other_sessions():
 
 
 def test_change_password_rules():
-    make_user("Opsy Rules", "responder")
+    make_user("Opsy Rules")
     h = auth("Opsy Rules")
     short = client.post("/api/auth/change-password", headers=h, json={"current_password": PASSWORD, "new_password": "short"})
     assert short.status_code == 422 and str(config.MIN_PASSWORD_LENGTH) in short.json()["detail"], short.text
@@ -206,17 +206,20 @@ def test_change_password_rules():
     assert sign_in("Opsy Rules", PASSWORD).status_code == 200  # nothing changed
 
 
-def test_reset_password_is_for_a_super_admin_only():
-    make_user("Opsy Target A", "responder")
-    tid = make_user("Opsy Target B", "responder")
-    r = client.post(f"/api/admin/users/{tid}/reset-password", headers=responder(), json={"new_password": NEW_PASSWORD})
-    assert r.status_code == 403, r.text
+def test_reset_password_is_open_to_every_admin_but_not_to_the_public():
+    make_user("Opsy Target A")
+    tid = make_user("Opsy Target B")
     assert client.post(f"/api/admin/users/{tid}/reset-password", json={"new_password": NEW_PASSWORD}).status_code == 401
     assert sign_in("Opsy Target B", PASSWORD).status_code == 200  # untouched
+    r = client.post(f"/api/admin/users/{tid}/reset-password", headers=second_admin(), json={"new_password": NEW_PASSWORD})
+    assert r.status_code == 200, r.text  # a plain Admin may reset
+    assert sign_in("Opsy Target B", PASSWORD).status_code == 401 and sign_in("Opsy Target B", NEW_PASSWORD).status_code == 200
+    entry = client.get("/api/admin/audit-log?action=user.reset_password", headers=admin()).json()[0]
+    assert entry["actor_name"] == "Opsy Second Admin" and entry["actor_role"] == "admin"
 
 
 def test_reset_password_ends_sessions_and_clears_the_lock():
-    tid = make_user("Opsy Forgetful", "responder")
+    tid = make_user("Opsy Forgetful")
     h1, h2 = auth("Opsy Forgetful"), auth("Opsy Forgetful")
     for _ in range(config.SIGNIN_MAX_WRONG_TRIES):  # lock it through the real sign-in path
         sign_in("Opsy Forgetful", "wrong wrong 1")
@@ -240,14 +243,14 @@ def test_reset_password_ends_sessions_and_clears_the_lock():
 
 
 def test_reset_password_rules():
-    tid = make_user("Opsy Locked By Admin", "responder")
+    tid = make_user("Opsy Locked By Admin")
     h = admin()
     assert client.post(f"/api/admin/users/{tid}/lock", headers=h).status_code == 200
     r = client.post(f"/api/admin/users/{tid}/reset-password", headers=h, json={"new_password": "short"})
     assert r.status_code == 422
     assert client.post("/api/admin/users/99999/reset-password", headers=h, json={"new_password": NEW_PASSWORD}).status_code == 404
     assert client.post(f"/api/admin/users/{ADMIN_ID}/reset-password", headers=h, json={"new_password": NEW_PASSWORD}).status_code == 409
-    # A lock a Super admin set is a separate decision: a reset leaves it, unlock undoes it.
+    # A lock an Admin set is a separate decision: a reset leaves it, unlock undoes it.
     assert client.post(f"/api/admin/users/{tid}/reset-password", headers=h, json={"new_password": NEW_PASSWORD}).status_code == 200
     assert sign_in("Opsy Locked By Admin", NEW_PASSWORD).status_code == 423
     client.post(f"/api/admin/users/{tid}/unlock", headers=h)
@@ -266,12 +269,12 @@ def send_hazard(phone_n, note="ops"):
 
 
 def mark_false_via_api(report_id, h):
-    r = client.post(f"/api/responder/reports/{report_id}/mark-false", headers=h, json={"reason": "Not real"})
+    r = client.post(f"/api/admin/reports/{report_id}/mark-false", headers=h, json={"reason": "Not real"})
     assert r.status_code == 200, r.text
 
 
 def block_phone(phone_n):
-    h = responder()
+    h = second_admin()
     for _ in range(config.FALSE_REPORTS_BEFORE_BLOCK):
         r = send_hazard(phone_n)
         assert r.status_code == 201, r.text
@@ -294,7 +297,7 @@ def test_blocked_phones_are_listed_without_any_phone_id():
         db.close()
     assert hashes and not any(h in r.text or h[:8] in r.text for h in hashes)
     assert "opsphone" not in r.text
-    assert client.get("/api/admin/blocked-phones", headers=responder()).status_code == 403
+    assert client.get("/api/admin/blocked-phones", headers=second_admin()).status_code == 200  # every Admin
     assert client.get("/api/admin/blocked-phones").status_code == 401
 
 
@@ -302,18 +305,18 @@ def test_unblock_lets_the_phone_send_again_with_a_fresh_count():
     block_phone(102)
     h = admin()
     block_id = max(b["id"] for b in client.get("/api/admin/blocked-phones", headers=h).json())
-    assert client.post(f"/api/admin/blocked-phones/{block_id}/unblock", headers=responder()).status_code == 403
-    r = client.post(f"/api/admin/blocked-phones/{block_id}/unblock", headers=h)
+    assert client.post(f"/api/admin/blocked-phones/{block_id}/unblock").status_code == 401
+    r = client.post(f"/api/admin/blocked-phones/{block_id}/unblock", headers=second_admin())  # any Admin may unblock
     assert r.status_code == 200 and "again" in r.json()["message"], r.text
     assert block_id not in [b["id"] for b in client.get("/api/admin/blocked-phones", headers=h).json()]
     sent = send_hazard(102)
     assert sent.status_code == 201, sent.text
     # Fresh count: its next false report does not block it straight away.
-    mark_false_via_api(sent.json()["id"], responder())
+    mark_false_via_api(sent.json()["id"], second_admin())
     assert send_hazard(102).status_code == 201
     assert client.post(f"/api/admin/blocked-phones/{block_id}/unblock", headers=h).status_code == 404
     entry = audit_rows("report.phone_unblocked")[-1]
-    assert entry.actor_name == "Opsy Admin" and entry.target == f"blocked_phone:{block_id}"
+    assert entry.actor_name == "Opsy Second Admin" and entry.target == f"blocked_phone:{block_id}"
     assert "opsphone" not in (entry.detail or "")
 
 
@@ -374,67 +377,67 @@ def facility_from_api(fid, phone_n=None):
     return next(f for f in client.get("/api/facilities", headers=headers).json() if f["id"] == fid)
 
 
-def test_place_edit_needs_a_responder():
+def test_place_edit_needs_an_admin():
     pid = add_place(201)
     body = {"name": "Opsy Gym Renamed"}
-    assert client.patch(f"/api/responder/places/{pid}", json=body).status_code == 401
-    assert client.patch(f"/api/responder/places/{pid}", headers=phone_headers(201), json=body).status_code == 401
+    assert client.patch(f"/api/admin/places/{pid}", json=body).status_code == 401
+    assert client.patch(f"/api/admin/places/{pid}", headers=phone_headers(201), json=body).status_code == 401
 
 
 def test_place_edit_changes_details_and_audits_old_and_new():
     pid = add_place(202, name="Opsy Gym Audit", latitude=13.7701)
-    h = responder()
-    r = client.patch(f"/api/responder/places/{pid}", headers=h, json={
+    h = second_admin()
+    r = client.patch(f"/api/admin/places/{pid}", headers=h, json={
         "name": "  Opsy   Gym Fixed ", "address": "New street", "barangay": "Gulod", "contact": "0911 111 1111", "note": "new note"})
     assert r.status_code == 200, r.text
     out = r.json()
     assert (out["name"], out["address"], out["barangay"], out["contact"], out["note"]) == (
         "Opsy Gym Fixed", "New street", "Gulod", "0911 111 1111", "new note"), out
-    approved = client.post(f"/api/responder/places/{pid}/approve", headers=h)
+    approved = client.post(f"/api/admin/places/{pid}/approve", headers=h)
     assert approved.status_code == 200
     f = facility_from_api(pid)  # the map row is in step
     assert f["name"] == "Opsy Gym Fixed" and "New street" in f["address"] and "Gulod" in f["address"] and f["contact"] == "0911 111 1111"
     entry = [a for a in audit_rows("place.edit") if a.target.startswith(f"place:{pid} ")][-1]
-    assert entry.actor_name == "Opsy Responder"
+    assert entry.actor_name == "Opsy Second Admin"
     detail = json.loads(entry.detail)
     assert detail["old"]["name"] == "Opsy Gym Audit" and detail["new"]["name"] == "Opsy Gym Fixed"
     assert detail["old"]["address"] == "Old street" and detail["new"]["address"] == "New street"
     # Clearing a field with an empty text; saying the same thing again changes nothing.
-    r = client.patch(f"/api/responder/places/{pid}", headers=h, json={"note": ""})
+    r = client.patch(f"/api/admin/places/{pid}", headers=h, json={"note": ""})
     assert r.status_code == 200 and r.json()["note"] is None
     n = len(audit_rows("place.edit"))
-    r = client.patch(f"/api/responder/places/{pid}", headers=h, json={"note": None})
+    r = client.patch(f"/api/admin/places/{pid}", headers=h, json={"note": None})
     assert r.status_code == 200 and "Nothing changed" in r.json()["message"] and len(audit_rows("place.edit")) == n
 
 
 def test_place_edit_uses_the_same_limits_as_adding():
     pid = add_place(203, name="Opsy Gym Limits", latitude=13.7712)
-    h = responder()
+    h = second_admin()
     for body in ({}, {"name": None}, {"name": "x"}, {"name": "n" * 101}, {"address": "a" * 201}, {"barangay": "b" * 81},
                  {"contact": "c" * 61}, {"note": "n" * 141}, {"latitude": 13.7}, {"max_capacity": 5}):
-        r = client.patch(f"/api/responder/places/{pid}", headers=h, json=body)
+        r = client.patch(f"/api/admin/places/{pid}", headers=h, json=body)
         assert r.status_code == 422, (body, r.status_code, r.text)
-    assert client.patch(f"/api/responder/places/99999", headers=h, json={"note": "x"}).status_code == 404
+    assert client.patch(f"/api/admin/places/99999", headers=h, json={"note": "x"}).status_code == 404
 
 
 def test_place_edit_applies_the_duplicate_rule_on_a_name_change():
     add_place(204, name="Opsy Duplicate Gym", latitude=13.7750, longitude=121.0800)
     pid = add_place(205, name="Opsy Other Gym", latitude=13.77505, longitude=121.08005)  # about 7 m away
-    h = responder()
-    r = client.patch(f"/api/responder/places/{pid}", headers=h, json={"name": "opsy  DUPLICATE gym!"})
+    h = second_admin()
+    r = client.patch(f"/api/admin/places/{pid}", headers=h, json={"name": "opsy  DUPLICATE gym!"})
     assert r.status_code == 409 and "within 30 metres" in r.json()["detail"], r.text
     assert facility_from_api(pid, 205)["name"] == "Opsy Other Gym"
-    ok = client.patch(f"/api/responder/places/{pid}", headers=h, json={"name": "Opsy Not A Duplicate Gym", "note": "fine"})
+    ok = client.patch(f"/api/admin/places/{pid}", headers=h, json={"name": "Opsy Not A Duplicate Gym", "note": "fine"})
     assert ok.status_code == 200, ok.text
     # A same-name center farther than 30 m is fine.
     far = add_place(206, name="Opsy Far Gym", latitude=13.7800, longitude=121.0900)
-    assert client.patch(f"/api/responder/places/{far}", headers=h, json={"name": "Opsy Duplicate Gym"}).status_code == 200
+    assert client.patch(f"/api/admin/places/{far}", headers=h, json={"name": "Opsy Duplicate Gym"}).status_code == 200
 
 
 def test_place_edit_refuses_hospitals_and_centers_from_the_data_files():
-    h = responder()
+    h = second_admin()
     hospital = next(f for f in client.get("/api/facilities").json() if f["type"] == "hospital")
-    r = client.patch(f"/api/responder/places/{hospital['id']}", headers=h, json={"note": "x"})
+    r = client.patch(f"/api/admin/places/{hospital['id']}", headers=h, json={"note": "x"})
     assert r.status_code == 422 and "evacuation centers" in r.json()["detail"], r.text
     db = db_session()
     try:
@@ -445,16 +448,16 @@ def test_place_edit_refuses_hospitals_and_centers_from_the_data_files():
         fid = row.id
     finally:
         db.close()
-    r = client.patch(f"/api/responder/places/{fid}", headers=h, json={"note": "x"})
+    r = client.patch(f"/api/admin/places/{fid}", headers=h, json={"note": "x"})
     assert r.status_code == 409 and "data files" in r.json()["detail"], r.text
 
 
 def test_place_edit_survives_a_restart():
     pid = add_place(207, name="Opsy Restart Gym", latitude=13.7900, longitude=121.1000)
-    h = responder()
-    assert client.patch(f"/api/responder/places/{pid}", headers=h, json={
+    h = second_admin()
+    assert client.patch(f"/api/admin/places/{pid}", headers=h, json={
         "name": "Opsy Restart Gym Fixed", "address": "Fixed street", "contact": "0922 222 2222"}).status_code == 200
-    client.post(f"/api/responder/places/{pid}/approve", headers=h)
+    client.post(f"/api/admin/places/{pid}/approve", headers=h)
     # A fresh start of the app on the same database: a new process imports it, which runs the startup sync.
     code = ("from fastapi.testclient import TestClient\nfrom app.main import app\nimport json\n"
             f"f = next(x for x in TestClient(app).get('/api/facilities').json() if x['id'] == {pid})\n"
@@ -479,7 +482,8 @@ def test_audit_log_default_call_still_works_and_has_a_total():
     assert ids == sorted(ids, reverse=True)
     old = client.get("/api/admin/audit-log", headers=h, params={"limit": 3, "before_id": ids[0], "action": "auth.sign_in"})
     assert old.status_code == 200 and all(e["action"] == "auth.sign_in" and e["id"] < ids[0] for e in old.json())
-    assert client.get("/api/admin/audit-log", headers=responder()).status_code == 403
+    assert client.get("/api/admin/audit-log", headers=second_admin()).status_code == 200  # every Admin
+    assert client.get("/api/admin/audit-log").status_code == 401
     # The browser may read the total from another origin.
     cors = client.get("/api/admin/audit-log", headers={**h, "Origin": "http://localhost:5173"})
     assert "x-total-count" in cors.headers.get("access-control-expose-headers", "").lower()
@@ -487,7 +491,7 @@ def test_audit_log_default_call_still_works_and_has_a_total():
 
 def test_audit_log_filters_and_paging():
     for n in range(3):
-        make_user(f"Opsy Filter {n}", "responder")
+        make_user(f"Opsy Filter {n}")
         sign_in(f"Opsy Filter {n}")
     h = admin()
     r = client.get("/api/admin/audit-log", headers=h, params={"person": "OPSY filter", "action": "auth.sign_in"})
@@ -717,8 +721,11 @@ def test_api_document_lists_every_route():
             assert needle in text, (label, needle)
         assert "| ? |" not in text and "(?" not in text  # every endpoint has a "who can call it"
     fresh = out.read_text(encoding="utf-8")
-    assert "| `POST` | `/api/admin/users/{user_id}/reset-password` | Super admin |" in fresh
-    assert "| `PATCH` | `/api/responder/places/{facility_id}` | Responder or Super admin |" in fresh
+    assert "| `POST` | `/api/admin/users/{user_id}/reset-password` | Admin |" in fresh
+    assert "| `PATCH` | `/api/admin/places/{facility_id}` | Admin |" in fresh
+    assert "| `POST` | `/api/admin/reports/{report_id}/take` | Admin |" in fresh
+    for label, text in (("fresh", fresh), ("committed docs/API.md", (REPO / "docs" / "API.md").read_text(encoding="utf-8"))):
+        assert "/api/responder" not in text and "Super admin" not in text and "Responder" not in text, label
     assert "| `POST` | `/api/reports` | Public (X-Phone-Id required) |" in fresh
 
 

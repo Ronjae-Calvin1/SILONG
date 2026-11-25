@@ -1,8 +1,8 @@
 """
 Backbone: map slice + capacity/availability status (Batangas City facilities)
-+ evacuation center manager (add as pending, staff approve / remove / restore, see evac_routes.py
++ evacuation center manager (add as pending, Admins approve / remove / restore, see evac_routes.py
   and place_routes.py; the rules are in place_service.py)
-+ staff accounts, roles and the audit log (see account_routes.py)
++ Admin accounts and the audit log (see account_routes.py; one role, Admin)
 + help requests and hazard reports (see report_routes.py)
 + weather, advisories and emergency numbers (see content_routes.py)
 + the chatbot placeholder (see chat_routes.py and chat_service.py)
@@ -64,6 +64,8 @@ Base.metadata.create_all(bind=engine)
 # reads those columns.
 report_service.upgrade_report_columns(engine)
 place_service.upgrade_place_columns(engine)
+# Accounts made with the old responder / super_admin roles become Admins (idempotent, logged).
+accounts.migrate_roles_on_startup()
 
 
 # Real hospitals in Batangas City, from the city government's official
@@ -297,14 +299,14 @@ def submit_status(
     """
     Add a status update (kept as history). Returns the new latest status.
 
-    Anyone can send it and it is saved as "Reported by a user". When a signed-in responder or
-    Super admin sends it (Authorization: Bearer ...), it is saved as "Confirmed by official" with
+    Anyone can send it and it is saved as "Reported by a user". When a signed-in Admin sends it
+    (Authorization: Bearer ...), it is saved as "Confirmed by official" with
     their name, and it can set the maximum capacity. A user's report cannot change a maximum
     capacity an official has set. A place that is still waiting for approval accepts updates only
     from the phone that added it (X-Phone-Id).
     """
     facility = _get_facility_or_404(db, facility_id, phone)
-    official = staff is not None and accounts.ROLE_RANK.get(staff.role, 0) >= accounts.ROLE_RANK[accounts.RESPONDER]
+    official = staff is not None  # optional_staff gives a signed-in Admin or None
 
     # The capacity rule (people_inside >= max_capacity -> full) lives in
     # status_service.resolve_status; nothing else decides it.
@@ -320,7 +322,7 @@ def submit_status(
         raise HTTPException(status_code=422, detail=str(e))
 
     # Rate limit after validation, so a mistyped form does not use up the allowance.
-    # Signed-in staff are not limited: they are known, and in a storm they update many places.
+    # Signed-in Admins are not limited: they are known, and in a storm they update many places.
     ip = request.client.host if request.client else "unknown"
     hit = None if official else limiter.check(ip, facility_id)
     if hit:
@@ -364,6 +366,6 @@ def status_history(
     phone: Optional[str] = Depends(optional_phone),
     db: Session = Depends(get_db),
 ):
-    """Newest first. Simple view for debugging and later use. (Staff see overrides and capacity corrections too, with names, in /api/responder/facilities/{id}/status-history.)"""
+    """Newest first. Simple view for debugging and later use. (Admins see overrides and capacity corrections too, with names, in /api/admin/facilities/{id}/status-history.)"""
     _get_facility_or_404(db, facility_id, phone)
     return status_service.history(db, facility_id, limit)

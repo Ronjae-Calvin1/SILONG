@@ -28,8 +28,8 @@ The same information is live at `/docs` while the backend runs.
 
 **Base URL.** Every path below starts with `/api`. Bodies and answers are JSON.
 
-**Sign-in (staff only).** There is no public sign-up. A responder or Super admin signs in with
-`POST /api/auth/sign-in` (`name`, `password`) and gets a `token`. Send it on every staff request as
+**Sign-in (Admins only).** There is no public sign-up. An Admin signs in with
+`POST /api/auth/sign-in` (`name`, `password`) and gets a `token`. Send it on every Admin request as
 `Authorization: Bearer <token>`. A sign-in ends after **30 minutes without any request** (each request
 starts the 30 minutes again). **A `401` means sign in again**: the token is missing, unknown, or ran out.
 
@@ -38,13 +38,16 @@ and sends it as the header `X-Phone-Id`: **16 to 64 letters, digits, `-` or `_`*
 `k3J9x-Qe7_Lm2Pz0aB4c`). It is how "my reports" and "my pending places" work. It is not proof of who
 someone is, and the server stores only a hash of it.
 
-**Roles.**
+**Roles.** There is one role, Admin. Nothing is locked by role: every Admin can use every Admin endpoint.
 
 | Role | Who | Can do |
 | --- | --- | --- |
 | Public | Anyone, no sign-in | Read the map, weather, advisories and numbers; send a status update, a report or a new place (some need `X-Phone-Id`) |
-| Responder | Signed-in staff | Everything public, plus the responder screens: reports, places to approve, status overrides |
-| Super admin | Signed-in staff | Everything a responder can, plus accounts, the audit log, blocked phones, advisories and emergency numbers |
+| Admin | Signed-in Admin (`role` is always `\"admin\"`) | Everything public, plus everything under `/api/admin`: reports, places to approve, status overrides, accounts, the audit log, blocked phones, advisories, official sources and emergency numbers. Removing, restoring and listing removed centers (`/api/evacuation-centers`) are Admin endpoints too |
+
+You cannot lock or remove your own account, and the last active Admin cannot be locked or removed.
+`POST /api/admin/users` still accepts a legacy `role` (`admin`, `responder` or `super_admin`) for one release and
+ignores it: every new account is an Admin. Stop sending it.
 
 **Common error codes.** The body is `{"detail": "<plain-language message>"}` (a `422` from a badly shaped
 body is a list of `{type, loc, msg}`). Show `detail` to the person when it is a text.
@@ -53,11 +56,11 @@ body is a list of `{type, loc, msg}`). Show `detail` to the person when it is a 
 | --- | --- |
 | 400 | The `X-Phone-Id` header is missing or not in the right format |
 | 401 | Not signed in, or the sign-in ran out. Sign in again |
-| 403 | Signed in, but this role may not do it; or a wrong current password; or this phone is blocked from reports |
+| 403 | The sign-in belongs to an account that is locked or was removed; or a wrong current password; or this phone is blocked from reports |
 | 404 | The thing does not exist, or this caller may not see it |
 | 409 | It clashes with the current state (already handled, a duplicate name, locked by someone else) |
 | 422 | A value is not accepted (too short, too long, outside Batangas City, wrong date format). The message says which |
-| 423 | The account is locked (too many wrong passwords, or locked by a Super admin) |
+| 423 | The account is locked (too many wrong passwords, or locked by an Admin) |
 | 429 | Too many requests. Wait the number of seconds in the `Retry-After` header |
 
 ## Example flows
@@ -76,19 +79,19 @@ body is a list of `{type, loc, msg}`). Show `detail` to the person when it is a 
 3. `GET /api/reports/mine` lists this phone's reports and their status. `GET /api/hazards/nearby?latitude=..&longitude=..` shows hazards others can see.
 4. A `403` means this phone was blocked after false reports; a `429` means wait `Retry-After` seconds.
 
-**3. A responder takes and resolves a help request**
+**3. An Admin takes and resolves a help request**
 
-1. Sign in (flow 1). `GET /api/responder/reports` lists open reports; poll it about every `refresh_seconds`.
-2. `POST /api/responder/reports/{id}/take` (no body). A `409` says someone else is already handling it.
-3. `POST /api/responder/reports/{id}/resolve` with `{"what_was_done": "Team sent, family moved to the gym"}`.
+1. Sign in (flow 1). `GET /api/admin/reports` lists open reports; poll it about every `refresh_seconds`.
+2. `POST /api/admin/reports/{id}/take` (no body). A `409` says someone else is already handling it.
+3. `POST /api/admin/reports/{id}/resolve` with `{"what_was_done": "Team sent, family moved to the gym"}`.
 4. Use `mark-false` (`{"reason": "..."}`) instead of `resolve` for a false report.
 
-**4. A user adds a place and a responder approves it**
+**4. A user adds a place and an Admin approves it**
 
 1. With `X-Phone-Id`, `POST /api/evacuation-centers` with `{"name", "center_type": "temporary", "max_capacity", "latitude", "longitude", ...}`. Answer `201`, with `"approval_status": "pending"`.
 2. `GET /api/facilities` with the same header shows that phone its own pending place; everybody else does not see it yet.
-3. A responder signs in, `GET /api/responder/places` (the queue; `possible_duplicate` is set when a same-name center is within 30 m), then `POST /api/responder/places/{id}/approve` (or `.../reject` with an optional `reason`).
-4. A responder can fix details later with `PATCH /api/responder/places/{id}`.
+3. An Admin signs in, `GET /api/admin/places` (the queue; `possible_duplicate` is set when a same-name center is within 30 m), then `POST /api/admin/places/{id}/approve` (or `.../reject` with an optional `reason`).
+4. An Admin can fix details later with `PATCH /api/admin/places/{id}`.
 """
 
 AREAS = {  # tag -> heading, in this order; a tag not listed here is added at the end under its own name
@@ -96,7 +99,7 @@ AREAS = {  # tag -> heading, in this order; a tag not listed here is added at th
     "phone blocks": "Phone blocks",
     "reports": "Help requests and hazard reports",
     "evacuation centers": "Evacuation centers (add, remove, restore)",
-    "places (staff)": "Places review and status corrections (staff)",
+    "places (admin)": "Places review and status corrections (Admin)",
     "content": "Weather, advisories and emergency numbers",
     "chat": "Chat",
 }
@@ -133,14 +136,12 @@ def route_access(route):
             visit(sub)
 
     visit(route.dependant)
-    if auth.require_super_admin in calls:
-        who = "Super admin"
-    elif auth.require_responder in calls:
-        who = "Responder or Super admin"
+    if auth.require_admin in calls:
+        who = "Admin"
     elif auth.current_user in calls:
-        who = "Any signed-in staff"
+        who = "Any signed-in Admin"
     elif auth.optional_staff in calls:
-        who = "Public (signed-in staff count as officials)"
+        who = "Public (a signed-in Admin counts as an official)"
     elif auth.bearer_token in calls:
         who = "Public (sends the token it wants to end)"
     else:

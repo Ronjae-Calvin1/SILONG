@@ -4,12 +4,12 @@ report_routes.py and only call the functions here.
 
 Two kinds of report (docs/REDESIGN.md, "Help requests and hazard reports"):
 
-  help    "I need help". Goes to responders only. Never public. The sender sees
+  help    "I need help". Goes to Admins only. Never public. The sender sees
           only their own reports and a status: New, Being handled, Resolved.
   hazard  People within the near-me range see an approximate spot with no
           details. It is "Unconfirmed" after HAZARD_UNCONFIRMED_PHONES reports
-          from different phones, and "Verified" once a responder or Super admin
-          verifies it. Until one of those, only responders (and the sender, in
+          from different phones, and "Verified" once an Admin
+          verifies it. Until one of those, only Admins (and the sender, in
           "my reports") see it.
 
 Phone ID: a random value from the browser, used for "my reports". It is not
@@ -20,7 +20,7 @@ nothing). A hash is never sent out.
 Hazards about the same place: a new hazard report within HAZARD_MERGE_METERS of
 the first report of an OPEN hazard joins it (same group_id). One phone counts
 once per hazard: a second report from the same phone for the same hazard
-returns the first one. Responder actions on a hazard apply to the whole group.
+returns the first one. Admin actions on a hazard apply to the whole group.
 A closed (resolved or false) hazard is never joined; a new report starts a new one.
 
 Functions here add rows and audit entries to the session; the ones that
@@ -292,10 +292,10 @@ def nearby_hazards(db: Session, lat: float, lng: float) -> List[dict]:
     return out
 
 
-# ------------------------------------------------------------ what responders see
+# ------------------------------------------------------------ what Admins see
 
 def _item(rows: List[Report]) -> dict:
-    """One line of the responder list: a help request, or a whole hazard group."""
+    """One line of the Admin list: a help request, or a whole hazard group."""
     first = rows[0]
     is_hazard = first.kind == HAZARD
     state = hazard_state(rows) if is_hazard else None
@@ -326,7 +326,7 @@ def _item(rows: List[Report]) -> dict:
     )
 
 
-def responder_list(db: Session, include_closed: bool = False, kind: Optional[str] = None) -> dict:
+def admin_list(db: Session, include_closed: bool = False, kind: Optional[str] = None) -> dict:
     """
     For the responder screens (poll about every RESPONDER_REFRESH_SECONDS).
     `new_help_count` / `has_new_help` is the red alert: help requests nobody has
@@ -360,7 +360,7 @@ def responder_list(db: Session, include_closed: bool = False, kind: Optional[str
     )
 
 
-# ------------------------------------------------------------ responder actions
+# ------------------------------------------------------------ Admin actions
 
 def _load(db: Session, report_id: int) -> List[Report]:
     """The report, or for a hazard the whole group it belongs to."""
