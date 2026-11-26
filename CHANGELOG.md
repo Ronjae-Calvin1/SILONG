@@ -2,6 +2,16 @@
 
 Short log of what changed in each update, newest first.
 
+## Update 17 — Admin hand-off docs (docs only)
+Documentation for the admin frontend developer and the move to one role in the docs. No code, test, path, field or answer changed.
+- **New `docs/ADMIN_FRONTEND_HANDOFF.md`.** For every desktop screen (sign in, Live map, Places, Content, Chatbot, Accounts, Audit log, Blocked phones, Change password), every phone screen (Reports, Map, Places, Me, report detail, resolve sheet, new-help alert) and the shared behaviour ("You were signed out", lock after 5 wrong tries, sign-in rate limit, "Mark as false", "Delete for good"): the exact endpoints, query and body fields, response fields used, error codes and refresh rules. It states the take-over question ("<name> is handling this. Take over?"), that the Admin token must never be reachable from the user site or put in a URL, and that the sign-in has no link to the public map. Every screen or action the server does not support (chatbot guide, two-step sign in, texts or pages, advisory expiry, place names on reports, device and accuracy fields) is marked, and so is every endpoint with no designed screen.
+- **Contradictions written down** (not fixed, no code changed): the admin console design says the backend allows any origin (since Update 16 only `CORS_ORIGINS`); polling keeps an Admin session alive, so "30 minutes without use" needs help from the screen; `Retry-After` cannot be read by the browser; `docs/API.md`'s intro still lists "already handled" under 409 and tells screens to read `Retry-After`.
+- **Leftovers in the user site** listed with the change each needs (`HamburgerMenu.tsx`, `App.tsx`, `AdminSignInPage.tsx`, `TopBarNav.css`, `MenuPages.tsx`, `IncidentPanel.tsx`, `MapPage.tsx`). Not edited.
+- **README.** One role, the two frontends and one backend with their ports, creating the first Admin, `CORS_ORIGINS` including testing from a phone over Wi-Fi, a "Run the tests" section, the new files in the project structure, and a few "staff" words changed to "Admin". The reference to a file that is not in the repository was replaced.
+- **`docs/REDESIGN.md`.** Responder and Super admin replaced by Admin (roles table, rules, settings table); new "Two sites, one backend" section; the phone-testing note names the three ports and the Wi-Fi case.
+- **`docs/FRONTEND_TODO.md`.** Responder and Super admin replaced by Admin; sections 5.2 and 5.3 merged into one "Admin console" section (now also covering `mine`, `release`, `since`, distance, `/api/admin/summary`, `/api/admin/me/activity`, contact settings and emergency number categories); 4.13 now removes the "Admin sign in" row and the `/admin` route from the user site; new 4.15 (support contact); stale lines fixed (CORS, support contact, take-over, hospital edit is 422).
+- `docs/API.md` did not change (`py scripts/generate_api_doc.py --check` is up to date).
+
 ## Update 16 — Two-origin hardening (backend only)
 Makes the two-frontend setup (user site 5173, admin console 5174, backend 8000) safe and proves it with tests. No path, method or
 answer shape changed. The only behaviour change is CORS; the rest is new checks of things that already held.

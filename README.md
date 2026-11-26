@@ -24,7 +24,9 @@ documentation). `CHANGELOG.md` lists what changed in each update.
 describes what the code does today, and the "Planned" rows below describe what
 is designed but not built.
 
-Frontend developer: start with [`docs/FRONTEND_TODO.md`](docs/FRONTEND_TODO.md), one checklist for connecting the screens to the server and building the staff screens.
+Frontend developer (user site): start with [`docs/FRONTEND_TODO.md`](docs/FRONTEND_TODO.md), one checklist for connecting the screens to the server and building the admin console.
+
+Admin frontend developer: [`docs/ADMIN_FRONTEND_HANDOFF.md`](docs/ADMIN_FRONTEND_HANDOFF.md) lists, for every admin screen, the exact endpoints, fields, error codes and refresh rules, and what the server does not support yet.
 
 ## What the site does
 
@@ -156,6 +158,46 @@ is accepted **only if you write it yourself**; the backend then prints a warning
 The Admin token is sent only in the `Authorization` header, only to the backend, and never put in a URL. Keep it out
 of the user site.
 
+- The two ports are examples. Any two free ports work, if both addresses are in `CORS_ORIGINS`.
+- Both frontends call the same backend, so set `VITE_API_URL` the same way for each (default `http://127.0.0.1:8000/api`).
+- The admin console is a separate frontend with its own link (for example `npm run dev -- --port 5174`). Its code is not in this
+  repository. The user site has no admin link, button or text, and the admin sign-in has no link back to the public map.
+- A separate link only hides the door. The sign-in and the server's token check keep users out: no token, or an expired one, is
+  401; an account that is locked or removed while its sign-in is still alive is 403.
+
+**Create the first Admin** (once, from the `backend` folder): `py scripts/create_admin.py`. See "Admin accounts" below.
+
+#### Testing on a phone over Wi-Fi
+
+The phone opens the computer's address, not `localhost`, so the backend must be told to allow it. Say the computer's Wi-Fi
+address is `192.168.1.20` (find it with `ipconfig` on Windows):
+
+1. In `backend/.env`, list the default addresses and the phone's addresses (setting `CORS_ORIGINS` replaces the default list, so keep the four defaults):
+   ```
+   CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://192.168.1.20:5173,http://192.168.1.20:5174
+   ```
+   No path and no trailing `/`. Restart the backend.
+2. Start the backend so other devices can reach it: `py -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`.
+3. Start each frontend so other devices can reach it (`npm run dev -- --host`, and the second one with `--port 5174`), and set `VITE_API_URL=http://192.168.1.20:8000/api` in each frontend's `.env`. Restart `npm run dev` after changing `.env`.
+4. On the phone open `http://192.168.1.20:5173` (user site) or `http://192.168.1.20:5174` (admin console). The computer and the phone must be on the same Wi-Fi, and the Windows firewall may ask to allow the three ports.
+
+Limits: GPS needs a secure page and `http://192.168.x.x` is not one, so "My GPS location" does not work on that page (pick a point on the map instead). The MapTiler key was created for `localhost` only ("Map setup"), so on the phone's address the MapTiler map may be refused; add the computer's address to the key's allowed origins if you want it. For GPS on a real phone, use USB and forward ports 5173, 5174 and 8000 so the phone opens `localhost` (`docs/REDESIGN.md`, "Testing on a phone"); the default `CORS_ORIGINS` already covers that. Use `*` in `CORS_ORIGINS` only for a quick test, and never once real Admin accounts exist.
+
+### 5. Run the tests
+
+From the `backend` folder (once: `py -m pip install -r requirements-dev.txt`):
+
+```
+cd backend
+py tests/run_all.py
+```
+
+`run_all.py` runs every `tests/test_*.py` file, each in its own process and with its own temporary database (your `typhoon.db` is
+never touched), and says which ones failed. A single file runs on its own, for example `py tests/test_accounts.py`. The tests cover
+accounts and sign in, reports, places, content, operations, the Admin console routes, the CORS rules, the token handling and that no public
+answer leaks an Admin-only field. After changing a route or a field, also run `py scripts/generate_api_doc.py --check`
+(it says whether `docs/API.md` is out of date; without `--check` it rewrites the file).
+
 ## Capacity and availability
 
 Tap a pin to see its status, when it was last updated ("15 minutes ago") and,
@@ -249,7 +291,7 @@ The current data file has no evacuation centers. Add one in the app (see
 "Evacuation centers: add, approve, remove, restore" below), or add one to
 `backend/data/manual_facilities.json` (see "Updating facility data").
 
-**Who reported it, and corrections by staff:** every status update records its
+**Who reported it, and corrections by Admins:** every status update records its
 source. A normal update is `"source": "user"` (`"Reported by a user"`). When a
 signed-in Admin sends the same update with their token
 (`Authorization: Bearer ...`), it is `"source": "official"` (`"Confirmed by
@@ -258,14 +300,14 @@ per-place cooldown. Both fields are inside `status` in `GET /api/facilities`
 (new fields only, nothing was renamed). A wrong or expired token counts as no
 sign-in: the update is saved as a user report.
 
-Staff can also correct a place (every one of these is audited with their name,
+Admins can also correct a place (every one of these is audited with their name,
 and none of them erases anything; each adds a row to the status history):
 
 | Action | Endpoint | Who |
 | --- | --- | --- |
 | Override the latest status | `POST /api/admin/facilities/{id}/status-override` | Admin |
 | Correct the maximum capacity | `POST /api/admin/facilities/{id}/capacity-correction` | Admin |
-| Full history with staff names | `GET /api/admin/facilities/{id}/status-history` | Admin |
+| Full history with Admin names | `GET /api/admin/facilities/{id}/status-history` | Admin |
 
 An override takes the same fields as a user report (and the same "at capacity
 means full" rule) plus an optional `reason`. A capacity correction needs a status
@@ -298,12 +340,12 @@ their own table, so re-fetching the file never removes them.
    else can read or update it by guessing its number. It shows "No status yet" and
    "Capacity: N people" until someone reports.
 4. An Admin approves it (everybody sees it from then on) or
-   rejects it (nobody but staff sees it). Staff see a list of pending places with
+   rejects it (nobody but Admins sees it). Admins see a list of pending places with
    the exact details.
 
 A place with the same name within 30 m of an existing one (an approved one, one
 still pending, or one that was removed) is **not refused**: it is flagged, and the
-staff list shows `possible_duplicate` with the other place, its distance and
+Admin list shows `possible_duplicate` with the other place, its distance and
 whether it was removed. The same phone cannot send the same place twice while it
 waits (409), and one phone can have at most 5 places waiting
 (`PENDING_PLACES_PER_PHONE`).
@@ -358,7 +400,7 @@ older status updates become user reports, nothing is lost.
 
 **Try it** (backend and frontend running; start the backend with
 `STATUS_COOLDOWN_SECONDS=0` so repeated updates are not delayed; sign in with
-`POST /api/auth/sign-in` for the staff steps):
+`POST /api/auth/sign-in` for the Admin steps):
 
 1. Add a center with capacity 100. You see it, with a dashed blue ring once the
    screens show `approval_status`; open the map from another browser and you do not.
@@ -372,7 +414,7 @@ older status updates become user reports, nothing is lost.
 
 ## Admin accounts
 
-One role: **Admin** (`ADMIN_CONSOLE.md` is the source of truth). Every Admin can do
+One role: **Admin** (the admin console design: one role, every Admin sees every screen). Every Admin can do
 everything: reports, places, status overrides, accounts, the audit log, blocked phones,
 advisories, official sources, emergency numbers and permanent delete. Nothing is locked
 by role. The public has no account, and there is no public sign-up. Sign-in is checked on
@@ -420,9 +462,9 @@ moves the timer forward.
 
 No token, an unknown one or an expired one gives 401. A sign-in that is still alive but whose
 account is locked or gone gives 403. You cannot lock or remove your own account, and the
-last active Admin cannot be locked or removed (409). The existing map,
-status and evacuation center endpoints still need no sign-in; they get their
-role checks in the later parts.
+last active Admin cannot be locked or removed (409). The map and status endpoints and
+`POST /api/evacuation-centers` need no sign-in; the removed-centers list, removing and
+restoring a center need an Admin.
 
 **Audit log.** Every admin action is saved with the person's name, their role,
 what it was done to and the time (UTC). Sign in, sign out and automatic locks
@@ -830,7 +872,7 @@ SILONG/
 ├── backend/
 │   ├── scripts/                # create_admin.py, seed_demo.py (DEMO data), generate_api_doc.py (docs/API.md), purge scripts, fetch/backdate helpers
 │   ├── .env.example            # Optional backend settings; copy to backend/.env (read automatically, ignored by Git)
-│   ├── tests/                  # test_accounts.py, test_reports.py, test_places.py, test_content.py, test_ops.py, run_all.py (runs them all)
+│   ├── tests/                  # test_accounts.py, test_reports.py, test_places.py, test_content.py, test_ops.py, test_console.py, test_security.py, test_public_leaks.py, run_all.py (runs them all)
 │   └── app/
 │       ├── main.py             # FastAPI app, loads facilities, /api/facilities and the status routes
 │       ├── content_routes.py   # Weather, advisories, official sources, emergency numbers
@@ -838,9 +880,9 @@ SILONG/
 │       ├── content_service.py  # Advisory, source and emergency number rules, starting rows, audit
 │       ├── chat_routes.py      # POST /api/chat (only calls chat_service.answer)
 │       ├── chat_service.py     # Chatbot placeholder and the slot for a future AI provider
-│       ├── evac_routes.py      # Add a place (public, starts pending); remove / restore / removed list (staff)
+│       ├── evac_routes.py      # Add a place (public, starts pending); remove / restore / removed list (Admin)
 │       ├── evac_service.py     # Center keys, duplicate check, what is hidden from whom, action log
-│       ├── place_routes.py     # Staff: pending list, approve, reject, delete for good, status override, capacity correction
+│       ├── place_routes.py     # Admin: pending list, approve, reject, delete for good, status override, capacity correction
 │       ├── place_service.py    # Approval and removal rules, 30-day purge, upgrade of older databases
 │       ├── status_admin.py     # Status override and capacity correction (history rows, audited)
 │       ├── models.py           # SQL tables (facilities, status updates, user centers, removals, action log, users, sessions, audit log, reports, blocked phones)
@@ -858,10 +900,21 @@ SILONG/
 │       ├── report_service.py   # Report rules: hazard groups, approximate spot, false reports, purge
 │       ├── status_service.py   # Latest status / history, source of an update, capacity rule (automatic "Full")
 │       ├── ops_routes.py       # Blocked phones: list and unblock (Admin)
+│       ├── console_routes.py   # Admin console helpers: badge numbers (/api/admin/summary) and my recent actions (/api/admin/me/activity)
+│       ├── console_schemas.py  # Shapes for the above
+│       ├── console_service.py  # Counts and recent actions for the above
+│       ├── settings_routes.py  # Contact settings: control-room number, support email and number
+│       ├── settings_schemas.py # Shapes for the above
+│       ├── settings_service.py # Contact settings rules and audit
 │       ├── maintenance.py      # Scheduled cleanup task (every PURGE_INTERVAL_MINUTES)
 │       ├── database.py         # SQLite connection
 │       └── weather_service.py  # Open-Meteo forecast, cache, last good forecast
-└── frontend/
+├── docs/
+│   ├── API.md                  # Every route with its fields (generated: backend/scripts/generate_api_doc.py)
+│   ├── REDESIGN.md             # Rules, roles and build status
+│   ├── FRONTEND_TODO.md        # Checklist for the user site and an overview of the admin console
+│   └── ADMIN_FRONTEND_HANDOFF.md  # Per screen: endpoints, fields, errors, refresh. For the admin frontend developer
+└── frontend/                   # The user site (the admin console is a separate frontend, not in this repository)
     ├── .env.example            # Copy to .env and add your MapTiler key
     └── src/
         ├── App.tsx             # Renders MapPage
@@ -892,8 +945,8 @@ Based on the project documentation:
   header with `/api/facilities`, the status update and the add-place call (a pending
   place disappears from its sender's map after a reload without it); show
   `approval_status` (dashed blue ring while pending) and `status.source_label`; the
-  approve / reject screens and the "Removed centers" list for staff. `RemovedCenters.tsx`
-  is not used by any page and would now need a staff sign-in.
+  approve / reject screens and the "Removed centers" list for Admins (in the admin console). `RemovedCenters.tsx`
+  is not used by any page and would now need an Admin sign-in.
 - Connect the report screens to the report endpoints (the backend is ready, the old incident form still saves on the phone only).
 - Chatbot: the placeholder works. Still to build: the checked guide, its editor and
   the wrong-answer report, then an AI provider (see "Plugging in an AI later").
