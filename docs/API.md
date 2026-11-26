@@ -18,6 +18,13 @@ and sends it as the header `X-Phone-Id`: **16 to 64 letters, digits, `-` or `_`*
 `k3J9x-Qe7_Lm2Pz0aB4c`). It is how "my reports" and "my pending places" work. It is not proof of who
 someone is, and the server stores only a hash of it.
 
+**Two websites (CORS).** The user site (`http://localhost:5173`) and the admin console (`http://localhost:5174`) call this
+backend from the browser. Only the origins in `CORS_ORIGINS` (`backend/.env`; default: those two sites on `localhost` and
+`127.0.0.1`) get CORS headers; a browser from any other website cannot read an answer. Allowed request headers are
+`Authorization`, `X-Phone-Id` and `Content-Type`; `X-Total-Count` can be read. The token is only read from the
+`Authorization` header, never from a URL, a query or a cookie. `*` (any website) works only when it is written in
+`CORS_ORIGINS` on purpose.
+
 **Roles.** There is one role, Admin. Nothing is locked by role: every Admin can use every Admin endpoint.
 
 | Role | Who | Can do |

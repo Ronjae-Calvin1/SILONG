@@ -27,6 +27,7 @@ from app.database import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import AuditLog, AuthSession, User  # noqa: E402
 from app.rate_limit import signin_limiter  # noqa: E402
+import route_helpers  # noqa: E402  (tests/route_helpers.py: finds every route of the app)
 
 client = TestClient(app)
 PASSWORD = "correct horse 1"
@@ -79,22 +80,12 @@ def test_existing_endpoints_still_work_without_a_token():
 
 def admin_routes():
     """
-    (METHOD, path, route) of every route that needs an Admin, found through the dependencies of the
-    routes themselves, so a route added later is covered without touching this test.
+    (METHOD, path, route) of every route that needs an Admin, wherever it is defined: found through the
+    dependencies of ALL the app's routes (tests/route_helpers.py), so a route or a whole router added
+    later is covered without touching this test. (It used to read six hand-listed router modules and
+    missed console_routes and settings_routes.)
     """
-    from app import auth
-    from app import account_routes, content_routes, evac_routes, ops_routes, place_routes, report_routes
-
-    def uses_require_admin(dep):
-        return dep.call is auth.require_admin or any(uses_require_admin(d) for d in dep.dependencies)
-
-    found = []
-    for module in (account_routes, content_routes, evac_routes, ops_routes, place_routes, report_routes):
-        for r in module.router.routes:
-            if getattr(r, "dependant", None) is not None and uses_require_admin(r.dependant):
-                for m in sorted(r.methods - {"HEAD"}):
-                    found.append((m, r.path, r))
-    return found
+    return [(m, p, r) for m, p, r in route_helpers.all_routes(app) if route_helpers.kind_of(r) == "admin"]
 
 
 def fill(path):
@@ -105,7 +96,7 @@ def fill(path):
 
 def test_the_admin_route_list_is_complete():
     routes = {(m, p) for m, p, _ in admin_routes()}
-    assert len(routes) >= 35, len(routes)
+    assert len(routes) >= 44, len(routes)
     # No old path is left, and every route staff used under /api/responder is under /api/admin now.
     assert not any("/api/responder" in p for _, p in routes)
     for needle in [
@@ -118,8 +109,29 @@ def test_the_admin_route_list_is_complete():
         ("POST", "/api/admin/advisories"), ("GET", "/api/admin/advisory-sources"), ("PUT", "/api/admin/emergency-numbers/order"),
         ("GET", "/api/admin/blocked-phones"), ("POST", "/api/admin/blocked-phones/{block_id}/unblock"),
         ("GET", "/api/evacuation-centers/removed"), ("DELETE", "/api/evacuation-centers/{facility_id}"),
+        # these four live in console_routes.py and settings_routes.py, which the old sweep did not read
+        ("GET", "/api/admin/summary"), ("GET", "/api/admin/me/activity"),
+        ("GET", "/api/admin/contact-settings"), ("PATCH", "/api/admin/contact-settings"),
     ]:
         assert needle in routes, needle
+
+
+def test_the_route_table_is_complete():
+    """The sweeps below can only check routes they can see: the route finder must agree with the app's own OpenAPI list."""
+    found = {(m, p) for m, p, _ in route_helpers.all_routes(app)}
+    assert found == route_helpers.openapi_operations(app), found ^ route_helpers.openapi_operations(app)
+
+
+def test_every_route_under_api_admin_has_an_admin_dependency():
+    """
+    The second guard: a route whose path says /api/admin but that does not depend on require_admin
+    (forgotten, or using only current_user / optional_staff) would be open to everyone. Fails by name.
+    The 401/403 behaviour of the admin routes is checked by the sweeps below, not here.
+    """
+    under_admin = [(m, p, r) for m, p, r in route_helpers.all_routes(app) if p == "/api/admin" or p.startswith("/api/admin/")]
+    assert len(under_admin) >= 35, len(under_admin)
+    open_ones = [f"{m} {p} ({route_helpers.kind_of(r)})" for m, p, r in under_admin if route_helpers.kind_of(r) != "admin"]
+    assert not open_ones, "no require_admin on: " + ", ".join(open_ones)
 
 
 def test_every_admin_route_is_401_without_a_good_sign_in():
