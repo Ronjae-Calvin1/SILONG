@@ -1,0 +1,132 @@
+/* Admin console styles. Same tokens and look as the user site (tokens.css), light work surface. */
+:root {
+  --admin-bg: #eef3f8;
+  --admin-ink: #0f2f48;
+  --admin-line: #d2dde7;
+  --admin-red: #c62222;
+  --admin-green: #1f6b33;
+}
+html, body, #root { height: 100%; }
+body { background: var(--admin-bg); color: var(--admin-ink); }
+button, select, textarea, input { font-family: inherit; }
+*:focus-visible { outline: 3px solid #1b6fd1; outline-offset: 2px; }
+
+/* Buttons and chips */
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 var(--space-4); border-radius: var(--radius-md); border: 1.5px solid var(--color-primary); background: #fff; color: var(--color-primary); font-weight: 700; font-size: 0.9rem; cursor: pointer; text-decoration: none; }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-primary { background: var(--color-primary); color: #fff; }
+.btn-outline { background: #fff; color: var(--color-primary); }
+.btn-green { background: #fff; color: var(--admin-green); border-color: var(--admin-green); }
+.btn-danger { background: #fff; color: var(--admin-red); border-color: var(--admin-red); }
+.btn-white { background: #fff; color: var(--admin-red); border-color: #fff; }
+.btn-signout { background: transparent; color: #fff; border-color: rgb(255 255 255 / 0.7); }
+.link-btn { background: none; border: 0; color: var(--color-primary); text-decoration: underline; cursor: pointer; font-weight: 600; padding: 0; }
+.badge-admin { background: #0f2f48; color: #fff; font-weight: 800; font-size: 0.75rem; letter-spacing: 0.06em; padding: 4px 10px; border-radius: var(--radius-sm); }
+.pill { min-height: 36px; padding: 0 var(--space-3); border-radius: var(--radius-pill); border: 1.5px solid var(--admin-line); background: #fff; color: var(--admin-ink); font-weight: 600; cursor: pointer; }
+.pill-on { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.pill-dark { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.chips { display: inline-flex; gap: 6px; }
+.chip { font-size: 0.75rem; font-weight: 700; padding: 3px 10px; border-radius: var(--radius-pill); }
+.chip-red { background: #f8d4d4; color: #7a1010; }
+.chip-yellow { background: #fdefc6; color: #5a3d00; }
+.chip-green { background: #dcf1e0; color: #1a5a2b; }
+.chip-grey { background: #e3e8ee; color: #3d4a57; }
+
+/* Desktop shell */
+.shell { display: flex; flex-direction: column; height: 100%; }
+.topbar { display: flex; align-items: center; gap: var(--space-4); background: var(--color-primary); color: #fff; padding: 0 var(--space-5); height: 60px; flex: none; }
+.topbar-logo { height: 28px; }
+.tabs { display: flex; gap: var(--space-1); margin-right: auto; margin-left: var(--space-3); }
+.tabs a { color: #fff; text-decoration: none; padding: 8px 14px; border-radius: var(--radius-md); font-weight: 600; }
+.tabs a.active { background: rgb(255 255 255 / 0.2); }
+.topbar-name { font-weight: 700; }
+.shell-main { flex: 1; min-height: 0; }
+.coming { padding: var(--space-6); }
+.coming h1 { font-family: var(--font-heading); margin: 0 0 var(--space-2); }
+
+/* Live map (desktop) */
+.live { display: flex; height: 100%; }
+.live-list { width: var(--sidebar-w); flex: none; background: #fff; border-right: 1px solid var(--admin-line); display: flex; flex-direction: column; min-height: 0; }
+.live-map { flex: 1; position: relative; min-width: 0; }
+.chip-row { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3) var(--space-4) 0; }
+.live-sub { color: #4a6479; font-size: var(--ui-text-small); margin: var(--space-2) var(--space-4); }
+.layer-row { position: absolute; z-index: 2; top: var(--space-3); left: var(--space-3); display: flex; gap: var(--space-2); }
+.cards { overflow-y: auto; flex: 1; }
+.empty { color: #4a6479; padding: var(--space-4); }
+.notice-error { background: #fbd5d5; color: #7a1010; padding: var(--space-3) var(--space-4); margin: var(--space-2) var(--space-4); border-radius: var(--radius-md); }
+.alert-red { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); background: var(--admin-red); color: #fff; padding: var(--space-3) var(--space-4); margin: 0 var(--space-3) var(--space-2); border-radius: var(--radius-md); }
+.alert-red div { display: flex; flex-direction: column; font-size: 0.85rem; }
+
+/* Cards */
+.card { border-top: 1px solid var(--admin-line); border-left: 5px solid #b6841c; }
+.card-help { border-left-color: #b94a48; }
+.card-closed { opacity: 0.85; border-left-color: #8aa; }
+.card-selected { background: #eaf2fa; }
+.card-head { display: flex; flex-direction: column; gap: 4px; width: 100%; text-align: left; border: 0; background: none; padding: var(--space-3) var(--space-4); cursor: pointer; color: inherit; }
+.card-top { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
+.card-kind { font-size: 0.8rem; font-weight: 700; }
+.kind-help { color: #a43c3a; }
+.kind-hazard { color: #946a12; }
+.card-title { font-family: var(--font-heading); font-size: 1.1rem; }
+.card-place { color: #4a6479; font-size: 0.85rem; }
+.card-body { padding: 0 var(--space-4) var(--space-4); }
+.details { background: rgb(15 47 72 / 0.05); border-radius: var(--radius-md); padding: var(--space-3); margin: 0 0 var(--space-3); display: grid; gap: 6px; font-size: 0.9rem; }
+.details div { display: flex; flex-wrap: wrap; gap: 6px; }
+.details dt { font-weight: 700; }
+.details dt::after { content: ":"; }
+.details dd { margin: 0; }
+.contact { margin-right: var(--space-3); }
+.contact a { color: var(--color-primary); font-weight: 700; }
+.actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.action-error { color: #7a1010; background: #fbd5d5; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); margin: var(--space-2) 0 0; }
+
+/* Map pins (inner span, because MapLibre moves the outer element) */
+.live-map > .map, .phone-map > .map { position: absolute; inset: 0; }
+.map-compact { position: relative; height: 200px; }
+.pin { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 2px solid #fff; color: #fff; font-weight: 800; font-size: 0.85rem; box-shadow: 0 1px 4px rgb(0 0 0 / 0.4); }
+.pin-help { background: #b94a48; }
+.pin-hazard { background: #c8962b; }
+.pin-closed { background: #5c8a66; }
+.pin-place { width: 12px; height: 12px; background: #205c80; }
+.pin-selected { outline: 3px solid #0f2f48; transform: scale(1.2); }
+
+/* Dialogs: centred on a computer, bottom sheet on a phone */
+.dialog-backdrop { position: fixed; inset: 0; z-index: 20; background: rgb(15 47 72 / 0.55); display: grid; place-items: center; padding: var(--space-4); }
+.dialog { background: #fff; border-radius: var(--radius-lg); padding: var(--space-5); width: min(460px, 100%); display: flex; flex-direction: column; gap: var(--space-3); max-height: 90vh; overflow-y: auto; }
+.dialog h2 { margin: 0; font-family: var(--font-heading); font-size: 1.2rem; }
+.dialog p { margin: 0; color: #4a6479; }
+.dialog textarea, .dialog select { width: 100%; box-sizing: border-box; border: 1px solid #9fb4c6; border-radius: var(--radius-md); padding: var(--space-3); font-size: 1rem; background: #fff; color: inherit; }
+.dialog textarea { min-height: 80px; resize: vertical; }
+.field-label { font-weight: 700; font-size: 0.8rem; text-transform: uppercase; color: #4a6479; }
+.option-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.dialog-buttons { display: flex; justify-content: flex-end; gap: var(--space-2); }
+
+/* Phone layout */
+.phone { display: flex; flex-direction: column; height: 100%; }
+.phone-head { display: flex; align-items: center; gap: var(--space-3); background: var(--color-primary); color: #fff; padding: 0 var(--ui-gutter); height: 56px; flex: none; }
+.phone-head img { height: 24px; }
+.phone-head .topbar-name { margin-left: auto; }
+.phone-main { flex: 1; min-height: 0; overflow-y: auto; position: relative; }
+.phone .chip-row { padding-top: var(--space-3); }
+.phone .live-sub { margin-left: var(--ui-gutter); }
+.phone .cards { overflow: visible; padding: 0 var(--ui-gutter) var(--space-4); }
+.phone .card { background: #fff; border: 1px solid var(--admin-line); border-left-width: 5px; border-radius: var(--radius-md); margin-bottom: var(--space-2); }
+.alert-phone { margin: var(--space-2) var(--ui-gutter) 0; }
+.phone-nav { display: flex; flex: none; background: #fff; border-top: 1px solid var(--admin-line); padding-bottom: env(safe-area-inset-bottom); }
+.phone-nav button { flex: 1; min-height: 56px; border: 0; background: none; font-weight: 700; color: #4a6479; position: relative; }
+.phone-nav button.on { color: var(--color-primary); }
+.phone-nav em { position: absolute; top: 6px; margin-left: 4px; background: var(--admin-red); color: #fff; font-style: normal; font-size: 0.7rem; border-radius: var(--radius-pill); padding: 1px 6px; }
+.phone-detail { display: flex; flex-direction: column; min-height: 100%; }
+.back { padding: var(--space-3) var(--ui-gutter); text-align: left; }
+.phone-detail-body { padding: var(--ui-gutter); padding-bottom: 150px; }
+.phone-detail-body h1 { font-family: var(--font-heading); font-size: 1.4rem; margin: var(--space-2) 0; }
+.actions-bar { position: fixed; left: 0; right: 0; bottom: calc(56px + env(safe-area-inset-bottom)); background: var(--admin-bg); border-top: 1px solid var(--admin-line); padding: var(--space-3) var(--ui-gutter); display: grid; grid-template-columns: 1fr 1fr; z-index: 5; }
+.phone-map { position: absolute; inset: 0; }
+.map-card { position: absolute; z-index: 3; left: var(--space-3); right: var(--space-3); bottom: var(--space-3); background: #fff; border-radius: var(--radius-lg); padding: var(--space-3); box-shadow: var(--shadow-card); display: flex; flex-direction: column; gap: var(--space-2); }
+.phone-me { padding: var(--ui-gutter); display: flex; flex-direction: column; gap: var(--space-3); }
+.me-card { background: #fff; border: 1px solid var(--admin-line); border-radius: var(--radius-md); padding: var(--space-4); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.me-signout { width: 100%; }
+@media (max-width: 767px) {
+  .dialog-backdrop { place-items: end center; padding: 0; }
+  .dialog { border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; width: 100%; }
+}
