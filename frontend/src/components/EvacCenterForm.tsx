@@ -80,12 +80,9 @@ function validate(d: CenterDraft): FieldErrors {
   return errors;
 }
 
-// Backend messages are already plain, except the "already exists" one, which ends
-// with developer details: "(id 12)" and "(POST /api/evacuation-centers/12/restore)".
-// Keep its sentences (including "It was removed earlier - restore it instead.") and drop those two bits.
-function friendlyError(err: unknown): string {
-  if (!(err instanceof ApiError)) return "Something went wrong. Please try again.";
-  return err.message.replace(/\s*\(id \d+\)/, "").replace(/\s*\(POST [^)]*\)/, "");
+// The server's messages are plain and are shown exactly as written (duplicate name, 409, 422, 429, ...).
+function errorText(err: unknown): string {
+  return err instanceof ApiError ? err.detail : "Something went wrong. Please try again.";
 }
 
 export function EvacCenterForm({ point, draft, onDraftChange, onBackToMap, onSaved }: Props) {
@@ -150,7 +147,7 @@ export function EvacCenterForm({ point, draft, onDraftChange, onBackToMap, onSav
       onSaved(created); // parent puts the pin on the map and closes the form
     } catch (err) {
       // Keep everything the user typed; just show what went wrong.
-      setError(friendlyError(err));
+      setError(errorText(err));
       setSaving(false);
     }
   }

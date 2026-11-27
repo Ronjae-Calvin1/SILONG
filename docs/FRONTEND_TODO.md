@@ -51,20 +51,20 @@ Calls that take it (API.md):
 | `POST /api/facilities/{facility_id}/status` | optional, but a pending place accepts updates only from the phone that added it |
 | `GET /api/facilities/{facility_id}/status/history` | optional |
 
-- [ ] Send it on all seven (done for the three calls that exist in `client.ts`: `getFacilities`, `submitStatus`, `addEvacuationCenter`; the other four are added with their screens, pass `phone: true`). No other route lists it (chat, weather, advisories, emergency numbers and every Admin route do not).
+- [ ] Send it on all seven (done for five: `getFacilities`, `submitStatus`, `addEvacuationCenter`, `sendReport`, `getMyReports`; `GET /api/hazards/nearby` and the status history are added with their screens, pass `phone: true`). No other route lists it (chat, weather, advisories, emergency numbers and every Admin route do not).
 - [x] `MapPage.tsx` refreshes `getFacilities()` every 60 seconds (`REFRESH_MS`). Each refresh needs the header, or a pending place disappears at the next refresh.
 
 ### 3.2 Central request helper (`src/api/client.ts`)
 
 Every call goes through `request()` in `src/api/client.ts`: JSON in and out, `X-Phone-Id` when a call passes `phone: true`, errors as `ApiError` (`status`, `detail`), status 0 when the server cannot be reached.
 
-- [ ] Add `X-Phone-Id` to the seven calls above (three of seven today, see 3.1).
+- [ ] Add `X-Phone-Id` to the seven calls above (five of seven today, see 3.1).
 - [ ] Add `Authorization: Bearer <token>` when an Admin is signed in, on every Admin route. Only the admin console does this; the user site never has a token.
 - [ ] `POST /api/facilities/{facility_id}/status` with an Admin token is saved as "Confirmed by official". A wrong or expired token there counts as a user, not an error (API.md). The user site sends no token, so its updates are always "Reported by a user".
 - [x] Keep `ApiError` and `messageFromBody()`. They already handle `detail` as a string and as a 422 list.
 - [x] Add `retryAfter` (seconds) to `ApiError` for 429. See 7: the browser may not be able to read the header.
 - [x] Remove the stale comment above `askSilo` ("ASSUMPTION ... routes.py ... not in this copy"). The route is `POST /api/chat` and the code already matches.
-- [ ] Add the missing methods for sections 4 and 5. Today `client.ts` has: health, facilities, status, add, remove, removed list, restore, chat.
+- [ ] Add the missing methods for sections 4 and 5. Today `client.ts` has: health, facilities, status, add, sendReport, getMyReports, chat (the three Admin-only methods for removed centers were deleted in Part F2).
 
 ### 3.3 Errors (body is `{"detail": "<plain message>"}`; a 422 body is a list)
 
@@ -80,7 +80,7 @@ Every call goes through `request()` in `src/api/client.ts`: JSON in and out, `X-
 | 423 | account locked | `detail` on the sign-in form |
 | 429 | too many requests | `detail`; disable the button for `Retry-After` seconds if it can be read |
 
-- [ ] Show `detail` as written. Do not rewrite server messages. (`EvacCenterForm.friendlyError` strips "(id N)" and "(POST ...)" from the old duplicate message; see 4.2.)
+- [x] Show `detail` as written. Do not rewrite server messages. (`EvacCenterForm.friendlyError` strips "(id N)" and "(POST ...)" from the old duplicate message; see 4.2.)
 
 ### 3.4 Admin token (admin console only)
 
@@ -102,8 +102,8 @@ Every call goes through `request()` in `src/api/client.ts`: JSON in and out, `X-
 
 Today: validates, then `saveReport()` writes to localStorage (`REPORTS_KEY` in `myActivity.ts`). Nothing is sent. Footnote says "Saved on this phone for now".
 
-- [ ] On submit call `POST /api/reports` with `X-Phone-Id`. Remove `saveReport()`.
-- [ ] Replace the texts "Request saved on this phone" and "Report saved on this phone" and the hazard footnote with the server's `message` (answer has `id`, `kind`, `status`, `label`, `created_at`, `message`).
+- [x] On submit call `POST /api/reports` with `X-Phone-Id`. Remove `saveReport()`.
+- [x] Replace the texts "Request saved on this phone" and "Report saved on this phone" and the hazard footnote with the server's `message` (answer has `id`, `kind`, `status`, `label`, `created_at`, `message`).
 
 | Form | API | Rule |
 | --- | --- | --- |
@@ -115,36 +115,36 @@ Today: validates, then `saveReport()` writes to localStorage (`REPORTS_KEY` in `
 | `canMove` | `can_move` | help only; `yes`, `no` or `unsure` (form: yes or no, required) |
 | `point.lat`, `point.lng` | `latitude`, `longitude` | must be inside Batangas City (south 13.60, west 120.97, north 13.86, east 121.18 in `config.py`), else 422 |
 
-- [ ] A hazard with `people` or `can_move` is refused (422). The form already keeps them in help mode only. Do not send them on a hazard.
-- [ ] Any other field is refused (422): no name, no photo.
-- [ ] Limits do **not** match. Form: details 200 (`MAX_DETAILS`), kind 60 (`MAX_KIND`). Server: note 140 (`REPORT_NOTE_MAX`), category 40 (`REPORT_CATEGORY_MAX`). Lower both in the form (or see 7).
-- [ ] 403 means the phone is blocked after 3 false reports. 429 means wait (per-phone and per-IP limits in `config.py`: `REPORT_PHONE_COOLDOWN_SECONDS`, `REPORT_PHONE_MAX`, `REPORT_IP_MAX`).
-- [ ] Keep the "Call 911" strip and the GPS texts as they are.
+- [x] A hazard with `people` or `can_move` is refused (422). The form already keeps them in help mode only. Do not send them on a hazard.
+- [x] Any other field is refused (422): no name, no photo.
+- [x] Limits do **not** match. Form: details 200 (`MAX_DETAILS`), kind 60 (`MAX_KIND`). Server: note 140 (`REPORT_NOTE_MAX`), category 40 (`REPORT_CATEGORY_MAX`). Lower both in the form (or see 7).
+- [x] 403 means the phone is blocked after 3 false reports. 429 means wait (per-phone and per-IP limits in `config.py`: `REPORT_PHONE_COOLDOWN_SECONDS`, `REPORT_PHONE_MAX`, `REPORT_IP_MAX`).
+- [x] Keep the "Call 911" strip and the GPS texts as they are.
 
 ### 4.2 Add place: `components/EvacCenterForm.tsx`, `AddEvacCenter.tsx`, `evacCenterDraft.ts`; `api.addEvacuationCenter`; `MapPage.handleAdded`
 
 Today: `POST /evacuation-centers` with no header. On success the page adds the pin, shows "Evacuation center added." and calls `rememberMyPlace()`.
 
-- [ ] Call `POST /api/evacuation-centers` with `X-Phone-Id`.
-- [ ] Field names already match the API: `name`, `center_type`, `barangay`, `address`, `contact`, `max_capacity`, `latitude`, `longitude`, `note`. Capacity 1 to 50000 matches.
-- [ ] The answer is `201` with `approval_status: "pending"`. Add `approval_status` to `Facility` in `types/index.ts`.
-- [ ] Change the toast "Evacuation center added." to say it waits for approval and only this phone sees it.
-- [ ] A possible duplicate (same name within 30 m) is **not** a 409 any more. The answer has no duplicate flag; only Admins see it. Remove the duplicate/"restore it instead" handling in `friendlyError()`.
-- [ ] Errors that can happen now:
+- [x] Call `POST /api/evacuation-centers` with `X-Phone-Id`.
+- [x] Field names already match the API: `name`, `center_type`, `barangay`, `address`, `contact`, `max_capacity`, `latitude`, `longitude`, `note`. Capacity 1 to 50000 matches.
+- [x] The answer is `201` with `approval_status: "pending"`. Add `approval_status` to `Facility` in `types/index.ts`.
+- [x] Change the toast "Evacuation center added." to say it waits for approval and only this phone sees it.
+- [x] A possible duplicate (same name within 30 m) is **not** a 409 any more. The answer has no duplicate flag; only Admins see it. Remove the duplicate/"restore it instead" handling in `friendlyError()`.
+- [x] Errors that can happen now:
   - 409 "You already added this place. It is waiting for approval by an Admin."
   - 429 when 5 places already wait (`PENDING_PLACES_PER_PHONE`)
   - 429 per IP or phone, with `Retry-After`
-- [ ] Without the header the place is still saved but only Admins will ever see it. Do not allow that case.
+- [x] Without the header the place is still saved but only Admins will ever see it. Do not allow that case.
 
 ### 4.3 Status form: `components/StatusForm.tsx`; `api.submitStatus`; `MapPage.handleSaved`; `statusInfo.ts`
 
-- [ ] Call `POST /api/facilities/{facility_id}/status` with `X-Phone-Id`. Body fields already match: `status`, `people_inside`, `max_capacity`, `resources`, `note`.
-- [ ] Add `source` and `source_label` to `FacilityStatus`. The answer has them: "Reported by a user" or "Confirmed by official".
-- [ ] Show `source_label` in `FacilityPanel.tsx` (next to "Last updated"). Nothing in `frontend/src` reads it today.
-- [ ] **Label bug confirmed.** `StatusForm.tsx` has two inputs both labelled "Maximum capacity (optional)". The first one holds `people` (placeholder "e.g. 85", error text "People inside must be a whole number"). Rename its label to "People inside".
-- [ ] `message` in the answer is already shown by `handleSaved` (8 seconds). Keep it. It is how the user learns the server changed what was sent (for example "full" because people reached capacity).
-- [ ] After an official sets a capacity, a user's `max_capacity` is ignored. The form always sends the field; this is expected (REDESIGN).
-- [ ] `resources` is only sent for evacuation centers (the form does that today).
+- [x] Call `POST /api/facilities/{facility_id}/status` with `X-Phone-Id`. Body fields already match: `status`, `people_inside`, `max_capacity`, `resources`, `note`.
+- [x] Add `source` and `source_label` to `FacilityStatus`. The answer has them: "Reported by a user" or "Confirmed by official".
+- [x] Show `source_label` in `FacilityPanel.tsx` (next to "Last updated"). Nothing in `frontend/src` reads it today.
+- [x] **Label bug confirmed.** `StatusForm.tsx` has two inputs both labelled "Maximum capacity (optional)". The first one holds `people` (placeholder "e.g. 85", error text "People inside must be a whole number"). Rename its label to "People inside".
+- [x] `message` in the answer is already shown by `handleSaved` (8 seconds). Keep it. It is how the user learns the server changed what was sent (for example "full" because people reached capacity).
+- [x] After an official sets a capacity, a user's `max_capacity` is ignored. The form always sends the field; this is expected (REDESIGN).
+- [x] `resources` is only sent for evacuation centers (the form does that today).
 
 ### 4.4 Map pins and facility panel: `pages/MapPage.tsx`, `components/StatusPanel.css`, `MapPins.css`, `FacilityPanel.tsx`, `CapacityIndicator.tsx`
 
@@ -157,11 +157,11 @@ Pin looks from `docs/REDESIGN.md`, compared with the code:
 | small blue ring | added through the app | `data-source="user"` rule in `StatusPanel.css` |
 | dashed blue | waiting for approval, only the sender sees it | **not built** |
 
-- [ ] Read `approval_status` from `GET /api/facilities` and set a data attribute on the pin. Add the dashed blue rule.
-- [ ] In `FacilityPanel.tsx` say a pending place is waiting for approval and only this phone sees it.
-- [ ] A pending place only comes back from `GET /api/facilities` when the header is sent (3.1).
+- [x] Read `approval_status` from `GET /api/facilities` and set a data attribute on the pin. Add the dashed blue rule.
+- [x] In `FacilityPanel.tsx` say a pending place is waiting for approval and only this phone sees it.
+- [x] A pending place only comes back from `GET /api/facilities` when the header is sent (3.1).
 - [ ] `FacilityList.tsx` and the search use the same list: decide if pending places show there (check).
-- [ ] Show "Confirmed by official" vs "Reported by a user" (4.3).
+- [x] Show "Confirmed by official" vs "Reported by a user" (4.3).
 
 ### 4.5 Weather tab and strip: `components/WeatherTab.tsx`, `WeatherStrip.tsx`, `AlertsSheet.tsx`, `pages/MapPage.tsx`
 
@@ -257,8 +257,8 @@ My places:
 
 - [ ] **It is not mounted anywhere** (only defined; `getRemovedCenters` and `restoreEvacuationCenter` are used only inside it).
 - [ ] Its three routes are Admin only now (401 or 403 without a sign-in): `GET /api/evacuation-centers/removed`, `DELETE /api/evacuation-centers/{facility_id}`, `POST /api/evacuation-centers/{facility_id}/restore`. `client.ts` sends no `Authorization` header on them.
-- [ ] Do not mount it on the public map or anywhere in the user site. Move it (or rebuild it) in the admin console's Places screen (5.2).
-- [ ] `RemovedCenter` in `types/index.ts` lacks `removed_by`, `delete_after`, `days_left` (the server sends them).
+- [x] Do not mount it on the public map or anywhere in the user site. Move it (or rebuild it) in the admin console's Places screen (5.2).
+- [x] `RemovedCenters.tsx`, the `RemovedCenter` type and the client methods `removeEvacuationCenter`, `getRemovedCenters` and `restoreEvacuationCenter` were deleted from the user site (Part F2). The admin console builds its own.
 
 ### 4.13 Admin sign in link: remove it from the user site: `components/HamburgerMenu.tsx`, `pages/AdminSignInPage.tsx`, `App.tsx`
 
@@ -396,10 +396,10 @@ Sizes: S = under half a day, M = about a day, L = several days. These are guesse
 ### Phase 1: shared plumbing and the user side
 
 - [ ] Phone ID + `client.ts` changes (3.1 to 3.5): S
-- [ ] Incident form to `POST /api/reports` (4.1): M
-- [ ] Add place, pending result (4.2): S
-- [ ] Status form: source label and label fix (4.3): S
-- [ ] Pending pin look and panel text (4.4): S
+- [x] Incident form to `POST /api/reports` (4.1): M
+- [x] Add place, pending result (4.2): S
+- [x] Status form: source label and label fix (4.3): S
+- [x] Pending pin look and panel text (4.4): S
 - [ ] My reports and my places (4.10): M
 - [ ] Nearby hazards on the map (4.14): M
 
@@ -478,4 +478,4 @@ Done when (sign in as "Demo Admin", on a computer):
 - [ ] Navigate button: which maps app (5.2).
 - [ ] `weather_code` to icon: not defined (4.5).
 - [ ] What `EmergencyHotlines` shows when `GET /api/emergency-numbers` fails (4.8).
-- [ ] Report limits in the form (4.1): lower to 40 and 140, or ask the backend owner to raise the server limits.
+- [x] Report limits in the form (4.1): lowered to 40 (category) and 140 (note), the server limits (Part F2).

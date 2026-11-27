@@ -89,8 +89,9 @@ export function StatusForm({ facility: f, onClose, onSaved, focusCapacity = fals
       const saved = await api.submitStatus(f.id, payload);
       onSaved(f.id, saved); // parent closes the form, updates the pin and shows the confirmation
     } catch (err) {
-      // Keep everything the user typed; just show what went wrong.
-      if (err instanceof ApiError) setError(err.message);
+      // Keep everything the user typed; just show what went wrong, as the server wrote it
+      // (a per-place cooldown is a 429, a refused value is a 422, status 0 = server not reached).
+      if (err instanceof ApiError) setError(err.detail);
       else setError("Something went wrong. Please try again.");
       setSaving(false);
     }
@@ -151,7 +152,7 @@ export function StatusForm({ facility: f, onClose, onSaved, focusCapacity = fals
               <div className="sf-row">
                 <label className="sf-field">
                   <span className="sf-label">
-                    Maximum capacity <span className="sf-optional">(optional)</span>
+                    People inside <span className="sf-optional">(optional)</span>
                   </span>
                   <input
                     ref={peopleRef}
