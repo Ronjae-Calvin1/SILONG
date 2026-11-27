@@ -5,21 +5,12 @@
   display: none;
 }
 
-/* "Admin sign in" on the right of the bar: desktop only, same look as the other links */
-.topbar-admin {
-  display: none;
-}
-
 @media (min-width: 1024px) {
   .topbar-nav {
     display: flex;
     align-items: center;
     gap: var(--space-1);
     margin-left: var(--space-7); /* space between the logo and the links */
-  }
-
-  .topbar-admin {
-    display: block;
   }
 
   .topbar-link {

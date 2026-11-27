@@ -11,7 +11,7 @@ import {
   statusHint,
 } from "./statusInfo";
 import "./StatusPanel.css";
-import "./FacilityPanel.css";
+import "./Facilitypanel.css";
 
 interface Props {
   facility: Facility;

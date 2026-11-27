@@ -10,14 +10,14 @@ type Props = {
   onClose: () => void;
 };
 
-// "help" = the person needs help (responders only). "hazard" = a danger on the road, shown nearby after it is checked.
+// "help" = the person needs help (Admins only). "hazard" = a danger on the road, shown nearby after it is checked.
 type Mode = "help" | "hazard";
 
 type Form = {
   mode: Mode;
   kind: string;
   details: string;
-  contact: string; // only asked in "I need help" mode, so responders can call back (required there)
+  contact: string; // only asked in "I need help" mode, so Admins can call back (required there)
   people: number; // only "I need help": how many people need help
   canMove: "" | "yes" | "no"; // only "I need help": can the person move?
 };
@@ -231,7 +231,7 @@ export function IncidentPanel({ open, onClose }: Props) {
     const help = form.mode === "help";
     if (!form.kind.trim()) next.kind = help ? "Please choose what happened." : "Please choose what it is.";
     if (help && !form.canMove) next.canMove = "Please choose Yes or No.";
-    if (help && !form.contact.trim()) next.contact = "Please enter a phone number so responders can reach you.";
+    if (help && !form.contact.trim()) next.contact = "Please enter a phone number so Admins can reach you.";
     else if (help && !isPhoneOk(form.contact)) next.contact = "Please enter a valid phone number.";
     if (!point) next.location = "Please use your GPS location or pick the spot on the map.";
     if (next.kind || next.canMove || next.contact || next.location || !point) {
@@ -318,7 +318,7 @@ export function IncidentPanel({ open, onClose }: Props) {
               </span>
               <span className="ir-mode-text">
                 <strong>I need help</strong>
-                <small>Goes to responders only. It is never shown on the map.</small>
+                <small>Goes to Admins only. It is never shown on the map.</small>
               </span>
               {isHelp && <CheckMark />}
             </button>
@@ -439,7 +439,7 @@ export function IncidentPanel({ open, onClose }: Props) {
 
               <div className="ir-field">
                 <label className="ir-label" htmlFor="incident-contact">
-                  Phone number <span className="ir-hint">(required, only responders see it)</span>
+                  Phone number <span className="ir-hint">(required, only Admins see it)</span>
                 </label>
                 <input
                   id="incident-contact"
@@ -550,7 +550,7 @@ export function IncidentPanel({ open, onClose }: Props) {
           </button>
           <p className="ir-footnote">
             {isHelp
-              ? "This report goes to responders only. It does not replace calling 911."
+              ? "This report goes to Admins only. It does not replace calling 911."
               : "Saved on this phone for now. This does not replace calling 911."}
           </p>
         </div>

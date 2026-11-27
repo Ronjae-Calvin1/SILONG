@@ -7,7 +7,7 @@ import "./HamburgerMenu.css";
 // "activity" = phone (one page with two tabs). "reports" and "places" = desktop (one page each).
 export type MenuPage = "activity" | "reports" | "places" | "about" | "faq";
 
-// Support contact details are set by the Super admin once staff accounts exist. Until then they come
+// Support contact details are set by an Admin. Until the screen reads them from the server they come
 // from frontend/.env (VITE_SUPPORT_EMAIL, VITE_SUPPORT_PHONE). If they are empty nothing is invented.
 const SUPPORT_EMAIL = (import.meta.env.VITE_SUPPORT_EMAIL as string | undefined)?.trim() ?? "";
 const SUPPORT_PHONE = (import.meta.env.VITE_SUPPORT_PHONE as string | undefined)?.trim() ?? "";
@@ -63,7 +63,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "What does “I need help” do?",
-    a: "It is the option in the Report form for when you need help yourself. It is meant for responders only and is never shown on the map. In danger? Call 911 first.",
+    a: "It is the option in the Report form for when you need help yourself. It is meant for Admins only and is never shown on the map. In danger? Call 911 first.",
   },
   {
     q: "Is my location shared?",
@@ -134,7 +134,7 @@ export function FaqPage({ onBack }: { onBack: () => void }) {
           )}
         </div>
 
-        <p className="hm-support-foot">Contact details are set by the Super admin.</p>
+        <p className="hm-support-foot">Contact details are set by an Admin.</p>
       </section>
     </PageShell>
   );
