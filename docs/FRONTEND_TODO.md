@@ -297,13 +297,13 @@ All of section 5 is the **admin console**: its own frontend at its own link (`ht
 
 One sign-in screen: name, password, show or hide password. No sign-up. No "Back to the public map" link and no link to the user site. A user who opens the admin link sees only this screen.
 
-- [ ] Sign in: `POST /api/auth/sign-in` with `name` (max 100, not case sensitive) and `password` (max 200). Answer: `token`, `token_type`, `user` (`id`, `name`, `role`, `idle_timeout_minutes`).
-- [ ] 401 wrong name or password (same message for both). 423 account locked (5 wrong tries in a row lock it for 15 minutes; an Admin can also lock it, and then only an Admin can unlock it). 429 sign-ins per IP (20 per 10 minutes).
-- [ ] `GET /api/me` says who is signed in (`id`, `name`, `role`, `idle_timeout_minutes`). `role` is always `"admin"`: do not branch on it.
-- [ ] Every Admin gets every screen. No locked tabs, no "Super admin only" labels, one ADMIN badge. The server checks the token on every admin route (401 without a good sign-in, 403 for a locked or removed account); hiding screens is not security.
+- [x] Sign in: `POST /api/auth/sign-in` with `name` (max 100, not case sensitive) and `password` (max 200). Answer: `token`, `token_type`, `user` (`id`, `name`, `role`, `idle_timeout_minutes`).
+- [x] 401 wrong name or password (same message for both). 423 account locked (5 wrong tries in a row lock it for 15 minutes; an Admin can also lock it, and then only an Admin can unlock it). 429 sign-ins per IP (20 per 10 minutes).
+- [x] `GET /api/me` says who is signed in (`id`, `name`, `role`, `idle_timeout_minutes`). `role` is always `"admin"`: do not branch on it.
+- [x] Every Admin gets every screen. No locked tabs, no "Super admin only" labels, one ADMIN badge. The server checks the token on every admin route (401 without a good sign-in, 403 for a locked or removed account); hiding screens is not security.
 - [ ] Change password: `POST /api/auth/change-password` with `current_password`, `new_password`. A wrong current password is 403 and counted (5 per person and 20 per IP per 10 minutes, then 429). New password: at least 8 characters (`MIN_PASSWORD_LENGTH`) and different from the current one (422). Your other sign-ins end; this one stays.
-- [ ] Sign out button: `POST /api/auth/sign-out`.
-- [ ] "You were signed out": after 30 minutes without any request (each request moves the timer), the next admin call is a 401. Drop the token, show "You were signed out" and the sign-in screen.
+- [x] Sign out button: `POST /api/auth/sign-out`.
+- [x] "You were signed out": after 30 minutes without any request (each request moves the timer), the next admin call is a 401. Drop the token, show "You were signed out" and the sign-in screen.
 
 ### 5.2 Admin console (computer: full; phone: simple)
 
@@ -311,20 +311,20 @@ One role, so one console. Computer: top bar with the logo, the ADMIN badge, five
 
 Reports (Live map on a computer; Reports and Map on a phone):
 
-- [ ] `GET /api/admin/reports`. Query: `status` (`new`, `handling`, `resolved`, `all`; anything else is 422; `resolved` also lists reports marked false, `all` is open and closed together, not given means open reports only), `include_closed` (adds nothing when `status` is given), `kind` (`help` or `hazard`), `mine` (only reports you took), `latitude` with `longitude` (both or neither, else 422; adds `distance_m`), `since` (ISO time; only items that changed since, closed ones included so you can drop them).
-- [ ] Filters in the design: computer All, New, Being handled, Resolved; phone New, Mine, Handling, Resolved. Map to `status=all`, `new`, `handling`, `resolved`, and `mine=true`.
-- [ ] Answer: `server_time`, `refresh_seconds` (10), `new_help_count`, `has_new_help`, `latest_report_id`, `since`, `items`. Poll every `refresh_seconds` from the answer, not a fixed number. Send the last `server_time` as `since` for the next poll and merge.
-- [ ] Order is the server's: new help requests first, then other open reports (longest waiting first), then closed (newest first).
-- [ ] Badges: `GET /api/admin/summary` (`new_reports`, `being_handled`, `mine`, `pending_places`, `removed_centers`, `server_time`). Poll it with the list. There is no count of resolved reports and no "All" count: count the list.
-- [ ] Red "Needs help" alert (computer and phone, with an Open button) while `has_new_help` is true. `new_help_count` and `latest_report_id` are in the answer. There is no push, text or page: the screens poll.
-- [ ] Item fields: `id`, `kind`, `status` (`new`, `being_handled`, `resolved`, `false`), `is_new_help`, `category`, `categories`, `people`, `can_move`, `latitude`, `longitude`, `contacts`, `notes`, `created_at`, `updated_at`, `taken_by`, `is_mine`, `distance_m`, `closed_by`, `resolution_note`, `false_reason`, `verified`, `verified_by`, `hazard_state` (`pending`, `unconfirmed`, `verified`), `phones`, `report_count`.
-- [ ] A hazard is one line for all reports about the same place (within 100 m). Show `report_count`, `phones`, every `categories` value, all `contacts` and `notes`.
-- [ ] Take it: `POST /api/admin/reports/{report_id}/take`, no body. If another Admin has it you take it over (reassigned to you); 409 only means it is closed. Safe to call twice. **Ask first:** when `taken_by` is another Admin, show "<name> is handling this. Take over?" before calling take. The server does not ask.
-- [ ] Release: `POST /api/admin/reports/{report_id}/release`, any Admin, any open report, safe to call twice.
-- [ ] Call: a `tel:` link from `contacts`. No endpoint. Navigate: a link with `latitude` and `longitude`. No endpoint. Which maps app is not decided.
-- [ ] Resolve: `POST /api/admin/reports/{report_id}/resolve` with `what_was_done` (3 to 500 characters). Phone sheet options: Helped on site, Moved to a center, Sent to a hospital, Could not find them, Other, plus an optional note. The server has only the one text: build `what_was_done` from the option and the note.
-- [ ] Mark false: `POST /api/admin/reports/{report_id}/mark-false` with `reason` (3 to 500). The dialog needs a reason. 3 false reports from one phone block that phone.
-- [ ] Verify a hazard: `POST /api/admin/reports/{report_id}/verify`, no body, hazards only (422 otherwise), safe to call twice. The public then sees "Verified".
+- [x] `GET /api/admin/reports`. Query: `status` (`new`, `handling`, `resolved`, `all`; anything else is 422; `resolved` also lists reports marked false, `all` is open and closed together, not given means open reports only), `include_closed` (adds nothing when `status` is given), `kind` (`help` or `hazard`), `mine` (only reports you took), `latitude` with `longitude` (both or neither, else 422; adds `distance_m`), `since` (ISO time; only items that changed since, closed ones included so you can drop them).
+- [x] Filters in the design: computer All, New, Being handled, Resolved; phone New, Mine, Handling, Resolved. Map to `status=all`, `new`, `handling`, `resolved`, and `mine=true`.
+- [x] Answer: `server_time`, `refresh_seconds` (10), `new_help_count`, `has_new_help`, `latest_report_id`, `since`, `items`. Poll every `refresh_seconds` from the answer, not a fixed number. Send the last `server_time` as `since` for the next poll and merge.
+- [x] Order is the server's: new help requests first, then other open reports (longest waiting first), then closed (newest first).
+- [x] Badges: `GET /api/admin/summary` (`new_reports`, `being_handled`, `mine`, `pending_places`, `removed_centers`, `server_time`). Poll it with the list. There is no count of resolved reports and no "All" count: count the list.
+- [x] Red "Needs help" alert (computer and phone, with an Open button) while `has_new_help` is true. `new_help_count` and `latest_report_id` are in the answer. There is no push, text or page: the screens poll.
+- [x] Item fields: `id`, `kind`, `status` (`new`, `being_handled`, `resolved`, `false`), `is_new_help`, `category`, `categories`, `people`, `can_move`, `latitude`, `longitude`, `contacts`, `notes`, `created_at`, `updated_at`, `taken_by`, `is_mine`, `distance_m`, `closed_by`, `resolution_note`, `false_reason`, `verified`, `verified_by`, `hazard_state` (`pending`, `unconfirmed`, `verified`), `phones`, `report_count`.
+- [x] A hazard is one line for all reports about the same place (within 100 m). Show `report_count`, `phones`, every `categories` value, all `contacts` and `notes`.
+- [x] Take it: `POST /api/admin/reports/{report_id}/take`, no body. If another Admin has it you take it over (reassigned to you); 409 only means it is closed. Safe to call twice. **Ask first:** when `taken_by` is another Admin, show "<name> is handling this. Take over?" before calling take. The server does not ask.
+- [x] Release: `POST /api/admin/reports/{report_id}/release`, any Admin, any open report, safe to call twice.
+- [x] Call: a `tel:` link from `contacts`. No endpoint. Navigate: a link with `latitude` and `longitude`. No endpoint. Which maps app is not decided.
+- [x] Resolve: `POST /api/admin/reports/{report_id}/resolve` with `what_was_done` (3 to 500 characters). Phone sheet options: Helped on site, Moved to a center, Sent to a hospital, Could not find them, Other, plus an optional note. The server has only the one text: build `what_was_done` from the option and the note.
+- [x] Mark false: `POST /api/admin/reports/{report_id}/mark-false` with `reason` (3 to 500). The dialog needs a reason. 3 false reports from one phone block that phone.
+- [x] Verify a hazard: `POST /api/admin/reports/{report_id}/verify`, no body, hazards only (422 otherwise), safe to call twice. The public then sees "Verified".
 - [ ] Rules: exact location and contact are visible to Admins only; the site cannot text or page anyone; the page is not a replacement for 911.
 
 Places:
@@ -374,7 +374,7 @@ Me (phone; the same data is useful on a computer):
 
 - [ ] Name from `GET /api/me`. Change password (5.1). "Signs out by itself after 30 minutes without use" (`idle_timeout_minutes`).
 - [ ] My recent actions: `GET /api/admin/me/activity` (`limit` 1 to 100, default 20): `handled_today`, `today_starts_at`, `server_time`, `items` (`id`, `created_at`, `action`, `target`, `detail`). Your own actions only; sign-ins are left out.
-- [ ] Call the control room: `control_room_number` from `GET /api/admin/contact-settings`; `null` means not set.
+- [x] Call the control room: `control_room_number` from `GET /api/admin/contact-settings`; `null` means not set.
 
 ### 5.3 What the backend does NOT have (do not look for it)
 
@@ -428,8 +428,8 @@ Done when:
 ### Phase 3: admin sign in and the report and place screens (admin console)
 
 - [ ] Sign in, change password, sign out, 401 handling (5.1): M
-- [ ] Reports list with polling and alert (5.2): L
-- [ ] Take (with the take-over question), resolve, mark false, verify (5.2): M
+- [x] Reports list with polling and alert (5.2): L
+- [x] Take (with the take-over question), resolve, mark false, verify (5.2): M
 - [ ] Places to approve, reject, edit (5.2): M
 - [ ] Status override, capacity, history (5.2): S
 - [ ] Removed places (5.2, 4.12): S

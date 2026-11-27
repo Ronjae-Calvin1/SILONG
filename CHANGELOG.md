@@ -2,6 +2,16 @@
 
 Short log of what changed in each update, newest first.
 
+## Update 19 — Admin console, Part F3: sign in, session and Live map (new `/admin` app)
+A new frontend in `/admin` (`http://localhost:5174`). No backend, `/frontend` or `docs/API.md` change.
+- **Own app.** Own `package.json`, Vite config, tsconfig, `.gitignore` and `.env.example`; React 19, TypeScript, Vite, maplibre-gl and react-router-dom at the versions of `/frontend`. It shares no files with the user site and has no link to it.
+- **Sign in.** Name, password, show or hide, the static 5-tries line; shows the server's text for 401, 423, 429 (the button waits the minutes read from the text) and "can't connect".
+- **Session.** One request helper (`src/api/client.ts`). The token is in `sessionStorage` of this site only and goes only in the `Authorization` header. Any 401 or 403 on an admin call drops the token, stops polling and shows "You were signed out". The console also signs out by itself after `idle_timeout_minutes` without the person's own click, tap or key press (polling does not count).
+- **Live map.** Report list and MapLibre map (computer); filters All (open only), New, Being handled, Resolved; polling every `refresh_seconds` with `since`; summary counts; red "Needs help" alert; chips including False, Pending, Unconfirmed and Verified; the nearest place name worked out from `GET /api/facilities`.
+- **Actions.** Take it (asks "<name> is handling this. Take over?" first when another Admin has it), Release, Call, Navigate (Google Maps), Resolve (options sent as one `what_was_done` text), Mark false (reason list, "Other" with a text box), Verify.
+- **Phone layout.** Header, bottom bar (Reports, Map, Me), chips New, Mine, Handling and Resolved, report detail with fixed buttons, resolve sheet, new-help banner with Open, and Me with the control-room number. Places on the phone and everything under Places, Content, Chatbot and Accounts come in a later part.
+- `docs/FRONTEND_TODO.md`: finished items ticked. README: one run line for the admin app.
+
 ## Update 18 — User site, Part F2: screens that send data (frontend only)
 No backend, docs/API.md or admin code changed.
 - **Incident form** sends `POST /api/reports` with the phone ID, then reads `GET /api/reports/mine` and shows the reference number and the status. Nothing is saved on the phone any more. Server errors (422, 429, a blocked phone) are shown as written. Form limits now match the server (category 40, note 140, contact 60).

@@ -160,8 +160,8 @@ of the user site.
 
 - The two ports are examples. Any two free ports work, if both addresses are in `CORS_ORIGINS`.
 - Both frontends call the same backend, so set `VITE_API_URL` the same way for each (default `http://127.0.0.1:8000/api`).
-- The admin console is a separate frontend with its own link (for example `npm run dev -- --port 5174`). Its code is not in this
-  repository. The user site has no admin link, button or text, and the admin sign-in has no link back to the public map.
+- The admin console is a separate frontend in the `admin` folder with its own link. Run it with `cd admin`, `npm install`, `npm run dev`
+  (port 5174; see `admin/README.md`). The user site has no admin link, button or text, and the admin sign-in has no link back to the public map.
 - A separate link only hides the door. The sign-in and the server's token check keep users out: no token, or an expired one, is
   401; an account that is locked or removed while its sign-in is still alive is 403.
 
