@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { api, ApiError } from "../api/client";
+import type { NewReport } from "../types";
 import { Icon } from "./icons";
 import { LocationPicker, type Point } from "./LocationPicker";
-import { REPORTS_KEY } from "./myActivity"; // the same list the menu's "My reports" reads
 import "./IncidentPanel.css";
 import "./ReportContent.css";
 
@@ -35,8 +36,10 @@ const KINDS: Record<Mode, string[]> = {
   hazard: ["Flooded road", "Fallen tree or pole", "Blocked road", "Landslide", "Other"],
 };
 
-const MAX_DETAILS = 200;
-const MAX_KIND = 60; // longest "something else" a person can type
+// Limits of the server (docs/API.md, POST /api/reports): note 140, category 40, contact 60.
+const MAX_DETAILS = 140;
+const MAX_KIND = 40; // longest "something else" a person can type
+const MAX_CONTACT = 60;
 
 const MAX_PEOPLE = 99;
 
@@ -82,37 +85,15 @@ function saveDraft(form: Form) {
   }
 }
 
-function saveReport(form: Form, point: Point): boolean {
-  try {
-    const raw = localStorage.getItem(REPORTS_KEY);
-    const list: unknown = raw ? JSON.parse(raw) : [];
-    const reports = Array.isArray(list) ? list : [];
-    const help = form.mode === "help";
-    reports.push({
-      mode: form.mode,
-      kind: form.kind.trim(),
-      details: form.details,
-      // Only "I need help" reports keep a phone number, a head count and "can they move".
-      contact: help ? form.contact.trim() : "",
-      ...(help ? { people: form.people, canMove: form.canMove } : {}),
-      latitude: point.lat,
-      longitude: point.lng,
-      savedAt: new Date().toISOString(),
-    });
-    localStorage.setItem(REPORTS_KEY, JSON.stringify(reports));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function IncidentPanel({ open, onClose }: Props) {
   const [form, setForm] = useState<Form>(loadDraft);
   const [point, setPoint] = useState<Point | null>(null); // where it happened (GPS or a pin on the mini map)
   const [whereMode, setWhereMode] = useState<WhereMode>(null);
   const [gps, setGps] = useState<GpsState>({ kind: "idle", text: "" });
   const [errors, setErrors] = useState<Errors>({});
-  const [status, setStatus] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  // `ref` is the second line after a send: the reference number and the status the server gives this phone.
+  const [status, setStatus] = useState<{ kind: "ok" | "error"; text: string; ref?: string } | null>(null);
+  const [sending, setSending] = useState(false);
   // Size of the area not covered by the phone keyboard (null = use full screen).
   const [viewport, setViewport] = useState<{ h: number; top: number } | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -224,8 +205,9 @@ export function IncidentPanel({ open, onClose }: Props) {
     setStatus(null);
   }
 
-  function onSubmit(e: FormEvent<HTMLFormElement>) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (sending) return;
 
     const next: Errors = {};
     const help = form.mode === "help";
@@ -241,19 +223,48 @@ export function IncidentPanel({ open, onClose }: Props) {
     }
     setErrors({});
 
-    if (!saveReport(form, point)) {
+    // Only what the server accepts. A hazard never carries contact, people or can_move.
+    const payload: NewReport = {
+      kind: form.mode,
+      category: form.kind.trim(),
+      latitude: point.lat,
+      longitude: point.lng,
+    };
+    if (form.details.trim()) payload.note = form.details.trim();
+    if (help) {
+      payload.contact = form.contact.trim();
+      payload.people = form.people;
+      if (form.canMove) payload.can_move = form.canMove;
+    }
+
+    setSending(true);
+    setStatus(null);
+    try {
+      const sent = await api.sendReport(payload);
+      // The form is only cleared after the server accepted the report.
+      setPoint(null);
+      setWhereMode(null);
+      setGps({ kind: "idle", text: "" });
+      setForm((f) => ({ ...EMPTY, mode: f.mode }));
+      // The reference and status this phone gets from GET /api/reports/mine. If that call fails,
+      // the answer to the send already has the same id and label.
+      let label = sent.label;
+      try {
+        const mine = await api.getMyReports();
+        label = mine.find((r) => r.id === sent.id)?.label ?? label;
+      } catch {
+        // Keep the label from the send.
+      }
+      setStatus({ kind: "ok", text: sent.message, ref: `Reference #${sent.id} · Status: ${label}` });
+    } catch (err) {
+      // Keep everything typed. Show the server's text as written (422, 429, a blocked phone, ...).
       setStatus({
         kind: "error",
-        text: "Could not save on this phone (storage may be blocked or full).",
+        text: err instanceof ApiError ? err.detail : "Something went wrong. Please try again.",
       });
-      return;
+    } finally {
+      setSending(false);
     }
-    setPoint(null);
-    setWhereMode(null);
-    setGps({ kind: "idle", text: "" });
-    setForm((f) => ({ ...EMPTY, mode: f.mode }));
-    // Only shown after the save really worked.
-    setStatus({ kind: "ok", text: help ? "Request saved on this phone" : "Report saved on this phone" });
   }
 
   // Same 78% height as the other panels, but never taller than the space above the phone keyboard.
@@ -449,6 +460,7 @@ export function IncidentPanel({ open, onClose }: Props) {
                   autoComplete="tel"
                   placeholder="e.g. 0917 123 4567"
                   aria-required="true"
+                  maxLength={MAX_CONTACT}
                   aria-invalid={errors.contact ? true : undefined}
                   value={form.contact}
                   onChange={(e) => change("contact", e.target.value)}
@@ -543,15 +555,21 @@ export function IncidentPanel({ open, onClose }: Props) {
               role={status.kind === "ok" ? "status" : "alert"}
             >
               {status.text}
+              {status.ref && (
+                <>
+                  <br />
+                  <strong>{status.ref}</strong>
+                </>
+              )}
             </p>
           )}
-          <button type="submit" className={`ir-submit${isHelp ? " ir-submit-help" : ""}`}>
-            {isHelp ? "Send for help" : "Send report"}
+          <button type="submit" className={`ir-submit${isHelp ? " ir-submit-help" : ""}`} disabled={sending}>
+            {sending ? "Sending…" : isHelp ? "Send for help" : "Send report"}
           </button>
           <p className="ir-footnote">
             {isHelp
               ? "This report goes to Admins only. It does not replace calling 911."
-              : "Saved on this phone for now. This does not replace calling 911."}
+              : "This does not replace calling 911."}
           </p>
         </div>
       </form>

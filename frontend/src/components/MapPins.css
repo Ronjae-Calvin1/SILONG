@@ -59,6 +59,31 @@
   background: #fff;
 }
 
+/* Waiting for approval (added from this phone, only this phone sees it): dashed blue ring, no solid ring. */
+.pin.facility-pin[data-approval="pending"] .pin-body {
+  border-style: dashed;
+  border-color: #4a55d6;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+/* The type letter badge has its own colour per type, so hospitals, clinics and evacuation centers can be told
+   apart. The pin fill stays the status colour (green, orange, red, grey), so the two never get mixed up. */
+.pin.facility-pin[data-type="hospital"] .pin-badge {
+  background: #b0197d;
+  border-color: #fff;
+  color: #fff;
+}
+.pin.facility-pin[data-type="clinic"] .pin-badge {
+  background: #00838f;
+  border-color: #fff;
+  color: #fff;
+}
+.pin.facility-pin[data-type="evacuation_center"] .pin-badge {
+  background: #283593;
+  border-color: #fff;
+  color: #fff;
+}
+
 /* Selected: bigger, thick double ring, always on top. The tip stays on the spot. */
 .pin.facility-pin[data-selected="true"] {
   z-index: 5;

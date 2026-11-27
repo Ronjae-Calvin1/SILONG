@@ -261,6 +261,8 @@ export function MapPage() {
       pin.el.dataset.status = statusKey(f); // open | almost_full | busy | full | closed | unknown
       pin.el.dataset.outdated = String(!!f.status?.is_outdated);
       pin.el.dataset.source = f.source; // "user" gets a small ring (added through the app)
+      pin.el.dataset.type = f.type; // hospital | clinic | evacuation_center: colours the letter badge
+      pin.el.dataset.approval = f.approval_status === "pending" ? "pending" : "approved"; // pending: dashed blue, only this phone sees it
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facilities, filter, hidden]); // "hidden": hiding or unhiding a center updates the pins right away
@@ -354,7 +356,7 @@ export function MapPage() {
     lastSaveAt.current = Date.now();
     setFacilities((list) => (list.some((f) => f.id === facility.id) ? list : [...list, facility]));
     setSelectedId(facility.id);
-    showToast("Evacuation center added.");
+    showToast("Evacuation center added. It is waiting for approval by an Admin, and only this phone can see it for now.", "notice", 8000);
     if (facility.type === "evacuation_center") {
       rememberMyPlace({ id: facility.id, name: facility.name, kind: facilityKindLabel(facility), savedAt: new Date().toISOString() });
     }

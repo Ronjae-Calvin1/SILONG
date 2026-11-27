@@ -97,12 +97,19 @@ export function FacilityPanel({ facility: f, onClose, onUpdateStatus, onSetCapac
           {f.is_outdated && <span className="fp-outdated">May be outdated</span>}
         </div>
 
+        {f.approval_status === "pending" && (
+          <p className="fp-pending" role="note">
+            Waiting for approval by an Admin. Only this phone can see it for now.
+          </p>
+        )}
+
         {/* Works with or without a status: a new center has no status yet but does have a capacity. */}
         {f.type === "evacuation_center" && <CapacityIndicator facility={f} onSetCapacity={onSetCapacity} />}
 
         {s ? (
           <p className="fp-updated">
             Last updated {timeAgo(s.updated_at, now)} · {clockTime(s.updated_at, now)}
+            {s.source_label && <span className="fp-source" data-source={s.source}> · {s.source_label}</span>}
           </p>
         ) : (
           <p className="fp-updated">Nobody has reported yet. Be the first to update.</p>

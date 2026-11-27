@@ -1,7 +1,16 @@
 // Single place that knows how to reach the backend. Every call goes through request().
-// Map slice + status updates + adding/removing/restoring evacuation centers for now — more endpoints get added back as features return.
+// Public calls only: the map, status updates, adding a place, sending a report, and the chat. No Admin route is called from the user site.
 
-import type { Facility, FacilityStatus, NewEvacuationCenter, RemovedCenter, SiloAnswer, StatusPayload } from "../types";
+import type {
+  Facility,
+  FacilityStatus,
+  MyReportItem,
+  NewEvacuationCenter,
+  NewReport,
+  ReportSent,
+  SiloAnswer,
+  StatusPayload,
+} from "../types";
 import { getPhoneId } from "./phoneId";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api";
@@ -86,14 +95,10 @@ export const api = {
   // Returns the new center, shaped like an item of getFacilities().
   addEvacuationCenter: (payload: NewEvacuationCenter) =>
     request<Facility>("/evacuation-centers", { method: "POST", body: payload, phone: true }),
-  // Soft remove: the backend hides the center and keeps its data, so it can be restored.
-  removeEvacuationCenter: (facilityId: number) =>
-    request<RemovedCenter>(`/evacuation-centers/${facilityId}`, { method: "DELETE" }),
-  // Centers that are removed right now (newest removal first), for the restore list.
-  getRemovedCenters: () => request<RemovedCenter[]>("/evacuation-centers/removed"),
-  // Brings a removed center back. Returns it shaped like an item of getFacilities().
-  restoreEvacuationCenter: (facilityId: number) =>
-    request<Facility>(`/evacuation-centers/${facilityId}/restore`, { method: "POST" }),
+  // Sends a help request or a hazard report. Needs X-Phone-Id (400 without it).
+  sendReport: (payload: NewReport) => request<ReportSent>("/reports", { method: "POST", body: payload, phone: true }),
+  // This phone's own reports, newest first.
+  getMyReports: () => request<MyReportItem[]>("/reports/mine", { phone: true }),
   // Silo, the chatbot: one question in, one short answer out. Nothing is kept between questions.
   askSilo: (question: string) => request<SiloAnswer>("/chat", { method: "POST", body: { question } }),
 };

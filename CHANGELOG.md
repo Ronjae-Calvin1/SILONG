@@ -2,6 +2,14 @@
 
 Short log of what changed in each update, newest first.
 
+## Update 18 — User site, Part F2: screens that send data (frontend only)
+No backend, docs/API.md or admin code changed.
+- **Incident form** sends `POST /api/reports` with the phone ID, then reads `GET /api/reports/mine` and shows the reference number and the status. Nothing is saved on the phone any more. Server errors (422, 429, a blocked phone) are shown as written. Form limits now match the server (category 40, note 140, contact 60).
+- **Add place** shows the server's text as written (the message rewriting in `EvacCenterForm` is gone). The added place is "waiting for approval" and only this phone sees it: dashed blue pin and a note in the details panel.
+- **Status form**: the first number field is now labelled "People inside". Server text is shown as written, including the per-place cooldown (429).
+- **Map and details panel**: `approval_status`, `source` and `source_label` are typed and shown ("Reported by a user", "Confirmed by official"). The letter badge on each pin has its own colour for hospitals, clinics and evacuation centers; the pin fill is still the status colour.
+- **Removed:** `RemovedCenters.tsx` (it was not mounted anywhere), the `RemovedCenter` type and the client methods `removeEvacuationCenter`, `getRemovedCenters` and `restoreEvacuationCenter` (all Admin-only routes). Unused `dexie`, `leaflet`, `react-leaflet` and `@types/leaflet`, and the Leaflet stylesheet link in `index.html`.
+
 ## Update 17 — Admin hand-off docs (docs only)
 Documentation for the admin frontend developer and the move to one role in the docs. No code, test, path, field or answer changed.
 - **New `docs/ADMIN_FRONTEND_HANDOFF.md`.** For every desktop screen (sign in, Live map, Places, Content, Chatbot, Accounts, Audit log, Blocked phones, Change password), every phone screen (Reports, Map, Places, Me, report detail, resolve sheet, new-help alert) and the shared behaviour ("You were signed out", lock after 5 wrong tries, sign-in rate limit, "Mark as false", "Delete for good"): the exact endpoints, query and body fields, response fields used, error codes and refresh rules. It states the take-over question ("<name> is handling this. Take over?"), that the Admin token must never be reachable from the user site or put in a URL, and that the sign-in has no link to the public map. Every screen or action the server does not support (chatbot guide, two-step sign in, texts or pages, advisory expiry, place names on reports, device and accuracy fields) is marked, and so is every endpoint with no designed screen.

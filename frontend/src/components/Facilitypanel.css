@@ -236,6 +236,22 @@
   font-size: var(--ui-text-small);
 }
 
+/* "Reported by a user" / "Confirmed by official" next to the time. */
+.fp-source {
+  font-weight: 700;
+}
+
+/* A place added from this phone that waits for an Admin: dashed blue, like its pin. */
+.fp-pending {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1.5px dashed #8f98ff;
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-size: var(--ui-text-small);
+  font-weight: 700;
+}
+
 /* Small text button, e.g. "Set capacity". Padding makes the tap area 44px tall. */
 .fp-link-btn {
   min-height: var(--tap-min);
