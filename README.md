@@ -918,18 +918,19 @@ SILONG/
     ├── .env.example            # Copy to .env and add your MapTiler key
     └── src/
         ├── App.tsx             # Renders MapPage
-        ├── api/client.ts       # Talks to the backend
+        ├── api/client.ts       # Talks to the backend (one request helper, adds X-Phone-Id)
+        ├── api/phoneId.ts      # The anonymous phone ID, made once and kept in localStorage
+        ├── api/convert.ts      # Server time to Date, id to string
         ├── pages/MapPage.tsx   # MapLibre map + facility pins
-        ├── components/         # Top bar, round buttons, alerts panel, incident form, plus:
-        │   ├── FacilityPanel.tsx      # Details panel: status, last updated, remove button
-        │   ├── CapacityIndicator.tsx  # Capacity bar, "Capacity: N people", "Capacity not set"
-        │   ├── StatusForm.tsx         # Update status form (own statuses for centers vs hospitals)
-        │   ├── statusInfo.ts          # Status labels, time labels, capacity colors
-        │   ├── AddEvacCenter.tsx      # "Add evacuation center" button, pin placement
-        │   ├── EvacCenterForm.tsx     # Details form for a new center
-        │   ├── RemovedCenters.tsx     # "Removed centers" list with Restore (top-bar menu)
-        │   └── StatusPanel.css, EvacManager.css   # Styles for the above
-        └── _later/             # Parked pages and offline code (not used)
+        └── components/         # Top bar, round buttons, alerts panel, incident form, plus:
+            ├── FacilityPanel.tsx      # Details panel: status, last updated, remove button
+            ├── CapacityIndicator.tsx  # Capacity bar, "Capacity: N people", "Capacity not set"
+            ├── StatusForm.tsx         # Update status form (own statuses for centers vs hospitals)
+            ├── statusInfo.ts          # Status labels, time labels, capacity colors
+            ├── AddEvacCenter.tsx      # "Add evacuation center" button, pin placement
+            ├── EvacCenterForm.tsx     # Details form for a new center
+            ├── RemovedCenters.tsx     # "Removed centers" list with Restore (top-bar menu)
+            └── StatusPanel.css, EvacManager.css   # Styles for the above
 ```
 
 ## Next steps
@@ -941,16 +942,12 @@ Based on the project documentation:
   (`/api/emergency-numbers`, which has only 911 until the Batangas City CDRRMO
   confirms the others), and the Admin screens to post advisories and edit
   numbers.
-- Connect the frontend to the places rules (backend is ready): send the `X-Phone-Id`
-  header with `/api/facilities`, the status update and the add-place call (a pending
-  place disappears from its sender's map after a reload without it); show
-  `approval_status` (dashed blue ring while pending) and `status.source_label`; the
+- Connect the frontend to the places rules (backend is ready; `client.ts` already sends
+  the `X-Phone-Id` header with `/api/facilities`, the status update and the add-place
+  call): show `approval_status` (dashed blue ring while pending) and `status.source_label`; the
   approve / reject screens and the "Removed centers" list for Admins (in the admin console). `RemovedCenters.tsx`
   is not used by any page and would now need an Admin sign-in.
 - Connect the report screens to the report endpoints (the backend is ready, the old incident form still saves on the phone only).
 - Chatbot: the placeholder works. Still to build: the checked guide, its editor and
   the wrong-answer report, then an AI provider (see "Plugging in an AI later").
-- Clean-up to match "online only": the offline code in `_later/` and the PWA
-  install settings in `frontend/vite.config.ts` are left from an earlier plan
-  and should be removed.
 - Add distinct pin colors for hospitals, clinics and evacuation centers.

@@ -14,7 +14,7 @@ import {
 } from "./statusInfo";
 import "./StatusPanel.css";
 import "./EvacManager.css";
-import "./FacilityPanel.css";
+import "./Facilitypanel.css";
 
 // Current time, refreshed every minute (and when the tab comes back), so the
 // "15 minutes ago" labels never go stale while the page stays open.

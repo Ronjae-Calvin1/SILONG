@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
 import logoWhite from "../assets/silong-logo-white.png";
 import { Icon, type IconName } from "./icons";
 import type { HiddenCenter } from "./hiddenCenters";
@@ -53,7 +52,6 @@ function Row({
 // The public menu (slides in from the left). It is mounted only while it is open, so the counts
 // for "My Suggested Places" and "My Reports" are read fresh from this phone every time it opens.
 export function HamburgerMenu({ hidden, onUnhide, page, onPage, onClose }: Props) {
-  const navigate = useNavigate();
   const [hiddenOpen, setHiddenOpen] = useState(true);
   const [reports] = useState(loadMyReports);
   const [places] = useState(loadMyPlaces);
@@ -213,12 +211,6 @@ export function HamburgerMenu({ hidden, onUnhide, page, onPage, onClose }: Props
           )}
         </section>
       </div>
-
-      <footer className="hm-footer">
-        <ul className="hm-list">
-          <Row icon="lock" label="Admin sign in" onClick={() => navigate("/admin")} />
-        </ul>
-      </footer>
     </nav>
   );
 

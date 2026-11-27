@@ -82,7 +82,7 @@ export function MapPage() {
   const [sheetH, setSheetH] = useState(0); // Pin that is open in the details panel, and whether its update form is open.
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [formOpen, setFormOpen] = useState(false); // True when the form was opened from "Set capacity" (capacity field first).
-  const [focusCapacity, setFocusCapacity] = useState(false); // Top-bar menu: Map, My reports, My suggested places, Hidden on this phone, About, FAQs, Support, Admin sign in.
+  const [focusCapacity, setFocusCapacity] = useState(false); // Top-bar menu: Map, My reports, My suggested places, Hidden on this phone, About, FAQs, Support.
   const [menuPage, setMenuPage] = useState<MenuPage | null>(null); // which page the menu shows (null = the menu list itself)
   const [menuOpen, setMenuOpen] = useState(false); // Hidden on this phone: evacuation centers this person hid on this browser only (kept in localStorage).
   const [hidden, setHidden] = useState<HiddenCenter[]>(loadHidden); // "notice" is for messages from the server that change what the person typed (longer, orange).

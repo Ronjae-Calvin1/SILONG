@@ -35,9 +35,9 @@ Where the docs and the code disagree, the code is what this file follows, and it
 
 ### 3.1 Phone ID
 
-- [ ] Make one random ID per browser, once, and keep it. Format: 16 to 64 letters, digits, `-` or `_` (API.md, "Phone ID"). A UUID (36 characters) fits.
-- [ ] Send it as the header `X-Phone-Id`. The server stores only a hash. It is not proof of identity. Clearing browser data makes a new one.
-- [ ] There is no phone ID code in `frontend/src` today.
+- [x] Make one random ID per browser, once, and keep it. Format: 16 to 64 letters, digits, `-` or `_` (API.md, "Phone ID"). A UUID (36 characters) fits.
+- [x] Send it as the header `X-Phone-Id`. The server stores only a hash. It is not proof of identity. Clearing browser data makes a new one.
+- [x] The phone ID code is `frontend/src/api/phoneId.ts` (`getPhoneId()`, kept in localStorage under `silong:phone-id`; a stored value that does not fit the format is replaced).
 
 Calls that take it (API.md):
 
@@ -51,19 +51,19 @@ Calls that take it (API.md):
 | `POST /api/facilities/{facility_id}/status` | optional, but a pending place accepts updates only from the phone that added it |
 | `GET /api/facilities/{facility_id}/status/history` | optional |
 
-- [ ] Send it on all seven. No other route lists it (chat, weather, advisories, emergency numbers and every Admin route do not).
-- [ ] `MapPage.tsx` refreshes `getFacilities()` every 60 seconds (`REFRESH_MS`). Each refresh needs the header, or a pending place disappears at the next refresh.
+- [ ] Send it on all seven (done for the three calls that exist in `client.ts`: `getFacilities`, `submitStatus`, `addEvacuationCenter`; the other four are added with their screens, pass `phone: true`). No other route lists it (chat, weather, advisories, emergency numbers and every Admin route do not).
+- [x] `MapPage.tsx` refreshes `getFacilities()` every 60 seconds (`REFRESH_MS`). Each refresh needs the header, or a pending place disappears at the next refresh.
 
 ### 3.2 Central request helper (`src/api/client.ts`)
 
-Today `request()` only does `fetch(BASE_URL + path, init)`. It has no headers of its own.
+Every call goes through `request()` in `src/api/client.ts`: JSON in and out, `X-Phone-Id` when a call passes `phone: true`, errors as `ApiError` (`status`, `detail`), status 0 when the server cannot be reached.
 
-- [ ] Add `X-Phone-Id` to the seven calls above.
+- [ ] Add `X-Phone-Id` to the seven calls above (three of seven today, see 3.1).
 - [ ] Add `Authorization: Bearer <token>` when an Admin is signed in, on every Admin route. Only the admin console does this; the user site never has a token.
 - [ ] `POST /api/facilities/{facility_id}/status` with an Admin token is saved as "Confirmed by official". A wrong or expired token there counts as a user, not an error (API.md). The user site sends no token, so its updates are always "Reported by a user".
-- [ ] Keep `ApiError` and `messageFromBody()`. They already handle `detail` as a string and as a 422 list.
-- [ ] Add `retryAfter` (seconds) to `ApiError` for 429. See 7: the browser may not be able to read the header.
-- [ ] Remove the stale comment above `askSilo` ("ASSUMPTION ... routes.py ... not in this copy"). The route is `POST /api/chat` and the code already matches.
+- [x] Keep `ApiError` and `messageFromBody()`. They already handle `detail` as a string and as a 422 list.
+- [x] Add `retryAfter` (seconds) to `ApiError` for 429. See 7: the browser may not be able to read the header.
+- [x] Remove the stale comment above `askSilo` ("ASSUMPTION ... routes.py ... not in this copy"). The route is `POST /api/chat` and the code already matches.
 - [ ] Add the missing methods for sections 4 and 5. Today `client.ts` has: health, facilities, status, add, remove, removed list, restore, chat.
 
 ### 3.3 Errors (body is `{"detail": "<plain message>"}`; a 422 body is a list)
@@ -91,10 +91,10 @@ Today `request()` only does `fetch(BASE_URL + path, init)`. It has no headers of
 
 ### 3.5 Times and ids
 
-- [ ] Times are ISO strings marked UTC. Convert with `new Date(iso)` (`statusInfo.timeAgo` and `clockTime` already do). Checked in code for reports, status, advisories, accounts. Places and removal times: (check).
+- [x] Times are ISO strings marked UTC. Convert with `parseApiTime(iso)` from `src/api/convert.ts` (it adds the UTC mark when one is missing; `statusInfo.timeAgo` and `clockTime` still use `new Date(iso)`, which is the same for marked times). Checked in code for reports, status, advisories, accounts. Places and removal times: (check).
 - [ ] Screens that want a `Date`: `WarningItem.issuedAt`, `UpdateItem.publishedAt`, `WeatherTab.lastUpdated`.
-- [ ] Advisory `id` is a number. `WarningItem.id` and `UpdateItem.id` are strings: use `String(id)`.
-- [ ] Facility, report, place and number ids are numbers in the API and in `types/index.ts` (`Facility.id`). No conversion there.
+- [ ] Advisory `id` is a number. `WarningItem.id` and `UpdateItem.id` are strings: use `idToString(id)` from `src/api/convert.ts` (not used yet; the screens are connected in 4.6 and 4.7).
+- [x] Facility, report, place and number ids are numbers in the API and in `types/index.ts` (`Facility.id`). No conversion there.
 
 ## 4. Existing screens to connect
 
@@ -264,11 +264,11 @@ My places:
 
 The admin console has its own link (its own frontend and port). The user site does not point to it in any way and does not mention it.
 
-- [ ] `HamburgerMenu.tsx`: delete the "Admin sign in" row (the footer with `navigate("/admin")`). The menu keeps Map, My reports, My suggested places, Hidden on this phone, About SILONG, FAQs and Contact support.
-- [ ] `App.tsx`: delete the `/admin` route and the `AdminSignInPage` import. The real sign-in is built in the admin console (5.1).
-- [ ] Delete `pages/AdminSignInPage.tsx` and its CSS from the user site.
-- [ ] No admin link, button or text anywhere else on the user screens, the landing page, the FAQs or Contact support.
-- [ ] The full list of places that still say Responder, Super admin or Admin sign in is in [`ADMIN_FRONTEND_HANDOFF.md`](ADMIN_FRONTEND_HANDOFF.md), "Leftovers in the user site".
+- [x] `HamburgerMenu.tsx`: delete the "Admin sign in" row (the footer with `navigate("/admin")`). The menu keeps Map, My reports, My suggested places, Hidden on this phone, About SILONG, FAQs and Contact support.
+- [x] `App.tsx`: delete the `/admin` route and the `AdminSignInPage` import. The real sign-in is built in the admin console (5.1).
+- [x] Delete `pages/AdminSignInPage.tsx` and its CSS from the user site.
+- [x] No admin link, button or text anywhere else on the user screens, the landing page, the FAQs or Contact support.
+- [x] The full list of places that still say Responder, Super admin or Admin sign in is in [`ADMIN_FRONTEND_HANDOFF.md`](ADMIN_FRONTEND_HANDOFF.md), "Leftovers in the user site".
 
 ### 4.14 Nearby hazards on the map (not built): `pages/MapPage.tsx`, `components/MapPins.css`, `types/index.ts`
 
@@ -285,7 +285,8 @@ Today no screen shows hazards from other people. Only the sender's own reports e
 ### 4.15 Contact support: `components/MenuPages.tsx`
 
 - [ ] Add `api.getSupportContact()`: `GET /api/support-contact` (public, no header). Answer: `support_email`, `support_number`; `null` means not set (show nothing, not a placeholder; the page's "not set yet" text may stay for null).
-- [ ] Replace `VITE_SUPPORT_EMAIL` and `VITE_SUPPORT_PHONE` with the server values. The footer line "Contact details are set by the Super admin." becomes "Contact details are set by an Admin." or goes away.
+- [ ] Replace `VITE_SUPPORT_EMAIL` and `VITE_SUPPORT_PHONE` with the server values.
+- [x] The footer line now says "Contact details are set by an Admin."
 - [ ] The control-room number is never in a public answer. Do not look for it here.
 
 ## 5. Missing screens to build
@@ -461,7 +462,7 @@ Done when (sign in as "Demo Admin", on a computer):
 ## 7. Known gaps and decisions
 
 - [ ] Where to keep the Admin token: memory (API.md example) or the browser. Not decided. Fixed rules whichever is chosen: never reachable from the user site (separate origin) and never in a URL.
-- [ ] Phone ID storage: it must survive a reload. The existing code already keeps hidden centers, drafts and "my places" in localStorage. Not decided where this one goes.
+- [x] Phone ID storage: localStorage, key `silong:phone-id` (decided in Part F1).
 - [ ] 143 Philippine Red Cross: not confirmed by the Batangas City CDRRMO. It is in `hotlineData.ts` but not in the database. Keep, remove or add through the admin console.
 - [ ] The "AI-summarized" chip and "Summaries are generated by AI" note are wrong for advisories typed by a person.
 - [ ] Updates order: pinned first (server) or official first (current code).
